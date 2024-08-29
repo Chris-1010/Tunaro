@@ -5,33 +5,29 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
-import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.navigation.NavController;
-import androidx.navigation.Navigation;
-import androidx.navigation.ui.AppBarConfiguration;
-import androidx.navigation.ui.NavigationUI;
+import androidx.viewpager2.widget.ViewPager2;
 
 import com.ca.tunaro.databinding.ActivityMainBinding;
-import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.tabs.TabLayout;
 import com.spotify.android.appremote.api.ConnectionParams;
 import com.spotify.android.appremote.api.Connector;
 import com.spotify.android.appremote.api.SpotifyAppRemote;
-import com.spotify.protocol.types.Track;
 import com.spotify.sdk.android.auth.AuthorizationClient;
 import com.spotify.sdk.android.auth.AuthorizationRequest;
 import com.spotify.sdk.android.auth.AuthorizationResponse;
 
-import java.io.IOException;
 import java.net.URI;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import se.michaelthelin.spotify.SpotifyApi;
 import se.michaelthelin.spotify.SpotifyHttpManager;
-import se.michaelthelin.spotify.exceptions.SpotifyWebApiException;
-import se.michaelthelin.spotify.model_objects.specification.User;
 import se.michaelthelin.spotify.requests.data.users_profile.GetCurrentUsersProfileRequest;
 
 public class MainActivity extends AppCompatActivity {
@@ -42,11 +38,27 @@ public class MainActivity extends AppCompatActivity {
     private String CLIENT_SECRET;
     private URI REDIRECT_URI;
     final int REQUEST_CODE = 1337;
+
+    private SpotifyApi spotifyApi;
     private SpotifyAppRemote mSpotifyAppRemote;
+    private String userID;
+
+    // Tabs (fragments) at bottom
+    // BottomNavigationView bottomNavigationView;
+    TabLayout tabLayout;
+    ViewPager2 viewPager2;
+    ViewPagerAdapter viewPagerAdapter;
+    LibraryFragment libraryFragment;
+    RankingsFragment rankingsFragment;
+
+    ExecutorService executor = Executors.newSingleThreadExecutor();
+//    Handler handler = new Handler(Looper.getMainLooper());
+    private CompletableFuture<Void> authenticationFuture;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
 
         // Initialize these here
         CLIENT_ID = getString(R.string.client_id);
@@ -54,155 +66,196 @@ public class MainActivity extends AppCompatActivity {
         REDIRECT_URI = SpotifyHttpManager.makeUri(getString(R.string.redirect_uri));
 
         binding = ActivityMainBinding.inflate(getLayoutInflater());
-        setContentView(binding.getRoot());
 
-        BottomNavigationView navView = findViewById(R.id.nav_view);
-        // Passing each menu ID as a set of Ids because each
-        // menu should be considered as top level destinations.
-        AppBarConfiguration appBarConfiguration = new AppBarConfiguration.Builder(
-                R.id.navigation_home, R.id.navigation_dashboard, R.id.navigation_notifications)
-                .build();
-        NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment_activity_main);
-        NavigationUI.setupActionBarWithNavController(this, navController, appBarConfiguration);
-        NavigationUI.setupWithNavController(binding.navView, navController);
+        // Initialize the CompletableFuture
+        authenticationFuture = new CompletableFuture<>();
+
+
+        viewPagerAdapter = new ViewPagerAdapter(this);
+        viewPager2 = findViewById(R.id.view_pager);
+        viewPager2.setAdapter(viewPagerAdapter);
     }
 
-////    @Override
-////    protected void onStart() {
-    public void start(View v) {
-//        super.onStart();
-        disable(v);
+    @Override
+    protected void onStart() {
+        super.onStart();
 
+        if (spotifyApi == null) {
+            authenticateSpotify()
+                    .thenRunAsync(() -> {
+                        prepareFragments();
+                        runOnUiThread(this::displayLoadingScreen);
+                    }, executor)
+                    .exceptionally(throwable -> {
+                        runOnUiThread(() -> {
+                            Toast.makeText(this, "Error: " + throwable.getMessage(), Toast.LENGTH_LONG).show();
+                        });
+                        return null;
+                    });
+        }
+    }
+
+    public void prepareFragments() {
+        preparePlayFragment();
+        prepareLibraryFragment();
+        prepareRankingsFragment();
+
+        runOnUiThread(this::onFragmentsPrepared);
+    }
+
+    public void preparePlayFragment() {
+        if (userID == null) {
+            System.out.println("userID null");
+        }
+        else {
+            System.out.println(userID);
+            PlaylistSetup.getPlaylistData(userID, spotifyApi).thenAccept(playlists -> {
+                System.out.println(playlists);
+                runOnUiThread(() -> {
+                    TextView playlistCountIndicator = findViewById(R.id.playlistCount);
+                    playlistCountIndicator.setText(getString(R.string.playlist_count, playlists.size()));
+                    ((PlayFragment) viewPagerAdapter.getFragment(0)).updatePlaylists(playlists);
+                });
+            });
+        }
+    }
+
+    public void prepareLibraryFragment() {
+
+    }
+
+    public void prepareRankingsFragment() {
+
+    }
+
+    public void onFragmentsPrepared() {
+
+        // Tabs (fragments) at bottom
+        tabLayout = findViewById(R.id.tab_layout);
+        viewPager2 = findViewById(R.id.view_pager);
+        viewPager2.setAdapter(viewPagerAdapter);
+
+        tabLayout.setVisibility(View.VISIBLE);
+
+        tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                viewPager2.setCurrentItem(tab.getPosition());
+            }
+
+            @Override
+            public void onTabUnselected(TabLayout.Tab tab) {
+            }
+
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {
+            }
+        });
+
+        viewPager2.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
+            @Override
+            public void onPageSelected(int position) {
+                super.onPageSelected(position);
+                Objects.requireNonNull(tabLayout.getTabAt(position)).select();
+            }
+        });
+    }
+
+    public void displayLoadingScreen() {
+
+    }
+
+//    // This method replaces the current fragment
+//    // with a new fragment
+//    public void replaceFragment(Fragment fragment)
+//    {
+//        // Get a reference to the FragmentManager
+//        androidx.fragment.app
+//                .FragmentManager fragmentManager
+//                = getSupportFragmentManager();
+//
+//        // Start a new FragmentTransaction
+//        androidx.fragment.app
+//                .FragmentTransaction fragmentTransaction
+//                = fragmentManager.beginTransaction();
+//
+//        // Replace the current fragment with the new
+//        // fragment
+//        fragmentTransaction.replace(R.id.frame_layout,
+//                fragment);
+//
+//        // Commit the FragmentTransaction
+//        fragmentTransaction.commit();
+//    }
+
+//    private void authenticateSpotify() {
+//        // Authorize
+//        AuthorizationRequest.Builder builder =
+//                new AuthorizationRequest.Builder(CLIENT_ID, AuthorizationResponse.Type.TOKEN, REDIRECT_URI.toString());
+//
+//        builder.setScopes(new String[]{"app-remote-control", "streaming", "playlist-read-private", "playlist-modify-private"});
+//        AuthorizationRequest request = builder.build();
+//
+//        AuthorizationClient.openLoginActivity(this, REQUEST_CODE, request);
+//
+//        // update spotifyAPI
+//        spotifyApi = new SpotifyApi.Builder()
+//                .setClientId(CLIENT_ID)
+//                .setClientSecret(CLIENT_SECRET)
+//                .setRedirectUri(REDIRECT_URI)
+//                .setAccessToken(getAccessToken())
+//                .build();
+//
+//        onSpotifyAuthenticated();
+//    }
+
+    private CompletableFuture<Void> authenticateSpotify() {
+        // Start the authentication process
         AuthorizationRequest.Builder builder =
                 new AuthorizationRequest.Builder(CLIENT_ID, AuthorizationResponse.Type.TOKEN, REDIRECT_URI.toString());
-
-        builder.setScopes(new String[]{"streaming"});
+        builder.setScopes(new String[]{"app-remote-control", "streaming", "playlist-read-private", "playlist-modify-private"});
         AuthorizationRequest request = builder.build();
 
         AuthorizationClient.openLoginActivity(this, REQUEST_CODE, request);
 
-        // Should now be logged in
-        connectSpotifyAppRemote();
-
-        // Link with WebAPI
-        SpotifyApi spotifyApi = new SpotifyApi.Builder()
+        // update spotifyAPI
+        spotifyApi = new SpotifyApi.Builder()
                 .setClientId(CLIENT_ID)
                 .setClientSecret(CLIENT_SECRET)
                 .setRedirectUri(REDIRECT_URI)
                 .setAccessToken(getAccessToken())
                 .build();
 
-        // Now retrieve user's profile
-        GetCurrentUsersProfileRequest getCurrentUsersProfileRequest = spotifyApi.getCurrentUsersProfile()
-                .build();
-        try {
-            final User user = getCurrentUsersProfileRequest.execute();
-            String name = user.getDisplayName();
-            System.out.println("Display name: " + name);
-            TextView s = (TextView) findViewById(R.id.displayName);
-            s.setText(name);
-        } catch (IOException | SpotifyWebApiException e) {
-            System.out.println("Error: " + e.getMessage());
-        } catch (org.apache.hc.core5.http.ParseException e) {
-            throw new RuntimeException(e);
-        }
+        // Create a new CompletableFuture for this authentication process
+        CompletableFuture<Void> authFuture = new CompletableFuture<>();
 
+        // Store this future so we can complete it in onActivityResult
+        this.authenticationFuture = authFuture;
+
+        // Return a new CompletableFuture that chains the authentication and user profile fetch
+        return authFuture.thenCompose(aVoid -> {
+            spotifyApi.setAccessToken(getAccessToken());
+            return getCurrentUsersProfile_Async();
+        }).thenRunAsync(() -> {
+            runOnUiThread(this::connectSpotifyAppRemote);
+        }, executor);
     }
 
-    @Override
-    protected void onStop() {
-        super.onStop();
-        SpotifyAppRemote.disconnect(mSpotifyAppRemote);
-    }
+//    private void onSpotifyAuthenticated() {
+        // Now logged in, retrieve user's profile (assigns userID a value, as well as retrieving the user's playlists, in the process)
+        // getCurrentUsersProfile_Async();
+        // The following takes place once userID has been found
+            //        connectSpotifyAppRemote();
+            //
+            //        PlayFragment playFragment = (PlayFragment) viewPagerAdapter.createFragment(0);
+            //        playFragment.onSpotifyAuthenticated(spotifyApi, userID, CLIENT_ID, REDIRECT_URI, mSpotifyAppRemote);
 
-    private void connected() {
-        // Play a playlist
-        mSpotifyAppRemote.getPlayerApi().play("spotify:playlist:37i9dQZF1DX2sUQwD7tbmL");
-
-        // Subscribe to PlayerState
-        mSpotifyAppRemote.getPlayerApi()
-                .subscribeToPlayerState()
-                .setEventCallback(playerState -> {
-                    final Track track = playerState.track;
-                    if (track != null) {
-                        Log.d("MainActivity", track.name + " by " + track.artist.name);
-                    }
-                });
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent intent) {
-        super.onActivityResult(requestCode, resultCode, intent);
-
-        // Check if result comes from the correct activity
-        if (requestCode == REQUEST_CODE) {
-            AuthorizationResponse response = AuthorizationClient.getResponse(resultCode, intent);
-            switch (response.getType()) {
-                // Response was successful and contains auth token
-                case TOKEN:
-                    // Handle successful response
-                    String token = response.getAccessToken();
-                    // Save the token for later use
-                    saveAccessToken(token);
-                    // Update UI to show logged-in state
-                    updateUILoggedIn();
-                    break;
-
-                // Auth flow returned an error
-                case ERROR:
-                    // Handle error response
-                    String errorMessage = response.getError();
-                    // Show error message to user
-                    showErrorToUser("Authorization failed: " + errorMessage);
-                    // Update UI to show not logged in state
-                    updateUILoggedOut();
-                    break;
-
-                // Most likely auth flow was cancelled
-                default:
-                    // Handle other cases
-                    showMessageToUser("Spotify login was cancelled");
-                    updateUILoggedOut();
-                    break;
-            }
-        }
-    }
-
-    private void saveAccessToken(String token) {
-        // Save token to SharedPreferences or secure storage
-        SharedPreferences prefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
-        prefs.edit().putString("spotify_access_token", token).apply();
-    }
-
-    private void updateUILoggedIn() {
-        // Update your UI elements to reflect logged-in state
-        // For example:
-        findViewById(R.id.loginButton).setVisibility(View.GONE);
-        findViewById(R.id.logoutButton).setVisibility(View.VISIBLE);
-        Switch s = (Switch) findViewById(R.id.authSwitch);
-        s.setChecked(true);
-        // Enable Spotify-related features in your UI
-    }
-
-    private void updateUILoggedOut() {
-        // Update your UI elements to reflect logged-out state
-        // For example:
-        findViewById(R.id.loginButton).setVisibility(View.VISIBLE);
-        findViewById(R.id.logoutButton).setVisibility(View.GONE);
-        Switch s = (Switch) findViewById(R.id.authSwitch);
-        s.setChecked(false);
-        // Disable Spotify-related features in your UI
-    }
-
-    private void showErrorToUser(String message) {
-        // Show error message to user, e.g., using a Toast or AlertDialog
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show();
-    }
-
-    private void showMessageToUser(String message) {
-        // Show message to user, e.g., using a Toast
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-    }
+            //        PlaylistSetup.getPlaylistData(userID, spotifyApi).thenAccept(playlists -> {
+            //            // Use the playlists here
+            //            itemAdapter = new Playlist_RecyclerViewAdapter(playlists);
+            //            recyclerView.setAdapter(itemAdapter);
+            //        });
+//    }
 
     private void connectSpotifyAppRemote() {
         // Connect to Spotify App Remote here
@@ -218,21 +271,141 @@ public class MainActivity extends AppCompatActivity {
 
                     public void onConnected(SpotifyAppRemote spotifyAppRemote) {
                         mSpotifyAppRemote = spotifyAppRemote;
-                        Log.d("MainActivity", "Connected! Yay!");
-                        Switch s = (Switch) findViewById(R.id.remoteSwitch);
-                        s.setChecked(true);
-
-                        // Now you can start interacting with App Remote
-                        connected();
-
+                        Log.d("MainActivity", "Connected to remote");
                     }
 
                     public void onFailure(Throwable throwable) {
                         Log.e("MyActivity", throwable.getMessage(), throwable);
 
-                        // Something went wrong when attempting to connect! Handle errors here
+                        // Something went wrong when attempting to connect
                     }
                 });
+    }
+
+//    public void start(View v) {
+//        disable(v);
+//
+//        //Subscribe to PlayerState
+//        mSpotifyAppRemote.getPlayerApi()
+//                .subscribeToPlayerState()
+//                .setEventCallback(playerState -> {
+//                    final Track track = playerState.track;
+//                    if (track != null) {
+//                        Log.d("MainActivity", track.name + " by " + track.artist.name);
+//                        TextView trackDisplay = findViewById(R.id.trackDisplay);
+//                        TextView artistDisplay = findViewById(R.id.artistDisplay);
+//                        ImageView songCover = findViewById(R.id.songCover);
+//                        trackDisplay.setText(track.name);
+//                        artistDisplay.setText(track.artist.name);
+//                        Uri imageURI = Uri.parse(track.imageUri.raw);
+//                        songCover.setImageURI(imageURI);
+//                    }
+//                });
+//    }
+
+    private CompletableFuture<Void> getCurrentUsersProfile_Async() {
+        final GetCurrentUsersProfileRequest getCurrentUsersProfileRequest = spotifyApi.getCurrentUsersProfile()
+                .build();
+        return getCurrentUsersProfileRequest.executeAsync()
+                .thenAccept(user -> {
+                    userID = user.getId();
+                    String displayName = user.getDisplayName();
+
+                    runOnUiThread(() -> {
+                        PlayFragment playFragment = (PlayFragment) viewPagerAdapter.getFragment(0);
+                        TextView s = playFragment.requireView().findViewById(R.id.displayName);
+                        s.setText(getString(R.string.logged_in_as, displayName));
+                        Toast.makeText(this, "Logged in as " + displayName, Toast.LENGTH_SHORT).show();
+                    });
+                })
+                .exceptionally(throwable -> {
+                    runOnUiThread(() -> {
+                        Toast.makeText(this, "Error: " + throwable.getMessage(), Toast.LENGTH_SHORT).show();
+                    });
+                    return null;
+                });
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        SpotifyAppRemote.disconnect(mSpotifyAppRemote);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent intent) {
+        super.onActivityResult(requestCode, resultCode, intent);
+
+        if (requestCode == REQUEST_CODE) {
+            AuthorizationResponse response = AuthorizationClient.getResponse(resultCode, intent);
+            switch (response.getType()) {
+                case TOKEN:
+                    // Authentication successful
+                    String token = response.getAccessToken();
+                    saveAccessToken(token);
+                    updateUILoggedIn();
+                    // Complete the future to signal that authentication is done
+                    if (authenticationFuture != null) {
+                        authenticationFuture.complete(null);
+                    }
+                    break;
+                case ERROR:
+                    // Authentication failed
+                    String errorMessage = response.getError();
+                    showErrorToUser("Authorization failed: " + errorMessage);
+                    updateUILoggedOut();
+                    // Complete the future exceptionally to signal authentication failure
+                    if (authenticationFuture != null) {
+                        authenticationFuture.completeExceptionally(new Exception(errorMessage));
+                    }
+                    break;
+                default:
+                    showMessageToUser("Spotify login was cancelled");
+                    updateUILoggedOut();
+                    // Complete the future exceptionally to signal authentication cancellation
+                    if (authenticationFuture != null) {
+                        authenticationFuture.completeExceptionally(new Exception("Authentication cancelled"));
+                    }
+                    break;
+            }
+        }
+    }
+
+
+    private void updateUILoggedIn() {
+        // Update your UI elements to reflect logged-in state
+        // For example:
+//        findViewById(R.id.loginButton).setVisibility(View.GONE);
+//        findViewById(R.id.logoutButton).setVisibility(View.VISIBLE);
+//        Switch s = (Switch) findViewById(R.id.authSwitch);
+//        s.setChecked(true);
+        // Enable Spotify-related features in your UI
+    }
+
+    private void updateUILoggedOut() {
+        // Update your UI elements to reflect logged-out state
+        // For example:
+//        findViewById(R.id.loginButton).setVisibility(View.VISIBLE);
+//        findViewById(R.id.logoutButton).setVisibility(View.GONE);
+//        Switch s = (Switch) findViewById(R.id.authSwitch);
+//        s.setChecked(false);
+        // Disable Spotify-related features in your UI
+    }
+
+    private void showErrorToUser(String message) {
+        // Show error message to user, e.g., using a Toast or AlertDialog
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+    }
+
+    private void showMessageToUser(String message) {
+        // Show message to user, e.g., using a Toast
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+    }
+
+    private void saveAccessToken(String token) {
+        // Save token to SharedPreferences or secure storage
+        SharedPreferences prefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
+        prefs.edit().putString("spotify_access_token", token).apply();
     }
 
     private String getAccessToken() {
@@ -242,6 +415,17 @@ public class MainActivity extends AppCompatActivity {
 
     public void disable(View v) {
         v.setEnabled(false);
-        Toast.makeText(this, "Starting", Toast.LENGTH_LONG).show();
     }
+
+//    public String getStringValue(String key) {
+//        SharedPreferences prefs = getSharedPreferences("MyStrings", MODE_PRIVATE);
+//        return prefs.getString(key, null);
+//    }
+//
+//    public void updateStringValue(String key, String newValue) {
+//        SharedPreferences prefs = getSharedPreferences("MyStrings", MODE_PRIVATE);
+//        SharedPreferences.Editor editor = prefs.edit();
+//        editor.putString(key, newValue);
+//        editor.apply();
+//    }
 }
