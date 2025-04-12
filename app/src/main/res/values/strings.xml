@@ -1,0 +1,26 @@
+<resources>
+    <string name="empty"> </string>
+    <string name="app_name" translatable="false">Tunaro</string>
+    <string name="title_home">Home</string>
+    <string name="title_dashboard">Dashboard</string>
+    <string name="title_notifications">Notifications</string>
+    <string name="spotifyButton">Get Display Name</string>
+    <string name="authSwitch">Authenticated</string>
+    <string name="controlSwitch">Spotify App Remote Control</string>
+
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="library">Library</string>
+    <string name="rankings">Rankings</string>
+
+    <string name="playlistCoverImage">Playlist Cover Image</string>
+    <string name="songAlbumCoverImage">Song Album Cover Image</string>
+    <string name="albumLabel">Album</string>
+    <string name="songDuration">Duration</string>
+
+    <string name="logged_in_as">Logged in as %s</string>
+    <string name="playlist_count">%d Playlists</string>
+    <string name="song_count">%d Tracks</string>
+
+    <string name="songViewDescription">Add notes/details to this song</string>
+</resources>
