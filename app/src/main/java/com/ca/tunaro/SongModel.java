@@ -12,17 +12,20 @@ public class SongModel {
     int duration;    // duration_ms
     String uri;
     int popularity;    // a score out of 100 which is based on how much the song is played and how recently (Dev Note: Seems to me more like a 'trending' score)
+    String albumName;
     String albumCoverUrl;    // images[1]["url"] (1 is the second index in the list which holds image sizes of 300x300)
     Date dateAddedToPlaylist;    // added_at (a string in date-time format. i.e. "2021-09-14T22:45:17Z")
     String releaseDate;    // album["release_date"]    (most often in a format like YYYY-MM)
+    Date lastListenDate;
 
-    public SongModel(String id, String name, ArtistSimplified[] artists, int duration, String uri, int popularity, String albumCoverUrl, Date dateAddedToPlaylist, String releaseDate) {
+    public SongModel(String id, String name, ArtistSimplified[] artists, int duration, String uri, int popularity, String albumName, String albumCoverUrl, Date dateAddedToPlaylist, String releaseDate) {
         this.id = id;
         this.name = name;
         this.artists = artists;
         this.duration = duration;
         this.uri = uri;
         this.popularity = popularity;
+        this.albumName = albumName;
         this.albumCoverUrl = albumCoverUrl;
         this.dateAddedToPlaylist = dateAddedToPlaylist;
         this.releaseDate = releaseDate;
@@ -68,11 +71,19 @@ public class SongModel {
         return popularity;
     }
 
+    public String getAlbumName() {
+        return albumName;
+    }
+
     public String getAlbumCoverUrl() {
         return albumCoverUrl;
     }
 
-    public String getDateAddedToPlaylist() {
+    public Date getDateAddedToPlaylist() {
+        return dateAddedToPlaylist;
+    }
+
+    public String getDateAddedToPlaylistString() {
         return dateAddedToPlaylist.toString();
     }
 
