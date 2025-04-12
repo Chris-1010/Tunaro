@@ -69,19 +69,20 @@ public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_
             songCount = itemView.findViewById(R.id.artistView);
             imageView = itemView.findViewById(R.id.albumCoverView);
 
-            itemView.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View view) {
-                    if (recyclerViewInterface != null) {
-                        int position = getAdapterPosition();
+            itemView.setOnClickListener(view -> {
+                if (recyclerViewInterface != null) {
+                    int position = getAdapterPosition();
 
-                        if (position != RecyclerView.NO_POSITION) {
-                            recyclerViewInterface.onItemClick(position, itemView);
-                        }
+                    if (position != RecyclerView.NO_POSITION) {
+                        recyclerViewInterface.onItemClick(position, itemView);
                     }
                 }
             });
         }
+    }
+
+    public PlayFragment getFragment() {
+        return playFragment;
     }
 
     private ArrayList<PlaylistModel> getPlaylistModels() {

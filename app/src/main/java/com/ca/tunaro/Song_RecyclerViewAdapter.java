@@ -18,13 +18,15 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
     private final Context context;
     private final PlaylistView activity;
     private final Song_RecyclerViewInterface recyclerViewInterface;
-    private final ArrayList<SongModel> songModels;
+    private ArrayList<SongModel> songModels;
+    private final DatabaseHelper dbHelper;
 
     public Song_RecyclerViewAdapter(Context context, PlaylistView playlistView, Song_RecyclerViewInterface recyclerViewInterface, ArrayList<SongModel> songModels) {
         this.context = context;
         this.activity = playlistView;
         this.recyclerViewInterface = recyclerViewInterface;
         this.songModels = songModels;
+        this.dbHelper = new DatabaseHelper(context);
     }
 
     @NonNull
@@ -44,6 +46,13 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         Glide.with(context)
                 .load(model.getAlbumCoverUrl())
                 .into(holder.imageCoverView);
+
+        // Check if the song has notes and show/hide the info icon accordingly
+        if (dbHelper.hasSongNotes(model.getId())) {
+            holder.hasNotesIcon.setVisibility(View.VISIBLE);
+        } else {
+            holder.hasNotesIcon.setVisibility(View.GONE);
+        }
     }
 
     @Override
@@ -51,9 +60,9 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         return getSongModels().size();
     }
 
-    // Important to have static here:
     public static class ViewHolder extends RecyclerView.ViewHolder {
         ImageView imageCoverView;
+        ImageView hasNotesIcon;
         TextView songNameView, artistView;
 
         public ViewHolder(@NonNull View itemView, Song_RecyclerViewInterface recyclerViewInterface) {
@@ -61,6 +70,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
             songNameView = itemView.findViewById(R.id.songNameView);
             artistView = itemView.findViewById(R.id.artistView);
             imageCoverView = itemView.findViewById(R.id.albumCoverView);
+            hasNotesIcon = itemView.findViewById(R.id.hasNotesIcon);
 
             itemView.setOnClickListener(view -> {
                 if (recyclerViewInterface != null) {
@@ -74,7 +84,16 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         }
     }
 
+    public void updateSongs(ArrayList<SongModel> newSongs) {
+        this.songModels = newSongs;
+        notifyDataSetChanged();
+    }
+
     private ArrayList<SongModel> getSongModels() {
         return this.songModels;
+    }
+
+    public ArrayList<SongModel> getSongs() {
+        return getSongModels();
     }
 }
