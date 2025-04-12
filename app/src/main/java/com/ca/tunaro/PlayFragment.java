@@ -22,11 +22,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class PlayFragment extends Fragment implements Playlist_RecyclerViewInterface {
+    private MainActivity mainActivity;
     private View view;
     private Playlist_RecyclerViewAdapter adapter;
     private final ArrayList<PlaylistModel> playlistModels = new ArrayList<>();
     private SwipeRefreshLayout swipeRefreshLayout;
-    private MainActivity mainActivity;
     private boolean isRefreshing = false;
     private DatabaseHelper dbHelper;
     private boolean showingArchived = false;
@@ -169,8 +169,6 @@ public class PlayFragment extends Fragment implements Playlist_RecyclerViewInter
         // Set the selected playlist in the singleton
         SelectedPlaylistHolder.getInstance().setSelectedPlaylist(
                 clickedPlaylist,
-                mainActivity.getSpotifyApi(),
-                mainActivity.getSpotifyAppRemote(),
                 mainActivity
         );
 

@@ -27,6 +27,7 @@ import com.spotify.android.appremote.api.SpotifyAppRemote;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 public class SongView extends AppCompatActivity {
     // Fields
@@ -56,7 +57,7 @@ public class SongView extends AppCompatActivity {
 
         // Add play button functionality
         ImageView playButton = findViewById(R.id.play_button);
-        playButton.setOnClickListener(v -> playSong());
+        playButton.setOnClickListener(v -> playSong(getIntent().getStringExtra("source")));
 
         // Load existing notes
         loadExistingNotes();
@@ -188,18 +189,20 @@ public class SongView extends AppCompatActivity {
         notesAdapter.updateNotes(notes);
     }
 
-    private void playSong() {
-        SpotifyAppRemote mSpotifyAppRemote = SelectedPlaylistHolder.getInstance().getSpotifyAppRemote();
-        MainActivity mainActivity = SelectedPlaylistHolder.getInstance().getMainActivity();
+    private void playSong(String source) {
+        MainActivity mainActivity;
+        if (Objects.equals(source, "playlist")) mainActivity = SelectedPlaylistHolder.getInstance().getMainActivity();
+        else mainActivity = SelectedSongHolder.getInstance().getMainActivity();
+        SpotifyAppRemote mSpotifyAppRemote = mainActivity.getSpotifyAppRemote();
 
         // Try to reconnect Spotify if MainActivity is available
-        if (mainActivity != null && !mSpotifyAppRemote.isConnected()) {
+        if (!mSpotifyAppRemote.isConnected()) {
             Toast.makeText(this, "Attempting to reconnect to Spotify...", Toast.LENGTH_SHORT).show();
             // Call a method in MainActivity to reconnect
             mainActivity.connectSpotifyAppRemote();
         }
 
-        if (mSpotifyAppRemote != null && mSpotifyAppRemote.isConnected() && selectedSong != null) {
+        if (selectedSong != null) {
             try {
                 // Play the song
                 mSpotifyAppRemote.getPlayerApi().play(selectedSong.getUri())

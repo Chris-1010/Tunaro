@@ -23,11 +23,20 @@ import se.michaelthelin.spotify.SpotifyApi;
 import se.michaelthelin.spotify.requests.data.tracks.GetTrackRequest;
 
 public class LibraryFragment extends Fragment implements Library_RecyclerViewInterface {
+    private MainActivity mainActivity;
+    private SpotifyApi spotifyApi;
     private View view;
     private LibrarySongAdapter adapter;
     private DatabaseHelper dbHelper;
     private List<SongModel> allSongs = new ArrayList<>();
     private EditText searchBar;
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        mainActivity = (MainActivity) requireActivity();
+        spotifyApi = mainActivity.getSpotifyApi();
+    }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -68,8 +77,11 @@ public class LibraryFragment extends Fragment implements Library_RecyclerViewInt
     }
 
     private void loadSongsWithNotes() {
-        MainActivity mainActivity = (MainActivity) requireActivity();
-        SpotifyApi spotifyApi = mainActivity.getSpotifyApi();
+        if (spotifyApi == null) {
+            // Show a message to the user
+            Toast.makeText(requireContext(), "Spotify API not available yet. Please try again later.", Toast.LENGTH_SHORT).show();
+            return;
+        }
 
         // Get all song IDs that have notes
         List<String> songIds = dbHelper.getSongIdsWithNotes();
@@ -82,10 +94,10 @@ public class LibraryFragment extends Fragment implements Library_RecyclerViewInt
         adapter.clearSongs();
 
         // Load songs one at a time sequentially
-        loadSongsSequentially(songIds, 0, spotifyApi);
+        loadSongsSequentially(songIds, 0);
     }
 
-    private void loadSongsSequentially(List<String> songIds, int index, SpotifyApi spotifyApi) {
+    private void loadSongsSequentially(List<String> songIds, int index) {
         if (index >= songIds.size()) {
             setLoadingState(false);
             return;
@@ -96,7 +108,7 @@ public class LibraryFragment extends Fragment implements Library_RecyclerViewInt
 
         getTrackRequest.executeAsync()
                 .thenAccept(track -> {
-                    requireActivity().runOnUiThread(() -> {
+                    mainActivity.runOnUiThread(() -> {
                         SongModel songModel = new SongModel(
                                 track.getId(),
                                 track.getName(),
@@ -114,16 +126,16 @@ public class LibraryFragment extends Fragment implements Library_RecyclerViewInt
                         adapter.addSong(songModel);
 
                         new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                            loadSongsSequentially(songIds, index + 1, spotifyApi);
+                            loadSongsSequentially(songIds, index + 1);
                         }, 100);
                     });
                 })
                 .exceptionally(throwable -> {
-                    requireActivity().runOnUiThread(() -> {
+                    mainActivity.runOnUiThread(() -> {
                         Toast.makeText(requireContext(),
                                 "Error loading song: " + throwable.getMessage(),
                                 Toast.LENGTH_SHORT).show();
-                        loadSongsSequentially(songIds, index + 1, spotifyApi);
+                        loadSongsSequentially(songIds, index + 1);
                     });
                     return null;
                 });
@@ -152,11 +164,9 @@ public class LibraryFragment extends Fragment implements Library_RecyclerViewInt
     @Override
     public void onItemClick(int position) {
         SongModel selectedSong = adapter.getSongs().get(position);
-        MainActivity mainActivity = (MainActivity) requireActivity();
-        SpotifyApi spotifyApi = mainActivity.getSpotifyApi();
 
         // Show loading state if needed
-        // You might want to add a ProgressBar in your layout for this
+        // Maybe add a progress bar instead
         setLoadingState(true);
 
         // Get song details from Spotify API
@@ -165,7 +175,7 @@ public class LibraryFragment extends Fragment implements Library_RecyclerViewInt
 
         getTrackRequest.executeAsync()
                 .thenAccept(track -> {
-                    requireActivity().runOnUiThread(() -> {
+                    mainActivity.runOnUiThread(() -> {
                         setLoadingState(false);
 
                         // Create SongModel from Spotify Track
@@ -183,15 +193,16 @@ public class LibraryFragment extends Fragment implements Library_RecyclerViewInt
                         );
 
                         // Set the selected song in the singleton
-                        SelectedSongHolder.getInstance().setSelectedSong(songModel);
+                        SelectedSongHolder.getInstance().setSelectedSong(songModel, mainActivity);
 
                         // Navigate to SongView
                         Intent intent = new Intent(requireContext(), SongView.class);
+                        intent.putExtra("source", "library");
                         startActivity(intent);
                     });
                 })
                 .exceptionally(throwable -> {
-                    requireActivity().runOnUiThread(() -> {
+                    mainActivity.runOnUiThread(() -> {
                         setLoadingState(false);
                         Toast.makeText(requireContext(),
                                 "Error loading song details: " + throwable.getMessage(),
