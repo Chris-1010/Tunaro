@@ -82,7 +82,7 @@ public class PlaylistView extends AppCompatActivity implements Song_RecyclerView
         // Get SpotifyApi instance from MainActivity
         SpotifyApi spotifyApi = null;
         try {
-            spotifyApi = SelectedPlaylistHolder.getInstance().getSpotifyApi();
+            spotifyApi = SelectedPlaylistHolder.getInstance().getMainActivity().getSpotifyApi();
             if (spotifyApi == null) throw new Exception("SpotifyApi not available");
         } catch (Exception e) {
             Toast.makeText(this, "Error: Spotify API not available", Toast.LENGTH_SHORT).show();
@@ -310,10 +310,12 @@ public class PlaylistView extends AppCompatActivity implements Song_RecyclerView
         SongModel clickedSong = adapter.getSongs().get(position);
 
         // Set the selected song in the singleton
-        SelectedSongHolder.getInstance().setSelectedSong(clickedSong);
+        MainActivity mainActivity = SelectedSongHolder.getInstance().getMainActivity();
+        SelectedSongHolder.getInstance().setSelectedSong(clickedSong, mainActivity);
 
         // Start the SongView activity
         Intent intent = new Intent(this, SongView.class);
+        intent.putExtra("source", "playlist");
         startActivity(intent);
     }
 }

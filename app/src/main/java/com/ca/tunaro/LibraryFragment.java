@@ -197,6 +197,7 @@ public class LibraryFragment extends Fragment implements Library_RecyclerViewInt
 
                         // Navigate to SongView
                         Intent intent = new Intent(requireContext(), SongView.class);
+                        intent.putExtra("source", "library");
                         startActivity(intent);
                     });
                 })
