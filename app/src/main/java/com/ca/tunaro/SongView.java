@@ -1,6 +1,7 @@
 package com.ca.tunaro;
 
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -189,33 +190,52 @@ public class SongView extends AppCompatActivity {
 
     private void playSong() {
         SpotifyAppRemote mSpotifyAppRemote = SelectedPlaylistHolder.getInstance().getSpotifyAppRemote();
+        MainActivity mainActivity = SelectedPlaylistHolder.getInstance().getMainActivity();
 
-        if (mSpotifyAppRemote != null && selectedSong != null) {
-            // Play the song
-            mSpotifyAppRemote.getPlayerApi().play(selectedSong.getUri());
+        // Try to reconnect Spotify if MainActivity is available
+        if (mainActivity != null && !mSpotifyAppRemote.isConnected()) {
+            Toast.makeText(this, "Attempting to reconnect to Spotify...", Toast.LENGTH_SHORT).show();
+            // Call a method in MainActivity to reconnect
+            mainActivity.connectSpotifyAppRemote();
+        }
 
-            // Create a "Date Listened" note
-            String currentDate = new java.text.SimpleDateFormat("dd-MM-yyyy HH:mm")
-                    .format(new java.util.Date());
-            SongNote note = new SongNote(
-                    selectedSong.getId(),
-                    SongNote.NoteType.DATE_LISTENED.getDisplayName(),
-                    currentDate
-            );
-
-            // Save to database
-            dbHelper.addNote(note);
-
-            // Refresh notes display
-            loadExistingNotes();
-
-            Toast.makeText(this, "Playing " + selectedSong.getName(),
-                    Toast.LENGTH_SHORT).show();
+        if (mSpotifyAppRemote != null && mSpotifyAppRemote.isConnected() && selectedSong != null) {
+            try {
+                // Play the song
+                mSpotifyAppRemote.getPlayerApi().play(selectedSong.getUri())
+                        .setResultCallback(empty -> {
+                            // Create a "Date Listened" note
+//                            String currentDate = new java.text.SimpleDateFormat("dd-MM-yyyy HH:mm")
+//                                    .format(new java.util.Date());
+//                            SongNote note = new SongNote(
+//                                    selectedSong.getId(),
+//                                    SongNote.NoteType.DATE_LISTENED.getDisplayName(),
+//                                    currentDate
+//                            );
+//
+//                            // Save to database
+//                            dbHelper.addNote(note);
+//
+//                            // Refresh notes display
+//                            loadExistingNotes();
+//
+                            Toast.makeText(this, "Playing " + selectedSong.getName(),
+                                    Toast.LENGTH_SHORT).show();
+                        })
+                        .setErrorCallback(throwable -> {
+                            Toast.makeText(this, "Error playing song: " + throwable.getMessage(),
+                                    Toast.LENGTH_SHORT).show();
+                            Log.e("SongView", "PlaybackError: " + throwable.getMessage());
+                        });
+            } catch (Exception e) {
+                Log.e("SongView", "PlaybackException: " + e.getMessage());
+            }
         } else {
             Toast.makeText(this, "Unable to play song. Please check Spotify connection.",
                     Toast.LENGTH_SHORT).show();
         }
     }
+
 
     // Display methods
     private void showEditDialog(final SongNote note) {
