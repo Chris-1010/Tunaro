@@ -41,8 +41,23 @@ public class SongModel {
     }
 
     public int getDuration() {
-        // Converts the milliseconds into seconds
-        return duration / 1000;
+        return duration;
+    }
+
+    public String getDurationString() {
+        // Convert milliseconds to seconds first
+        int totalSeconds = duration / 1000;
+
+        // Calculate minutes and remaining seconds
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+
+        // Return formatted string
+        if (seconds == 0) {
+            return minutes + "m";
+        } else {
+            return minutes + "m " + seconds + "s";
+        }
     }
 
     public String getUri() {
