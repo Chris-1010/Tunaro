@@ -7,54 +7,71 @@
     tools:context=".PlayFragment"
     android:id="@+id/playFragment">
 
-    <androidx.constraintlayout.widget.ConstraintLayout
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/swipeRefreshLayout"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:fadingEdge="horizontal|vertical">
+        android:layout_height="match_parent">
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/mRecyclerView"
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:paddingTop="20sp"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            tools:listitem="@layout/recycler_view_row">
+            android:fadingEdge="horizontal|vertical">
 
-        </androidx.recyclerview.widget.RecyclerView>
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/mRecyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:paddingTop="20sp"
+                app:layout_constraintEnd_toEndOf="@id/playlistCount"
+                app:layout_constraintHorizontal_bias="0.0"
+                app:layout_constraintStart_toStartOf="@id/playlistCount"
+                app:layout_constraintTop_toBottomOf="@+id/playlistCount"
+                tools:listitem="@layout/recycler_view_row" />
 
-        <TextView
-            android:id="@+id/playlistCount"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="50dp"
-            android:background="#65FFFFFF"
-            android:textAlignment="center"
-            android:textColor="@color/black"
-            android:textSize="30sp"
-            android:textStyle="bold"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            tools:text="50 Playlists?" />
+            <TextView
+                android:id="@+id/playlistCount"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="50dp"
+                android:background="#65FFFFFF"
+                android:textAlignment="center"
+                android:textColor="@color/black"
+                android:textSize="30sp"
+                android:textStyle="bold"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                tools:text="50 Playlists?" />
 
-        <TextView
-            android:id="@+id/displayName"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="#65FFFFFF"
-            android:minHeight="50sp"
-            android:textAlignment="center"
-            android:textColor="@color/dark_blue"
-            android:textSize="30sp"
-            android:textStyle="italic"
-            app:layout_constraintBottom_toTopOf="@+id/playlistCount"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            tools:text="...Logged in as Ahern..." />
+            <TextView
+                android:id="@+id/displayName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#65FFFFFF"
+                android:minHeight="50sp"
+                android:textAlignment="center"
+                android:textColor="@color/dark_blue"
+                android:textSize="30sp"
+                android:textStyle="italic"
+                app:layout_constraintBottom_toTopOf="@+id/playlistCount"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                tools:text="...Logged in as John..." />
 
-    </androidx.constraintlayout.widget.ConstraintLayout>
+            <ImageView
+                android:id="@+id/archiveToggleButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_gravity="end|top"
+                android:layout_marginEnd="10dp"
+                android:contentDescription="Toggle archived playlists"
+                android:padding="12dp"
+                android:src="@drawable/archived_playlists"
+                app:layout_constraintBottom_toBottomOf="@+id/playlistCount"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
 
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 </RelativeLayout>

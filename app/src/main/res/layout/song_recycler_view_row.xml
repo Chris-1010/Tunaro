@@ -3,22 +3,21 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="wrap_content">
 
     <androidx.cardview.widget.CardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="15dp"
-        android:layout_marginBottom="5dp"
         android:layout_marginStart="8dp"
+        android:layout_marginTop="15dp"
         android:layout_marginEnd="8dp"
+        android:paddingBottom="4dp"
         app:cardBackgroundColor="@color/blueBlack"
         app:cardCornerRadius="20dp"
         app:cardElevation="8dp"
-        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" >
+        app:layout_constraintTop_toTopOf="parent">
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
@@ -28,11 +27,13 @@
                 android:id="@+id/albumCoverView"
                 android:layout_width="70dp"
                 android:layout_height="70dp"
+                android:contentDescription="@string/songAlbumCoverImage"
                 android:padding="5dp"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintHeight_percent="0.6"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintVertical_bias="0.19999999"
                 app:shapeAppearanceOverlay="@style/roundedImageView"
                 tools:srcCompat="@tools:sample/avatars" />
 
@@ -40,7 +41,7 @@
                 android:id="@+id/songNameView"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="20dp"
+                android:layout_marginStart="15dp"
                 android:layout_marginTop="20dp"
                 android:maxWidth="250sp"
                 android:minHeight="47dp"
@@ -58,7 +59,7 @@
                 android:id="@+id/artistView"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="20dp"
+                android:layout_marginStart="15dp"
                 android:layout_marginTop="5dp"
                 android:layout_marginBottom="5dp"
                 android:textColor="#80E3CDB3"
@@ -69,14 +70,27 @@
                 app:layout_constraintTop_toBottomOf="@+id/songNameView"
                 tools:text="Ricky Stanicky" />
 
+            <ImageView
+                android:id="@+id/hasNotesIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_note"
+                android:visibility="visible"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="@+id/albumCoverView"
+                app:layout_constraintStart_toStartOf="@+id/albumCoverView"
+                app:layout_constraintTop_toBottomOf="@+id/albumCoverView"
+                app:tint="@android:color/holo_blue_dark" />
+
             <ToggleButton
                 android:id="@+id/toggleButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="10dp"
                 android:text="ToggleButton"
-                android:textOff="Paused"
-                android:textOn="Playing"
+                android:textOff="@string/pause"
+                android:textOn="@string/play"
+                android:visibility="gone"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
