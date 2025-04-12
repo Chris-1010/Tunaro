@@ -402,6 +402,10 @@ public class MainActivity extends AppCompatActivity {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
     }
 
+    public SpotifyApi getSpotifyApi() {
+        return spotifyApi;
+    }
+
     private void saveAccessToken(String token) {
         // Save token to SharedPreferences or secure storage
         SharedPreferences prefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
@@ -411,6 +415,14 @@ public class MainActivity extends AppCompatActivity {
     private String getAccessToken() {
         SharedPreferences prefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
         return prefs.getString("spotify_access_token", null); // Returns null if the token is not found
+    }
+
+    public SpotifyAppRemote getSpotifyAppRemote() {
+        return mSpotifyAppRemote;
+    }
+
+    public String getUserID() {
+        return userID;
     }
 
     public void disable(View v) {
