@@ -70,6 +70,8 @@ public class MainActivity extends AppCompatActivity {
         // Initialize the CompletableFuture
         authenticationFuture = new CompletableFuture<>();
 
+        // Initialise the PlaylistSetup Class
+        PlaylistSetup.initialize(this);
 
         viewPagerAdapter = new ViewPagerAdapter(this);
         viewPager2 = findViewById(R.id.view_pager);
@@ -106,18 +108,45 @@ public class MainActivity extends AppCompatActivity {
     public void preparePlayFragment() {
         if (userID == null) {
             System.out.println("userID null");
+            return;
         }
-        else {
-            System.out.println(userID);
-            PlaylistSetup.getPlaylistData(userID, spotifyApi).thenAccept(playlists -> {
-                System.out.println(playlists);
-                runOnUiThread(() -> {
-                    TextView playlistCountIndicator = findViewById(R.id.playlistCount);
-                    playlistCountIndicator.setText(getString(R.string.playlist_count, playlists.size()));
-                    ((PlayFragment) viewPagerAdapter.getFragment(0)).updatePlaylists(playlists);
+
+        System.out.println(userID);
+        PlaylistSetup.getPlaylistData(userID, spotifyApi)
+                .thenAccept(playlists -> {
+                    System.out.println(playlists);
+                    runOnUiThread(() -> {
+                        // Add a small delay to ensure fragment is ready
+                        viewPager2.post(() -> {
+                            PlayFragment playFragment = (PlayFragment) viewPagerAdapter.getFragment(0);
+                            if (playFragment != null && playFragment.isAdded()) {
+                                Log.d("preparePlayFragment", "Fragment is ready. Playlist Size: " + playlists.size());
+                                TextView playlistCountIndicator = findViewById(R.id.playlistCount);
+                                playlistCountIndicator.setText(getString(R.string.playlist_count, playlists.size()));
+                                playFragment.updatePlaylists(playlists);
+                            } else {
+                                // If fragment isn't ready, retry after a short delay
+                                viewPager2.postDelayed(() -> {
+                                    Log.d("preparePlayFragment", "Fragment is not ready, Retrying. Playlist Size: " + playlists.size());
+                                    PlayFragment retryFragment = (PlayFragment) viewPagerAdapter.getFragment(0);
+                                    if (retryFragment != null && retryFragment.isAdded()) {
+                                        Log.d("preparePlayFragment", "After retrying, Fragment is ready. Playlist Size: " + playlists.size());
+                                        TextView playlistCountIndicator = findViewById(R.id.playlistCount);
+                                        playlistCountIndicator.setText(getString(R.string.playlist_count, playlists.size()));
+                                        retryFragment.updatePlaylists(playlists);
+                                    }
+                                }, 100); // 100ms delay
+                            }
+                        });
+                    });
+                })
+                .exceptionally(throwable -> {
+                    runOnUiThread(() -> {
+                        Toast.makeText(this, "Error loading playlists: " + throwable.getMessage(),
+                                Toast.LENGTH_SHORT).show();
+                    });
+                    return null;
                 });
-            });
-        }
     }
 
     public void prepareLibraryFragment() {
@@ -249,7 +278,6 @@ public class MainActivity extends AppCompatActivity {
             //
             //        PlayFragment playFragment = (PlayFragment) viewPagerAdapter.createFragment(0);
             //        playFragment.onSpotifyAuthenticated(spotifyApi, userID, CLIENT_ID, REDIRECT_URI, mSpotifyAppRemote);
-
             //        PlaylistSetup.getPlaylistData(userID, spotifyApi).thenAccept(playlists -> {
             //            // Use the playlists here
             //            itemAdapter = new Playlist_RecyclerViewAdapter(playlists);
