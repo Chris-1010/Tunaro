@@ -16,6 +16,7 @@ import com.google.android.material.tabs.TabLayout;
 import com.spotify.android.appremote.api.ConnectionParams;
 import com.spotify.android.appremote.api.Connector;
 import com.spotify.android.appremote.api.SpotifyAppRemote;
+import com.spotify.protocol.types.Track;
 import com.spotify.sdk.android.auth.AuthorizationClient;
 import com.spotify.sdk.android.auth.AuthorizationRequest;
 import com.spotify.sdk.android.auth.AuthorizationResponse;
@@ -285,7 +286,7 @@ public class MainActivity extends AppCompatActivity {
             //        });
 //    }
 
-    private void connectSpotifyAppRemote() {
+    public void connectSpotifyAppRemote() {
         // Connect to Spotify App Remote here
 
         ConnectionParams connectionParams =
@@ -296,30 +297,32 @@ public class MainActivity extends AppCompatActivity {
 
         SpotifyAppRemote.connect(this, connectionParams,
                 new Connector.ConnectionListener() {
-
                     public void onConnected(SpotifyAppRemote spotifyAppRemote) {
                         mSpotifyAppRemote = spotifyAppRemote;
                         Log.d("MainActivity", "Connected to remote");
+                        // Store this for later use
+                        onSpotifyRemoteConnected();
                     }
 
                     public void onFailure(Throwable throwable) {
-                        Log.e("MyActivity", throwable.getMessage(), throwable);
-
-                        // Something went wrong when attempting to connect
+                        Log.e("MainActivity", "Remote connection failed: " + throwable.getMessage(), throwable);
+                        Toast.makeText(MainActivity.this,
+                                "Failed to connect to Spotify. Please ensure the Spotify app is installed.",
+                                Toast.LENGTH_LONG).show();
                     }
                 });
     }
 
-//    public void start(View v) {
-//        disable(v);
-//
-//        //Subscribe to PlayerState
-//        mSpotifyAppRemote.getPlayerApi()
-//                .subscribeToPlayerState()
-//                .setEventCallback(playerState -> {
-//                    final Track track = playerState.track;
-//                    if (track != null) {
-//                        Log.d("MainActivity", track.name + " by " + track.artist.name);
+    public void start(View v) {
+        disable(v);
+
+        //Subscribe to PlayerState
+        mSpotifyAppRemote.getPlayerApi()
+                .subscribeToPlayerState()
+                .setEventCallback(playerState -> {
+                    final Track track = playerState.track;
+                    if (track != null) {
+                        Log.d("MainActivity", track.name + " by " + track.artist.name);
 //                        TextView trackDisplay = findViewById(R.id.trackDisplay);
 //                        TextView artistDisplay = findViewById(R.id.artistDisplay);
 //                        ImageView songCover = findViewById(R.id.songCover);
@@ -327,9 +330,9 @@ public class MainActivity extends AppCompatActivity {
 //                        artistDisplay.setText(track.artist.name);
 //                        Uri imageURI = Uri.parse(track.imageUri.raw);
 //                        songCover.setImageURI(imageURI);
-//                    }
-//                });
-//    }
+                    }
+                });
+    }
 
     private CompletableFuture<Void> getCurrentUsersProfile_Async() {
         final GetCurrentUsersProfileRequest getCurrentUsersProfileRequest = spotifyApi.getCurrentUsersProfile()
@@ -354,10 +357,19 @@ public class MainActivity extends AppCompatActivity {
                 });
     }
 
+    /**
+     * Disconnect from Spotify remote.
+     * Note: only disconnect from Spotify when the app is actually closing,
+     * not during navigation between activities. This ensures the connection
+     * remains active when playing songs from other screens.
+     */
     @Override
     protected void onStop() {
         super.onStop();
-        SpotifyAppRemote.disconnect(mSpotifyAppRemote);
+        // Only disconnect if the app is actually closing
+        if (isFinishing()) {
+            SpotifyAppRemote.disconnect(mSpotifyAppRemote);
+        }
     }
 
     @Override
@@ -399,6 +411,10 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void onSpotifyRemoteConnected() {
+        // Enable UI elements that require Spotify connection
+        Toast.makeText(this, "Connected to Spotify", Toast.LENGTH_SHORT).show();
+    }
 
     private void updateUILoggedIn() {
         // Update your UI elements to reflect logged-in state
