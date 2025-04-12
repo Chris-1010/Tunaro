@@ -16,6 +16,8 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
+import com.spotify.android.appremote.api.SpotifyAppRemote;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,7 +26,6 @@ public class PlayFragment extends Fragment implements Playlist_RecyclerViewInter
     private Playlist_RecyclerViewAdapter adapter;
     private final ArrayList<PlaylistModel> playlistModels = new ArrayList<>();
     private SwipeRefreshLayout swipeRefreshLayout;
-    private RecyclerView recyclerView;
     private MainActivity mainActivity;
     private boolean isRefreshing = false;
     private DatabaseHelper dbHelper;
@@ -42,7 +43,7 @@ public class PlayFragment extends Fragment implements Playlist_RecyclerViewInter
         view = inflater.inflate(R.layout.fragment_play, container, false);
 
         // Initialize RecyclerView
-        recyclerView = view.findViewById(R.id.mRecyclerView);
+        RecyclerView recyclerView = view.findViewById(R.id.mRecyclerView);
         adapter = new Playlist_RecyclerViewAdapter(getContext(), this, this);
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         recyclerView.setAdapter(adapter);
@@ -58,25 +59,26 @@ public class PlayFragment extends Fragment implements Playlist_RecyclerViewInter
         archiveToggleButton = view.findViewById(R.id.archiveToggleButton);
         archiveToggleButton.setOnClickListener(v -> toggleArchivedView());
 
-        SwipeToArchiveCallback.OnSwipeListener archiveListener = new SwipeToArchiveCallback.OnSwipeListener() {
-            @Override
-            public void onArchive(int position) {
-                PlaylistModel playlist = getPlaylistModels().get(position);
-                if (showingArchived) {
-                    dbHelper.unarchivePlaylist(playlist.getId());
-                    Toast.makeText(requireContext(), "Playlist unarchived", Toast.LENGTH_SHORT).show();
-                } else {
-                    dbHelper.archivePlaylist(playlist.getId());
-                    Toast.makeText(requireContext(), "Playlist archived", Toast.LENGTH_SHORT).show();
-                }
-                refreshPlaylists();
-            }
-        };
-
-        SwipeToArchiveCallback swipeHandler = new SwipeToArchiveCallback(adapter, archiveListener, showingArchived);
+        SwipeToArchiveCallback swipeHandler = getSwipeToArchiveCallback();
         new ItemTouchHelper(swipeHandler).attachToRecyclerView(recyclerView);
 
         return view;
+    }
+
+    private @NonNull SwipeToArchiveCallback getSwipeToArchiveCallback() {
+        SwipeToArchiveCallback.OnSwipeListener archiveListener = position -> {
+            PlaylistModel playlist = getPlaylistModels().get(position);
+            if (showingArchived) {
+                dbHelper.unarchivePlaylist(playlist.getId());
+                Toast.makeText(requireContext(), "Playlist unarchived", Toast.LENGTH_SHORT).show();
+            } else {
+                dbHelper.archivePlaylist(playlist.getId());
+                Toast.makeText(requireContext(), "Playlist archived", Toast.LENGTH_SHORT).show();
+            }
+            refreshPlaylists();
+        };
+
+        return new SwipeToArchiveCallback(adapter, archiveListener, showingArchived);
     }
 
     @Override
@@ -168,7 +170,8 @@ public class PlayFragment extends Fragment implements Playlist_RecyclerViewInter
         SelectedPlaylistHolder.getInstance().setSelectedPlaylist(
                 clickedPlaylist,
                 mainActivity.getSpotifyApi(),
-                mainActivity.getSpotifyAppRemote()
+                mainActivity.getSpotifyAppRemote(),
+                mainActivity
         );
 
         // Start the PlaylistView activity
@@ -223,13 +226,23 @@ public class PlayFragment extends Fragment implements Playlist_RecyclerViewInter
         }
     }
 
-//    public void toggleAPI(View v) {
-//        Button b = (Button) v;
-//        String currentState = b.getText().toString();
-//        if (currentState.equals("Play")) {mSpotifyAppRemote.getPlayerApi().resume(); b.setText(R.string.pause);}
-//        else {mSpotifyAppRemote.getPlayerApi().pause(); b.setText(R.string.play);}
-////        if (b.getText().toString().equals("Play")) {
-////
-////        }
-//    }
+    public void toggleAPI(View v) {
+        SpotifyAppRemote mSpotifyAppRemote = mainActivity.getSpotifyAppRemote();
+
+        if (mSpotifyAppRemote == null) {
+            Toast.makeText(getContext(), "Spotify Remote not connected", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        android.widget.Button b = (android.widget.Button) v;
+        String currentState = b.getText().toString();
+
+        if (currentState.equals("Play")) {
+            mSpotifyAppRemote.getPlayerApi().resume();
+            b.setText(R.string.pause);
+        } else {
+            mSpotifyAppRemote.getPlayerApi().pause();
+            b.setText(R.string.play);
+        }
+    }
 }

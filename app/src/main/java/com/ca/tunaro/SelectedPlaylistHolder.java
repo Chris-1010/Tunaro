@@ -11,6 +11,7 @@ public class SelectedPlaylistHolder {
     private static SelectedPlaylistHolder instance;
     private PlaylistModel selectedPlaylist;
     private SpotifyApi spotifyApi;
+    private MainActivity mainActivity;
     private SpotifyAppRemote mSpotifyAppRemote;
 
     private SelectedPlaylistHolder() {}
@@ -22,10 +23,11 @@ public class SelectedPlaylistHolder {
         return instance;
     }
 
-    public void setSelectedPlaylist(PlaylistModel playlist, SpotifyApi api, SpotifyAppRemote appRemote) {
+    public void setSelectedPlaylist(PlaylistModel playlist, SpotifyApi api, SpotifyAppRemote appRemote, MainActivity activity) {
         this.selectedPlaylist = playlist;
         this.spotifyApi = api;
         this.mSpotifyAppRemote = appRemote;
+        this.mainActivity = activity;
     }
 
     public PlaylistModel getSelectedPlaylist() {
@@ -40,9 +42,14 @@ public class SelectedPlaylistHolder {
         return mSpotifyAppRemote;
     }
 
+    public MainActivity getMainActivity() {
+        return mainActivity;
+    }
+
     public void clearSelectedPlaylist() {
         selectedPlaylist = null;
         spotifyApi = null;
         mSpotifyAppRemote = null;
+        mainActivity = null;
     }
 }
