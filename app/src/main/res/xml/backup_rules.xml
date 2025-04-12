@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Exclude specific files and folders from auto backup -->
+    <!-- <exclude domain="sharedpref" path="device.xml"/> -->
+    <!-- <exclude domain="database" path="device.db"/> -->
+    <!-- <exclude domain="file" path="device-data"/> -->
+</full-backup-content>
