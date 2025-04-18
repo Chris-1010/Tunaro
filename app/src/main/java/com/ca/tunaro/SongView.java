@@ -40,6 +40,9 @@ public class SongView extends AppCompatActivity {
             return;
         }
 
+        // Initialize AppBarLayout
+        appBarLayout = findViewById(R.id.appbar);
+
         // Set up basic song info
         setupBasicSongInfo();
 
