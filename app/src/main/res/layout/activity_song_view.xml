@@ -133,11 +133,10 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/fixed_header"
             app:tabGravity="fill"
-            app:tabIndicatorColor="@color/tanAccent"
-            app:tabIndicatorHeight="3dp"
             app:tabMode="fixed"
-            app:tabSelectedTextColor="@color/tanAccent"
-            app:tabTextColor="@color/white" />
+            app:tabPaddingStart="4dp"
+            app:tabPaddingEnd="4dp"
+            app:tabIndicator="@null" />
 
         <androidx.viewpager2.widget.ViewPager2
             android:id="@+id/view_pager"
