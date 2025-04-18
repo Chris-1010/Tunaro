@@ -28,4 +28,6 @@
     <string name="add_snippet">Add Snippet</string>
     <string name="notes_tab">Notes</string>
     <string name="snippets_tab">Snippets</string>
+    <string name="notes">Notes</string>
+    <string name="toggle_snippet_playback">Toggle Snippet Playback</string>
 </resources>
