@@ -114,13 +114,19 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"/>
 
-        <ImageView
-            android:id="@+id/play_button"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:src="@android:drawable/ic_media_play" />
+    <ImageView
+        android:id="@+id/play_button"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="bottom|center"
+        android:layout_marginBottom="50dp"
+        android:background="@drawable/circle_background"
+        android:clickable="true"
+        android:contentDescription="@string/play"
+        android:focusable="true"
+        android:padding="8dp"
+        android:src="@android:drawable/ic_media_play"
+        app:tint="@color/white" />
 
     </LinearLayout>
 </ScrollView>
