@@ -32,14 +32,10 @@ import java.util.Objects;
 public class SongView extends AppCompatActivity {
     // Fields
     private SongModel selectedSong;
-    private DatabaseHelper dbHelper;
-    private Spinner noteTypeSpinner;
-    private EditText noteInput;
-    private Button addNoteButton;
-    private LinearLayout noteInputLayout;
-    private RecyclerView notesRecyclerView;
-    private SongNotesAdapter notesAdapter;
-    private List<SongNote> notes = new ArrayList<>();
+    private TabLayout tabLayout;
+    private ViewPager2 viewPager;
+    private SongTabAdapter tabAdapter;
+    private AppBarLayout appBarLayout;
 
     // Creation
     @Override
@@ -47,29 +43,6 @@ public class SongView extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_song_view);
-
-        dbHelper = new DatabaseHelper(this);
-
-        // Initialize UI components
-        initializeUI();
-        setupNoteTypeSpinner();
-        setupNotesList();
-
-        // Add play button functionality
-        ImageView playButton = findViewById(R.id.play_button);
-        playButton.setOnClickListener(v -> playSong(getIntent().getStringExtra("source")));
-
-        // Load existing notes
-        loadExistingNotes();
-    }
-
-    // Initialization
-    private void initializeUI() {
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
-            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
-            return insets;
-        });
 
         // Retrieve the selected song
         selectedSong = SelectedSongHolder.getInstance().getSelectedSong();
@@ -81,12 +54,15 @@ public class SongView extends AppCompatActivity {
         // Set up basic song info
         setupBasicSongInfo();
 
-        // Initialize note-related UI components
-        noteTypeSpinner = findViewById(R.id.noteTypeSpinner);
-        noteInput = findViewById(R.id.noteInput);
-        addNoteButton = findViewById(R.id.addNoteButton);
-        noteInputLayout = findViewById(R.id.noteInputLayout);
-        notesRecyclerView = findViewById(R.id.notesRecyclerView);
+        // Set up tabs
+        setupTabs();
+
+        // Add play button functionality
+        ImageView playButton = findViewById(R.id.play_button);
+        playButton.setOnClickListener(v -> playSong(getIntent().getStringExtra("source")));
+
+        // Force the collapsible details part to be collapsed initially
+        appBarLayout.setExpanded(false, false);
     }
 
     // Setup methods
@@ -112,81 +88,27 @@ public class SongView extends AppCompatActivity {
         durationView.setText(duration);
     }
 
-    private void setupNoteTypeSpinner() {
-        ArrayList<String> noteTypes = new ArrayList<>();
-        for (SongNote.NoteType type : SongNote.NoteType.values()) {
-            noteTypes.add(type.getDisplayName());
-        }
+    private void setupTabs() {
+        tabLayout = findViewById(R.id.tab_layout);
+        viewPager = findViewById(R.id.view_pager);
 
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(
-                this, android.R.layout.simple_spinner_item, noteTypes);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        noteTypeSpinner.setAdapter(adapter);
+        tabAdapter = new SongTabAdapter(this, selectedSong);
+        viewPager.setAdapter(tabAdapter);
 
-        noteTypeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                noteInputLayout.setVisibility(View.VISIBLE);
+        // Connect TabLayout with ViewPager2
+        new TabLayoutMediator(tabLayout, viewPager, (tab, position) -> {
+            switch (position) {
+                case 0:
+                    tab.setText("Notes");
+                    break;
+                case 1:
+                    tab.setText("Snippets");
+                    break;
             }
+        }).attach();
 
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-                noteInputLayout.setVisibility(View.GONE);
-            }
-        });
-
-        addNoteButton.setOnClickListener(v -> saveNote());
-    }
-
-    private void setupNotesList() {
-        notesAdapter = new SongNotesAdapter(this, new ArrayList<>());
-        notesRecyclerView.setLayoutManager(new LinearLayoutManager(this));
-        notesRecyclerView.setAdapter(notesAdapter);
-
-        // Setup swipe functionality
-        SwipeToDeleteCallback swipeHandler = new SwipeToDeleteCallback(notesAdapter,
-                new SwipeToDeleteCallback.OnSwipeListener() {
-                    @Override
-                    public void onDelete(int position) {
-                        SongNote noteToDelete = notesAdapter.getNote(position);
-                        dbHelper.deleteNote(noteToDelete.getId());
-                        notesAdapter.removeNote(position);
-                        Toast.makeText(SongView.this, "Note deleted", Toast.LENGTH_SHORT).show();
-                    }
-
-                    @Override
-                    public void onEdit(int position) {
-                        showEditDialog(notesAdapter.getNote(position));
-                    }
-                });
-        new ItemTouchHelper(swipeHandler).attachToRecyclerView(notesRecyclerView);
-    }
-
-    // Save methods
-    private void saveNote() {
-        String content = noteInput.getText().toString().trim();
-        if (content.isEmpty()) {
-            Toast.makeText(this, "Please enter a note", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        String noteType = noteTypeSpinner.getSelectedItem().toString();
-        SongNote note = new SongNote(selectedSong.getId(), noteType, content);
-
-        long id = dbHelper.addNote(note);
-        if (id != -1) {
-            Toast.makeText(this, "Note added successfully", Toast.LENGTH_SHORT).show();
-            noteInput.setText("");
-            loadExistingNotes(); // Refresh the notes list
-        } else {
-            Toast.makeText(this, "Error saving note", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    // Load methods
-    private void loadExistingNotes() {
-        notes = dbHelper.getSongNotes(selectedSong.getId());
-        notesAdapter.updateNotes(notes);
+        // Select Notes tab by default
+        viewPager.setCurrentItem(0);
     }
 
     private void playSong(String source) {
@@ -237,54 +159,6 @@ public class SongView extends AppCompatActivity {
             Toast.makeText(this, "Unable to play song. Please check Spotify connection.",
                     Toast.LENGTH_SHORT).show();
         }
-    }
-
-
-    // Display methods
-    private void showEditDialog(final SongNote note) {
-        // Create dialog layout
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(50, 30, 50, 30);
-
-        // Create spinner for note type
-        final Spinner typeSpinner = new Spinner(this);
-        ArrayList<String> noteTypes = new ArrayList<>();
-        for (SongNote.NoteType type : SongNote.NoteType.values()) {
-            noteTypes.add(type.getDisplayName());
-        }
-        ArrayAdapter<String> spinnerAdapter = new ArrayAdapter<>(
-                this, android.R.layout.simple_spinner_item, noteTypes);
-        spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        typeSpinner.setAdapter(spinnerAdapter);
-        typeSpinner.setSelection(noteTypes.indexOf(note.getNoteType()));
-
-        // Create edit text for content
-        final EditText contentInput = new EditText(this);
-        contentInput.setText(note.getContent());
-
-        layout.addView(typeSpinner);
-        layout.addView(contentInput);
-
-        // Show dialog
-        new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Edit Note")
-                .setView(layout)
-                .setPositiveButton("Save", (dialog, which) -> {
-                    note.setNoteType(typeSpinner.getSelectedItem().toString());
-                    note.setContent(contentInput.getText().toString());
-                    dbHelper.editNote(note);
-                    loadExistingNotes();
-                    Toast.makeText(SongView.this, "Note updated", Toast.LENGTH_SHORT).show();
-                })
-                .setNegativeButton("Cancel", (dialog, which) -> {
-                    // Reset the view state by notifying adapter of change
-                    int position = notes.indexOf(note);
-                    if (position != -1) {
-                        notesAdapter.notifyItemChanged(position);
-                    }
-                })
-                .show();
     }
 
     // Destroy
