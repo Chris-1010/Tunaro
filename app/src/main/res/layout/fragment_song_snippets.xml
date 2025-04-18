@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.core.widget.NestedScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
@@ -10,23 +11,21 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <TextView
+        <!-- Add Snippet button -->
+        <Button
+            android:id="@+id/addSnippetButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Snippets"
-            android:textColor="@color/white"
-            android:textSize="20sp"
-            android:textStyle="bold"
+            android:text="@string/add_snippet"
             android:layout_marginBottom="16dp"/>
 
-        <!-- Placeholder for snippets content -->
-        <TextView
+        <!-- Snippets section -->
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/snippetsRecyclerView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Snippets feature coming soon"
-            android:textColor="@color/faintTanAccent"
-            android:gravity="center"
-            android:padding="32dp"/>
+            tools:listitem="@layout/snippet_item" />
 
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>
