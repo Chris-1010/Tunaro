@@ -17,10 +17,17 @@
     <string name="songAlbumCoverImage">Song Album Cover Image</string>
     <string name="albumLabel">Album</string>
     <string name="songDuration">Duration</string>
+    <string name="songViewTabsDesc">Notes / Snippets Tabs</string>
 
     <string name="logged_in_as">Logged in as %s</string>
     <string name="playlist_count">%d Playlists</string>
     <string name="song_count">%d Tracks</string>
 
     <string name="songViewDescription">Add notes/details to this song</string>
+
+    <string name="add_snippet">Add Snippet</string>
+    <string name="notes_tab">Notes</string>
+    <string name="snippets_tab">Snippets</string>
+    <string name="notes">Notes</string>
+    <string name="toggle_snippet_playback">Toggle Snippet Playback</string>
 </resources>
