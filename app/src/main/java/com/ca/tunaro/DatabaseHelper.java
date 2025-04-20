@@ -96,6 +96,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     + COLUMN_PLAYLIST_ID + " TEXT UNIQUE NOT NULL"
                     + ")");
         }
+
+        if (oldVersion < 4) {
+            // Create the song_snippets table for version 4
+            db.execSQL(CREATE_TABLE_SONG_SNIPPETS);
+        }
     }
 
     // ======== NOTES METHODS ========
