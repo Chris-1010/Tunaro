@@ -229,6 +229,108 @@ public class SongSnippetsFragment extends Fragment {
             }
         });
 
+        // Value listener that updates the end time if start time becomes greater
+        NumberPicker.OnValueChangeListener startTimeListener = (picker, oldVal, newVal) -> {
+            // Calculate current start and end times in milliseconds
+            long startMs = calculateTimeInMs(
+                    startMinutesPicker.getValue(),
+                    startSecondsPicker.getValue(),
+                    startMillisecondsPicker.getValue() * 100
+            );
+
+            long endMs = calculateTimeInMs(
+                    endMinutesPicker.getValue(),
+                    endSecondsPicker.getValue(),
+                    endMillisecondsPicker.getValue() * 100
+            );
+
+            // If start time becomes greater than or equal to end time,
+            // adjust end time to be at least 500ms after start time
+            if (startMs >= endMs) {
+                startMs += 500; // Add 500ms buffer
+
+                // Make sure we don't exceed song duration
+                if (startMs < totalDurationMs) {
+                    // Convert back to minutes, seconds, milliseconds
+                    int newEndMinutes = (int) (startMs / 60000);
+                    int newEndSeconds = (int) ((startMs % 60000) / 1000);
+                    int newEndMillis = (int) ((startMs % 1000) / 100);
+
+                    // Update end time pickers without triggering their listeners
+                    endMinutesPicker.setValue(newEndMinutes);
+                    endSecondsPicker.setValue(newEndSeconds);
+                    endMillisecondsPicker.setValue(newEndMillis);
+                } else {
+                    // If we'd exceed song duration, roll back the start time change
+                    if (picker == startMinutesPicker) {
+                        startMinutesPicker.setValue(oldVal);
+                    } else if (picker == startSecondsPicker) {
+                        startSecondsPicker.setValue(oldVal);
+                    } else if (picker == startMillisecondsPicker) {
+                        startMillisecondsPicker.setValue(oldVal);
+                    }
+
+                    Toast.makeText(requireContext(),
+                            "Cannot set start time this high - would exceed song duration",
+                            Toast.LENGTH_SHORT).show();
+                }
+            }
+
+            // Also check if we're at the maximum minute and adjust seconds accordingly
+            if (startMinutesPicker.getValue() == maxMinutes) {
+                startSecondsPicker.setMaxValue(maxSecondsInLastMinute);
+            } else {
+                startSecondsPicker.setMaxValue(59);
+            }
+        };
+
+        // Value listener that updates the start time if end time becomes smaller
+        NumberPicker.OnValueChangeListener endTimeListener = (picker, oldVal, newVal) -> {
+            // Calculate current start and end times in milliseconds
+            long startMs = calculateTimeInMs(
+                    startMinutesPicker.getValue(),
+                    startSecondsPicker.getValue(),
+                    startMillisecondsPicker.getValue() * 100
+            );
+
+            long endMs = calculateTimeInMs(
+                    endMinutesPicker.getValue(),
+                    endSecondsPicker.getValue(),
+                    endMillisecondsPicker.getValue() * 100
+            );
+
+            // If end time becomes less than or equal to start time,
+            // prevent the change by resetting to old value
+            if (endMs <= startMs) {
+                if (picker == endMinutesPicker) {
+                    endMinutesPicker.setValue(oldVal);
+                } else if (picker == endSecondsPicker) {
+                    endSecondsPicker.setValue(oldVal);
+                } else if (picker == endMillisecondsPicker) {
+                    endMillisecondsPicker.setValue(oldVal);
+                }
+
+//                Toast.makeText(requireContext(),
+//                        "End time must be after start time",
+//                        Toast.LENGTH_SHORT).show();
+            }
+
+            // Also check if we're at the maximum minute and adjust seconds accordingly
+            if (endMinutesPicker.getValue() == maxMinutes) {
+                endSecondsPicker.setMaxValue(maxSecondsInLastMinute);
+            } else {
+                endSecondsPicker.setMaxValue(59);
+            }
+        };
+
+        // Apply listeners
+        startMinutesPicker.setOnValueChangedListener(startTimeListener);
+        startSecondsPicker.setOnValueChangedListener(startTimeListener);
+        startMillisecondsPicker.setOnValueChangedListener(startTimeListener);
+        endMinutesPicker.setOnValueChangedListener(endTimeListener);
+        endSecondsPicker.setOnValueChangedListener(endTimeListener);
+        endMillisecondsPicker.setOnValueChangedListener(endTimeListener);
+
         // Set default values (start at 0, end at 25% of the song)
         startMinutesPicker.setValue(0);
         startSecondsPicker.setValue(0);
@@ -292,7 +394,7 @@ public class SongSnippetsFragment extends Fragment {
 
                     // Validate
                     if (startMs >= endMs) {
-                        Toast.makeText(requireContext(), "End time must be after start time", Toast.LENGTH_SHORT).show();
+//                        Toast.makeText(requireContext(), "End time must be after start time", Toast.LENGTH_SHORT).show();
                         return;
                     }
 
