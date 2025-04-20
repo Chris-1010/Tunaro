@@ -153,7 +153,6 @@ public class SongSnippetsFragment extends Fragment {
     }
 
     private void showAddSnippetDialog() {
-        // Use a custom layout instead of programmatically creating views
         View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_add_snippet, null);
 
         // Get references to all the views
@@ -170,6 +169,9 @@ public class SongSnippetsFragment extends Fragment {
                 .into(previewAlbumCover);
         previewSongTitle.setText(song.getName());
         previewArtist.setText(song.getArtist());
+
+        CheckBox previewStartCheckbox = dialogView.findViewById(R.id.preview_start_checkbox);
+        CheckBox previewEndCheckbox = dialogView.findViewById(R.id.preview_end_checkbox);
 
         // Get song duration and break down into components
         int totalDurationMs = song.getDuration();
@@ -323,6 +325,95 @@ public class SongSnippetsFragment extends Fragment {
             }
         };
 
+        // Listeners for preview functionality
+        NumberPicker.OnValueChangeListener startTimePreviewListener = (picker, oldVal, newVal) -> {
+            if (previewStartCheckbox.isChecked() && spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
+                // Calculate current start time in milliseconds
+                long startMs = calculateTimeInMs(
+                        startMinutesPicker.getValue(),
+                        startSecondsPicker.getValue(),
+                        startMillisecondsPicker.getValue() * 100
+                );
+
+                // Preview start position (play 3 seconds starting from the selected position)
+                previewPosition(startMs, 3000);
+            }
+        };
+
+        NumberPicker.OnValueChangeListener endTimePreviewListener = (picker, oldVal, newVal) -> {
+            if (previewEndCheckbox.isChecked() && spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
+                // Calculate current end time in milliseconds
+                long endMs = calculateTimeInMs(
+                        endMinutesPicker.getValue(),
+                        endSecondsPicker.getValue(),
+                        endMillisecondsPicker.getValue() * 100
+                );
+
+                // Preview end position (play 3 seconds leading up to the end position)
+                long previewStartMs = Math.max(0, endMs - 3000);
+                previewPositionWithEnd(previewStartMs, endMs);
+            }
+        };
+
+        // Add a way to apply the preview listeners when checkboxes are checked
+        previewStartCheckbox.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isChecked) {
+                // When checkbox is checked, add the preview listener to all start time pickers
+                startMinutesPicker.setOnValueChangedListener(
+                        (picker, oldVal, newVal) -> {
+                            startTimeListener.onValueChange(picker, oldVal, newVal);
+                            startTimePreviewListener.onValueChange(picker, oldVal, newVal);
+                        });
+                startSecondsPicker.setOnValueChangedListener(
+                        (picker, oldVal, newVal) -> {
+                            startTimeListener.onValueChange(picker, oldVal, newVal);
+                            startTimePreviewListener.onValueChange(picker, oldVal, newVal);
+                        });
+                startMillisecondsPicker.setOnValueChangedListener(
+                        (picker, oldVal, newVal) -> {
+                            startTimeListener.onValueChange(picker, oldVal, newVal);
+                            startTimePreviewListener.onValueChange(picker, oldVal, newVal);
+                        });
+
+                // Trigger preview with current values
+                startTimePreviewListener.onValueChange(startMinutesPicker, 0, startMinutesPicker.getValue());
+            } else {
+                // When unchecked, revert to original listeners
+                startMinutesPicker.setOnValueChangedListener(startTimeListener);
+                startSecondsPicker.setOnValueChangedListener(startTimeListener);
+                startMillisecondsPicker.setOnValueChangedListener(startTimeListener);
+            }
+        });
+
+        previewEndCheckbox.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isChecked) {
+                // When checkbox is checked, add the preview listener to all end time pickers
+                endMinutesPicker.setOnValueChangedListener(
+                        (picker, oldVal, newVal) -> {
+                            endTimeListener.onValueChange(picker, oldVal, newVal);
+                            endTimePreviewListener.onValueChange(picker, oldVal, newVal);
+                        });
+                endSecondsPicker.setOnValueChangedListener(
+                        (picker, oldVal, newVal) -> {
+                            endTimeListener.onValueChange(picker, oldVal, newVal);
+                            endTimePreviewListener.onValueChange(picker, oldVal, newVal);
+                        });
+                endMillisecondsPicker.setOnValueChangedListener(
+                        (picker, oldVal, newVal) -> {
+                            endTimeListener.onValueChange(picker, oldVal, newVal);
+                            endTimePreviewListener.onValueChange(picker, oldVal, newVal);
+                        });
+
+                // Trigger preview with current values
+                endTimePreviewListener.onValueChange(endMinutesPicker, 0, endMinutesPicker.getValue());
+            } else {
+                // When unchecked, revert to original listeners
+                endMinutesPicker.setOnValueChangedListener(endTimeListener);
+                endSecondsPicker.setOnValueChangedListener(endTimeListener);
+                endMillisecondsPicker.setOnValueChangedListener(endTimeListener);
+            }
+        });
+
         // Apply listeners
         startMinutesPicker.setOnValueChangedListener(startTimeListener);
         startSecondsPicker.setOnValueChangedListener(startTimeListener);
@@ -442,6 +533,55 @@ public class SongSnippetsFragment extends Fragment {
     private void loadSnippets() {
         snippets = dbHelper.getSongSnippets(song.getId());
         snippetAdapter.updateSnippets(snippets);
+    }
+
+    // Helper method to preview a position with a specified duration
+    private void previewPosition(long positionMs, long durationMs) {
+        if (spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
+            // Play the song
+            spotifyAppRemote.getPlayerApi().play(song.getUri())
+                    .setResultCallback(empty -> {
+                        // Add a delay to ensure the song has loaded
+                        new android.os.Handler().postDelayed(() -> {
+                            // Seek to the position
+                            spotifyAppRemote.getPlayerApi().seekTo(positionMs)
+                                    .setResultCallback(seekResult -> {
+                                        // Start a timer to pause after the duration
+                                        new android.os.Handler().postDelayed(() -> {
+                                            spotifyAppRemote.getPlayerApi().pause();
+                                        }, durationMs);
+                                    });
+                        }, 200); // Delay after play
+                    });
+        } else {
+            Toast.makeText(requireContext(), "Spotify not connected", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // Helper method to preview up to a specific end position
+    private void previewPositionWithEnd(long startPositionMs, long endPositionMs) {
+        if (spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
+            // Calculate duration
+            long durationMs = endPositionMs - startPositionMs;
+
+            // Play the song
+            spotifyAppRemote.getPlayerApi().play(song.getUri())
+                    .setResultCallback(empty -> {
+                        // Add a delay to ensure the song has loaded
+                        new android.os.Handler().postDelayed(() -> {
+                            // Seek to the start position
+                            spotifyAppRemote.getPlayerApi().seekTo(startPositionMs)
+                                    .setResultCallback(seekResult -> {
+                                        // Start a timer to pause at the end position
+                                        new android.os.Handler().postDelayed(() -> {
+                                            spotifyAppRemote.getPlayerApi().pause();
+                                        }, durationMs);
+                                    });
+                        }, 200); // Delay after play
+                    });
+        } else {
+            Toast.makeText(requireContext(), "Spotify not connected", Toast.LENGTH_SHORT).show();
+        }
     }
 
     // Format milliseconds into MM:SS format
