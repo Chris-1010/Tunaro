@@ -87,46 +87,105 @@
             android:textStyle="bold"
             android:layout_marginBottom="8dp" />
 
-        <com.google.android.material.slider.RangeSlider
-            android:id="@+id/time_range_slider"
+        <!-- Start Time Section -->
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:valueFrom="0.0"
-            android:valueTo="100.0"
-            app:labelBehavior="gone" />
+            android:text="Start Time:"
+            android:textStyle="bold"
+            android:layout_marginTop="8dp" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
+            android:gravity="center">
+
+            <NumberPicker
+                android:id="@+id/start_minutes_picker"
+                android:layout_width="wrap_content"
+                android:layout_height="120dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="m"
+                android:textSize="18sp"
+                android:layout_marginEnd="8dp" />
+
+            <NumberPicker
+                android:id="@+id/start_seconds_picker"
+                android:layout_width="wrap_content"
+                android:layout_height="120dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="s"
+                android:textSize="18sp"
+                android:layout_marginEnd="8dp" />
+
+            <NumberPicker
+                android:id="@+id/start_milliseconds_picker"
+                android:layout_width="wrap_content"
+                android:layout_height="120dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ms"
+                android:textSize="18sp" />
+        </LinearLayout>
+
+        <!-- End Time Section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="End Time:"
+            android:textStyle="bold"
+            android:layout_marginTop="16dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
             android:layout_marginBottom="16dp">
 
-            <TextView
+            <NumberPicker
+                android:id="@+id/end_minutes_picker"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Start: "
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/start_time_text"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                tools:text="0:00" />
+                android:layout_height="120dp" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="End: "
-                android:textStyle="bold" />
+                android:text="m"
+                android:textSize="18sp"
+                android:layout_marginEnd="8dp" />
+
+            <NumberPicker
+                android:id="@+id/end_seconds_picker"
+                android:layout_width="wrap_content"
+                android:layout_height="120dp" />
 
             <TextView
-                android:id="@+id/end_time_text"
-                android:layout_width="0dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                tools:text="0:30" />
+                android:text="s"
+                android:textSize="18sp"
+                android:layout_marginEnd="8dp" />
+
+            <NumberPicker
+                android:id="@+id/end_milliseconds_picker"
+                android:layout_width="wrap_content"
+                android:layout_height="120dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ms"
+                android:textSize="18sp" />
         </LinearLayout>
 
         <!-- Test Playback Button -->

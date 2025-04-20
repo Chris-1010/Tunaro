@@ -8,6 +8,7 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.NumberPicker;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -16,7 +17,6 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
-import com.google.android.material.slider.RangeSlider;
 import com.spotify.android.appremote.api.SpotifyAppRemote;
 
 import java.util.ArrayList;
@@ -162,9 +162,6 @@ public class SongSnippetsFragment extends Fragment {
         TextView previewArtist = dialogView.findViewById(R.id.preview_artist);
 
         EditText titleInput = dialogView.findViewById(R.id.snippet_title_input);
-        RangeSlider timeRangeSlider = dialogView.findViewById(R.id.time_range_slider);
-        TextView startTimeText = dialogView.findViewById(R.id.start_time_text);
-        TextView endTimeText = dialogView.findViewById(R.id.end_time_text);
         CheckBox includeInRankingsCheckbox = dialogView.findViewById(R.id.include_in_rankings);
 
         // Set up the preview section
@@ -174,31 +171,89 @@ public class SongSnippetsFragment extends Fragment {
         previewSongTitle.setText(song.getName());
         previewArtist.setText(song.getArtist());
 
-        // Set up the time range slider
-        int songDurationMs = song.getDuration();
-        timeRangeSlider.setValueFrom(0);
-        timeRangeSlider.setValueTo(songDurationMs);
-        timeRangeSlider.setValues(0f, songDurationMs / 4f); // Default to first quarter
+        // Get song duration and break down into components
+        int totalDurationMs = song.getDuration();
+        int totalSeconds = totalDurationMs / 1000;
+        int maxMinutes = totalSeconds / 60;
+        int maxSecondsInLastMinute = totalSeconds % 60;
 
-        // Update time text views when slider values change
-        timeRangeSlider.addOnChangeListener((slider, value, fromUser) -> {
-            List<Float> values = slider.getValues();
-            long startMs = values.get(0).longValue();
-            long endMs = values.get(1).longValue();
+        // Initialize start time pickers
+        NumberPicker startMinutesPicker = dialogView.findViewById(R.id.start_minutes_picker);
+        NumberPicker startSecondsPicker = dialogView.findViewById(R.id.start_seconds_picker);
+        NumberPicker startMillisecondsPicker = dialogView.findViewById(R.id.start_milliseconds_picker);
 
-            startTimeText.setText(formatTime(startMs));
-            endTimeText.setText(formatTime(endMs));
+        // Initialize end time pickers
+        NumberPicker endMinutesPicker = dialogView.findViewById(R.id.end_minutes_picker);
+        NumberPicker endSecondsPicker = dialogView.findViewById(R.id.end_seconds_picker);
+        NumberPicker endMillisecondsPicker = dialogView.findViewById(R.id.end_milliseconds_picker);
+
+        // Configure minutes pickers
+        startMinutesPicker.setMinValue(0);
+        startMinutesPicker.setMaxValue(maxMinutes);
+
+        endMinutesPicker.setMinValue(0);
+        endMinutesPicker.setMaxValue(maxMinutes);
+
+        // Configure seconds pickers (initially full range)
+        startSecondsPicker.setMinValue(0);
+        startSecondsPicker.setMaxValue(59);
+
+        endSecondsPicker.setMinValue(0);
+        endSecondsPicker.setMaxValue(59);
+
+        // Configure milliseconds pickers (using steps of 100ms for better usability)
+        startMillisecondsPicker.setMinValue(0);
+        startMillisecondsPicker.setMaxValue(9);
+        startMillisecondsPicker.setDisplayedValues(new String[]{"000", "100", "200", "300", "400", "500", "600", "700", "800", "900"});
+
+        endMillisecondsPicker.setMinValue(0);
+        endMillisecondsPicker.setMaxValue(9);
+        endMillisecondsPicker.setDisplayedValues(new String[]{"000", "100", "200", "300", "400", "500", "600", "700", "800", "900"});
+
+        // Add listeners to handle constraints between minutes and seconds
+        startMinutesPicker.setOnValueChangedListener((picker, oldVal, newVal) -> {
+            // Adjust seconds maximum if at the maximum minute
+            if (newVal == maxMinutes) {
+                startSecondsPicker.setMaxValue(maxSecondsInLastMinute);
+            } else {
+                startSecondsPicker.setMaxValue(59);
+            }
         });
 
-        // Trigger initial text update
-        timeRangeSlider.getValues();
+        endMinutesPicker.setOnValueChangedListener((picker, oldVal, newVal) -> {
+            // Adjust seconds maximum if at the maximum minute
+            if (newVal == maxMinutes) {
+                endSecondsPicker.setMaxValue(maxSecondsInLastMinute);
+            } else {
+                endSecondsPicker.setMaxValue(59);
+            }
+        });
+
+        // Set default values (start at 0, end at 25% of the song)
+        startMinutesPicker.setValue(0);
+        startSecondsPicker.setValue(0);
+        startMillisecondsPicker.setValue(0);
+
+        int quarterDurationSecs = totalSeconds / 4;
+        endMinutesPicker.setValue(quarterDurationSecs / 60);
+        endSecondsPicker.setValue(quarterDurationSecs % 60);
+        endMillisecondsPicker.setValue(0);
 
         // Test playback button
         Button testPlaybackButton = dialogView.findViewById(R.id.test_playback_button);
         testPlaybackButton.setOnClickListener(v -> {
-            List<Float> values = timeRangeSlider.getValues();
-            long startMs = values.get(0).longValue();
-            long endMs = values.get(1).longValue();
+            // Calculate time values in milliseconds
+            long startMs = calculateTimeInMs(
+                    startMinutesPicker.getValue(),
+                    startSecondsPicker.getValue(),
+                    startMillisecondsPicker.getValue() * 100
+            );
+
+            long endMs = calculateTimeInMs(
+                    endMinutesPicker.getValue(),
+                    endSecondsPicker.getValue(),
+                    endMillisecondsPicker.getValue() * 100
+            );
 
             // Create temporary snippet for testing
             SongSnippet testSnippet = new SongSnippet(
@@ -218,12 +273,22 @@ public class SongSnippetsFragment extends Fragment {
                 .setTitle("Add Snippet")
                 .setView(dialogView)
                 .setPositiveButton("Save", (dialog, which) -> {
-                    // Get values
+                    // Get title and rankings checkbox
                     String title = titleInput.getText().toString();
-                    List<Float> values = timeRangeSlider.getValues();
-                    long startMs = values.get(0).longValue();
-                    long endMs = values.get(1).longValue();
                     boolean includeInRankings = includeInRankingsCheckbox.isChecked();
+
+                    // Calculate time values in milliseconds
+                    long startMs = calculateTimeInMs(
+                            startMinutesPicker.getValue(),
+                            startSecondsPicker.getValue(),
+                            startMillisecondsPicker.getValue() * 100
+                    );
+
+                    long endMs = calculateTimeInMs(
+                            endMinutesPicker.getValue(),
+                            endSecondsPicker.getValue(),
+                            endMillisecondsPicker.getValue() * 100
+                    );
 
                     // Validate
                     if (startMs >= endMs) {
@@ -261,6 +326,11 @@ public class SongSnippetsFragment extends Fragment {
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
+    }
+
+    // Calculate milliseconds from components
+    private long calculateTimeInMs(int minutes, int seconds, int milliseconds) {
+        return (minutes * 60 * 1000) + (seconds * 1000) + milliseconds;
     }
 
     private void showEditSnippetDialog(SongSnippet snippet) {
