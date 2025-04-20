@@ -88,12 +88,26 @@
             android:layout_marginBottom="8dp" />
 
         <!-- Start Time Section -->
-        <TextView
+        <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Start Time:"
-            android:textStyle="bold"
-            android:layout_marginTop="8dp" />
+            android:layout_marginTop="8dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_centerHorizontal="true"
+                android:text="Start Time"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <CheckBox
+                android:id="@+id/preview_start_checkbox"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:text="Preview" />
+        </RelativeLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -138,12 +152,26 @@
         </LinearLayout>
 
         <!-- End Time Section -->
-        <TextView
+        <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="End Time:"
-            android:textStyle="bold"
-            android:layout_marginTop="16dp" />
+            android:layout_marginTop="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerHorizontal="true"
+                android:text="End Time"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <CheckBox
+                android:id="@+id/preview_end_checkbox"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:text="Preview" />
+        </RelativeLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
