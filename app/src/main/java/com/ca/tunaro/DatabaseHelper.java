@@ -10,8 +10,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class DatabaseHelper extends SQLiteOpenHelper {
-    private static final String DATABASE_NAME = "SongNotesDB";
-    private static final int DATABASE_VERSION = 3;
+    private static final String DATABASE_NAME = "TunaroDB";
+    private static final int DATABASE_VERSION = 4;
 
     // Table name
     private static final String TABLE_SONG_NOTES = "song_notes";
@@ -19,8 +19,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     // Column names
     private static final String COLUMN_ID = "id";
-    private static final String COLUMN_PLAYLIST_ID = "playlist_id";
     private static final String COLUMN_SONG_ID = "song_id";
+
+    private static final String COLUMN_PLAYLIST_ID = "playlist_id";
+
+    // Notes Columns
     private static final String COLUMN_NOTE_TYPE = "note_type";
     private static final String COLUMN_CONTENT = "content";
     private static final String COLUMN_TIMESTAMP = "timestamp";
@@ -30,14 +33,19 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             "UPDATE " + TABLE_SONG_NOTES +
                     " SET " + COLUMN_TIMESTAMP + " = strftime('%d-%m-%Y %H:%M', " + COLUMN_TIMESTAMP + ", 'localtime')";
 
-    // Create table query
+    // Create table queries
     private static final String CREATE_TABLE_SONG_NOTES =
             "CREATE TABLE " + TABLE_SONG_NOTES + "("
-                    + COLUMN_ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    + COLUMN_SONG_ID + " TEXT NOT NULL,"
-                    + COLUMN_NOTE_TYPE + " TEXT NOT NULL,"
-                    + COLUMN_CONTENT + " TEXT NOT NULL,"
-                    + COLUMN_TIMESTAMP + " TEXT DEFAULT (strftime('%d-%m-%Y %H:%M', 'now', 'localtime'))"
+                    + COLUMN_ID +           " INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + COLUMN_SONG_ID +      " TEXT NOT NULL,"
+                    + COLUMN_NOTE_TYPE +    " TEXT NOT NULL,"
+                    + COLUMN_CONTENT +      " TEXT NOT NULL,"
+                    + COLUMN_TIMESTAMP +    " TEXT DEFAULT (strftime('%d-%m-%Y %H:%M', 'now', 'localtime'))"
+                    + ")";
+    private static final String CREATE_TABLE_ARCHIVED_PLAYLISTS =
+            "CREATE TABLE " + TABLE_ARCHIVED_PLAYLISTS + "("
+                    + COLUMN_ID +           " INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + COLUMN_PLAYLIST_ID +  " TEXT UNIQUE NOT NULL"
                     + ")";
 
     public DatabaseHelper(Context context) {
@@ -47,10 +55,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     @Override
     public void onCreate(SQLiteDatabase db) {
         db.execSQL(CREATE_TABLE_SONG_NOTES);
-        db.execSQL("CREATE TABLE " + TABLE_ARCHIVED_PLAYLISTS + "("
-                + COLUMN_ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
-                + COLUMN_PLAYLIST_ID + " TEXT UNIQUE NOT NULL"
-                + ")");
+        db.execSQL(CREATE_TABLE_ARCHIVED_PLAYLISTS);
     }
 
     @Override
@@ -74,7 +79,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         }
     }
 
-    // Add a new note
+    // ======== NOTES METHODS ========
+    // Add
     public long addNote(SongNote note) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
@@ -82,13 +88,15 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_SONG_ID, note.getSongId());
         values.put(COLUMN_NOTE_TYPE, note.getNoteType());
         values.put(COLUMN_CONTENT, note.getContent());
+        // COLUMN_TIMESTAMP is automatically set by the database as default
 
         long id = db.insert(TABLE_SONG_NOTES, null, values);
+        note.setId(id);
         db.close();
         return id;
     }
 
-    // Edit a note
+    // Edit
     public void editNote(SongNote note) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
@@ -96,21 +104,19 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_NOTE_TYPE, note.getNoteType());
         values.put(COLUMN_CONTENT, note.getContent());
 
-        // Execute update with current timestamp
-        String updateQuery = "UPDATE " + TABLE_SONG_NOTES +
-                " SET " + COLUMN_NOTE_TYPE + " = ?, " +
-                COLUMN_CONTENT + " = ?, " +
-                COLUMN_TIMESTAMP + " = strftime('%d-%m-%Y %H:%M', 'now', 'localtime')" +
-                " WHERE " + COLUMN_ID + " = ?";
+        // Update with current timestamp first
+        db.execSQL("UPDATE " + TABLE_SONG_NOTES +
+                        " SET " + COLUMN_TIMESTAMP + " = strftime('%d-%m-%Y %H:%M', 'now', 'localtime')" +
+                        " WHERE " + COLUMN_ID + " = ?",
+                new String[]{String.valueOf(note.getId())});
 
-        db.execSQL(updateQuery,
-                new String[]{note.getNoteType(),
-                        note.getContent(),
-                        String.valueOf(note.getId())});
+        // Update other fields
+        db.update(TABLE_SONG_NOTES, values, COLUMN_ID + " = ?",
+                new String[]{String.valueOf(note.getId())});
         db.close();
     }
 
-    // Delete a note
+    // Delete
     public void deleteNote(long noteId) {
         SQLiteDatabase db = this.getWritableDatabase();
         db.delete(TABLE_SONG_NOTES, COLUMN_ID + " = ?",
@@ -123,7 +129,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         List<SongNote> notes = new ArrayList<>();
         String selectQuery = "SELECT * FROM " + TABLE_SONG_NOTES +
                 " WHERE " + COLUMN_SONG_ID + " = ?" +
-                " ORDER BY " + COLUMN_TIMESTAMP + " DESC";
+                " ORDER BY " + COLUMN_TIMESTAMP + " ASC";
 
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(selectQuery, new String[]{songId});
@@ -185,6 +191,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return songIds;
     }
 
+    // ======== ARCHIVED PLAYLISTS METHODS ========
+    // Add a playlist to the archived playlists table
     public void archivePlaylist(String playlistId) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
