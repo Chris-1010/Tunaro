@@ -2,7 +2,7 @@ package com.ca.tunaro;
 
 public class SongSnippet {
     private long id;
-    private String songId;
+    private final String songId;
     private long snippetNo;
     private String title;
     private long startTime; // in milliseconds
@@ -40,7 +40,6 @@ public class SongSnippet {
 
     // Setters
     public void setId(long id) { this.id = id; }
-    public void setSongId(String songId) { this.songId = songId; }
     public void setSnippetNo(long snippetNo) { this.snippetNo = snippetNo; }
     public void setTitle(String title) { this.title = title; }
     public void setStartTime(long startTime) { this.startTime = startTime; }

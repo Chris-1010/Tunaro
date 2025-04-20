@@ -2,7 +2,7 @@ package com.ca.tunaro;
 
 public class SongNote {
     private long id;
-    private String songId;
+    private final String songId;
     private String noteType;
     private String content;
     private String timestamp;
@@ -11,13 +11,6 @@ public class SongNote {
         this.songId = songId;
         this.noteType = noteType;
         this.content = content;
-    }
-
-    public SongNote(String songId, String noteType, String content, String timestamp) {
-        this.songId = songId;
-        this.noteType = noteType;
-        this.content = content;
-        this.timestamp = timestamp;
     }
 
     // Constructor with ID for editing/retrieving from database
