@@ -32,6 +32,10 @@ public class SongSnippetsFragment extends Fragment {
     private SongSnippetsAdapter snippetAdapter;
     private List<SongSnippet> snippets = new ArrayList<>();
 
+    private int activeTimers = 0;
+    private android.os.Handler snippetHandler = new android.os.Handler();
+    private Runnable pauseRunnable;
+
     public static SongSnippetsFragment newInstance(SongModel song) {
         SongSnippetsFragment fragment = new SongSnippetsFragment();
         Bundle args = new Bundle();
@@ -106,29 +110,31 @@ public class SongSnippetsFragment extends Fragment {
 
     private void playSnippet(SongSnippet snippet) {
         if (spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
-            // First play the song
+            // Cancel any existing timer
+            if (pauseRunnable != null) {
+                snippetHandler.removeCallbacks(pauseRunnable);
+                activeTimers = 0; // Reset count when starting a new playback
+            }
             spotifyAppRemote.getPlayerApi().play(song.getUri())
                     .setResultCallback(empty -> {
-                        // Add a delay before seeking to ensure the track has started loading
+                        // Add a delay to ensure the song has loaded
                         new android.os.Handler().postDelayed(() -> {
                             // Pause first to make seeking more reliable
                             spotifyAppRemote.getPlayerApi().pause()
                                     .setResultCallback(pauseResult -> {
                                         // Another small delay to ensure pause completes
                                         new android.os.Handler().postDelayed(() -> {
-                                            // Then seek to the snippet start position
+                                            // Seek to the position
                                             spotifyAppRemote.getPlayerApi().seekTo(snippet.getStartTime())
                                                     .setResultCallback(seekResult -> {
                                                         // Resume playback after seeking
                                                         spotifyAppRemote.getPlayerApi().resume();
-
-                                                        // Start a timer to pause at the end time
-                                                        long duration = snippet.getEndTime() - snippet.getStartTime();
-                                                        startSnippetEndTimer(duration);
+                                                        // Start a timer to pause after the duration
+                                                        startSnippetEndTimer(snippet.getEndTime() - snippet.getStartTime());
                                                     });
-                                        }, 100); // Delay after pause
+                                        }, 50); // Delay after pause
                                     });
-                        }, 100); // Delay after play
+                        }, 50); // Delay after play
                     });
         } else {
             Toast.makeText(requireContext(), "Spotify not connected", Toast.LENGTH_SHORT).show();
@@ -136,20 +142,35 @@ public class SongSnippetsFragment extends Fragment {
     }
 
     private void startSnippetEndTimer(long duration) {
+        activeTimers++;
+
         // Create a handler and runnable to pause playback after duration
-        new android.os.Handler().postDelayed(() -> {
+        pauseRunnable = () -> {
             SpotifyAppRemote spotifyAppRemote = mainActivity.getSpotifyAppRemote();
 
-            if (spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
-                spotifyAppRemote.getPlayerApi().pause();
+            // Decrement the counter
+            activeTimers--;
+
+            // Only pause if this is the last timer
+            if (activeTimers <= 0) {
+                activeTimers = 0; // Ensure non-negative
+                if (spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
+                    spotifyAppRemote.getPlayerApi().pause();
+                }
             }
-        }, duration);
+        };
+
+        // Schedule the runnable
+        snippetHandler.postDelayed(pauseRunnable, duration);
     }
 
     private void detachSnippet() {
-        // This method would simply cancel any timer that would pause the playback
+        if (pauseRunnable != null) {
+            snippetHandler.removeCallbacks(pauseRunnable);
+            activeTimers = 0; // Reset count when starting a new playback
+        }
+
         Toast.makeText(requireContext(), "Playback will continue after snippet end", Toast.LENGTH_SHORT).show();
-        // TODO need to implement a way to cancel the timer here
     }
 
     private void showAddSnippetDialog() {
@@ -336,7 +357,16 @@ public class SongSnippetsFragment extends Fragment {
                 );
 
                 // Preview start position (play 3 seconds starting from the selected position)
-                previewPosition(startMs, 3000);
+                long previewEndMs = Math.min(startMs + 3000, totalDurationMs);
+                SongSnippet previewSnippet = new SongSnippet(
+                        song.getId(),
+                        1, // Temporary number
+                        "Preview End",
+                        startMs,
+                        previewEndMs,
+                        false);
+
+                playSnippet(previewSnippet);
             }
         };
 
@@ -351,7 +381,15 @@ public class SongSnippetsFragment extends Fragment {
 
                 // Preview end position (play 3 seconds leading up to the end position)
                 long previewStartMs = Math.max(0, endMs - 3000);
-                previewPositionWithEnd(previewStartMs, endMs);
+                SongSnippet previewSnippet = new SongSnippet(
+                        song.getId(),
+                        1, // Temporary number
+                        "Preview End",
+                        previewStartMs,
+                        endMs,
+                        false);
+
+                playSnippet(previewSnippet);
             }
         };
 
@@ -538,7 +576,11 @@ public class SongSnippetsFragment extends Fragment {
     // Helper method to preview a position with a specified duration
     private void previewPosition(long positionMs, long durationMs) {
         if (spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
-            // Play the song
+            // Cancel any existing timer
+            if (pauseRunnable != null) {
+                snippetHandler.removeCallbacks(pauseRunnable);
+                activeTimers = 0; // Reset count when starting a new playback
+            }
             spotifyAppRemote.getPlayerApi().play(song.getUri())
                     .setResultCallback(empty -> {
                         // Add a delay to ensure the song has loaded
@@ -547,37 +589,9 @@ public class SongSnippetsFragment extends Fragment {
                             spotifyAppRemote.getPlayerApi().seekTo(positionMs)
                                     .setResultCallback(seekResult -> {
                                         // Start a timer to pause after the duration
-                                        new android.os.Handler().postDelayed(() -> {
-                                            spotifyAppRemote.getPlayerApi().pause();
-                                        }, durationMs);
+                                        startSnippetEndTimer(durationMs);
                                     });
-                        }, 200); // Delay after play
-                    });
-        } else {
-            Toast.makeText(requireContext(), "Spotify not connected", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    // Helper method to preview up to a specific end position
-    private void previewPositionWithEnd(long startPositionMs, long endPositionMs) {
-        if (spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
-            // Calculate duration
-            long durationMs = endPositionMs - startPositionMs;
-
-            // Play the song
-            spotifyAppRemote.getPlayerApi().play(song.getUri())
-                    .setResultCallback(empty -> {
-                        // Add a delay to ensure the song has loaded
-                        new android.os.Handler().postDelayed(() -> {
-                            // Seek to the start position
-                            spotifyAppRemote.getPlayerApi().seekTo(startPositionMs)
-                                    .setResultCallback(seekResult -> {
-                                        // Start a timer to pause at the end position
-                                        new android.os.Handler().postDelayed(() -> {
-                                            spotifyAppRemote.getPlayerApi().pause();
-                                        }, durationMs);
-                                    });
-                        }, 200); // Delay after play
+                        }, 100); // Delay after play
                     });
         } else {
             Toast.makeText(requireContext(), "Spotify not connected", Toast.LENGTH_SHORT).show();
@@ -590,5 +604,13 @@ public class SongSnippetsFragment extends Fragment {
         int minutes = totalSeconds / 60;
         int seconds = totalSeconds % 60;
         return String.format(Locale.getDefault(), "%d:%02d", minutes, seconds);
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        if (snippetHandler != null && pauseRunnable != null) {
+            snippetHandler.removeCallbacks(pauseRunnable);
+        }
     }
 }
