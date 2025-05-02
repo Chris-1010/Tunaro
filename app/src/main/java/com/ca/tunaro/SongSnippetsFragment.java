@@ -137,7 +137,8 @@ public class SongSnippetsFragment extends Fragment {
                         }, 50); // Delay after play
                     });
         } else {
-            Toast.makeText(requireContext(), "Spotify not connected", Toast.LENGTH_SHORT).show();
+            Toast.makeText(requireContext(), "Spotify reconnecting...", Toast.LENGTH_SHORT).show();
+            mainActivity.connectSpotifyAppRemote();
         }
     }
 
