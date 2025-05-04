@@ -34,6 +34,7 @@ public class PlaybackManager {
 
     public interface PlaybackListener {
         void onPlaybackStateChanged(boolean isPlaying, SongModel currentSong);
+
         void onConnectionStateChanged(boolean isConnected);
     }
 
@@ -157,8 +158,15 @@ public class PlaybackManager {
 
     // Helper method to create SongModel
     private SongModel createSongModelFromRemoteTrack(Track remoteTrack, String id, String[] artistNames) {
-        // This will need to be updated based on your modified SongModel
-        // This is just an example assuming you'll update SongModel to accept String[] for artists
+        // Convert Spotify URI image format to web URL format
+        String imageUrl = remoteTrack.imageUri.raw;
+        if (imageUrl != null && imageUrl.startsWith("spotify:image:")) {
+            // Extract the image ID (the part after the last colon)
+            String imageId = imageUrl.substring(imageUrl.lastIndexOf(":") + 1);
+            // Construct the proper web URL
+            imageUrl = "https://i.scdn.co/image/" + imageId;
+        }
+
         return new SongModel(
                 id,
                 remoteTrack.name,
@@ -167,7 +175,7 @@ public class PlaybackManager {
                 remoteTrack.uri,
                 0, // We don't have popularity from playback
                 remoteTrack.album.name,
-                remoteTrack.imageUri.raw,
+                imageUrl,
                 null,
                 null
         );
