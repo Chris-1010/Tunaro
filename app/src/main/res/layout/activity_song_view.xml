@@ -164,4 +164,11 @@
         android:src="@android:drawable/ic_media_play"
         app:tint="@color/white" />
 
+    <include
+        android:id="@+id/playback_bar"
+        layout="@layout/playback_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom" />
+
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
