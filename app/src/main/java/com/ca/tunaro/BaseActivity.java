@@ -78,11 +78,33 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
             playbackBar.setOnClickListener(v -> {
                 SongModel currentSong = playbackManager.getCurrentSong();
                 if (currentSong != null) {
-                    SelectedSongHolder.getInstance().setSelectedSong(currentSong,
-                            (MainActivity) BaseActivity.this);
+                    MainActivity mainActivity = null;
 
-                    // Open SongView activity
-                    startActivity(new android.content.Intent(this, SongView.class));
+                    if (BaseActivity.this instanceof MainActivity) {
+                        // If we're in MainActivity, use the current activity
+                        mainActivity = (MainActivity) BaseActivity.this;
+                    } else if (SelectedPlaylistHolder.getInstance().getMainActivity() != null) {
+                        mainActivity = SelectedPlaylistHolder.getInstance().getMainActivity();
+                    } else if (SelectedSongHolder.getInstance().getMainActivity() != null) {
+                        mainActivity = SelectedSongHolder.getInstance().getMainActivity();
+                    }
+
+                    // Only continue if we have a valid MainActivity reference
+                    if (mainActivity != null) {
+                        // Check if the SongView for the clicked song is already open
+                        SelectedSongHolder songHolder = SelectedSongHolder.getInstance();
+                        if (songHolder.getSelectedSong() != null && Objects.equals(songHolder.getSelectedSong().getId(), currentSong.getId()))
+                            return;
+
+                        // Set the selected song
+                        SelectedSongHolder.getInstance().setSelectedSong(currentSong, mainActivity);
+
+                        // Open SongView activity
+                        startActivity(new android.content.Intent(this, SongView.class));
+                    } else {
+                        // Handle the case where no MainActivity reference is found
+                        Toast.makeText(this, "Unable to open song view", Toast.LENGTH_SHORT).show();
+                    }
                 }
             });
         }
