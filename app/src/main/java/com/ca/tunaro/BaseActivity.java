@@ -6,11 +6,14 @@ import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.bumptech.glide.Glide;
+
+import java.util.Objects;
 
 public class BaseActivity extends AppCompatActivity implements PlaybackManager.PlaybackListener {
 
@@ -112,7 +115,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
 
     private void updatePlaybackBarVisibility() {
         if (playbackBar != null) {
-            boolean shouldShowBar = playbackManager.isPlaying() && playbackManager.getCurrentSong() != null;
+            boolean shouldShowBar = playbackManager.getCurrentSong() != null;
             playbackBar.setVisibility(shouldShowBar ? View.VISIBLE : View.GONE);
 
             // Adjust main content padding if needed
