@@ -120,7 +120,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
 
             // Adjust main content padding if needed
             View mainContent = findViewById(android.R.id.content);
-            if (mainContent instanceof ViewGroup) {
+            if (mainContent instanceof ViewGroup && !(BaseActivity.this instanceof MainActivity)) {
                 // Add bottom padding to main content if bar is visible
                 // This is a simplified approach - you might need to adjust based on your layouts
                 int bottomPadding = shouldShowBar ?

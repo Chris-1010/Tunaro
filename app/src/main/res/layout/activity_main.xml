@@ -9,13 +9,14 @@
         android:id="@+id/frame_layout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@color/purple_700"/>
+        android:background="@color/purple_700" />
 
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tab_layout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
+        android:layout_marginBottom="@dimen/playback_bar_height"
         android:background="#000000"
         android:visibility="visible">
 
@@ -49,7 +50,7 @@
         android:id="@+id/playback_bar"
         layout="@layout/playback_bar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="@dimen/playback_bar_height"
         android:layout_alignParentBottom="true" />
 </RelativeLayout>
 
