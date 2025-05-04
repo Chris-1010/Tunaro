@@ -8,7 +8,7 @@ public class SongModel {
     // See https://developer.spotify.com/documentation/web-api/reference/get-playlists-tracks to add more (also change the 'fields' parameter in the PlaylistSetup.java file)
     String id;
     String name;
-    ArtistSimplified[] artists;
+    String[] artists;
     int duration;    // duration_ms
     String uri;
     int popularity;    // a score out of 100 which is based on how much the song is played and how recently (Dev Note: Seems to me more like a 'trending' score)
@@ -18,7 +18,7 @@ public class SongModel {
     String releaseDate;    // album["release_date"]    (most often in a format like YYYY-MM)
     Date lastListenDate;
 
-    public SongModel(String id, String name, ArtistSimplified[] artists, int duration, String uri, int popularity, String albumName, String albumCoverUrl, Date dateAddedToPlaylist, String releaseDate) {
+    public SongModel(String id, String name, String[] artists, int duration, String uri, int popularity, String albumName, String albumCoverUrl, Date dateAddedToPlaylist, String releaseDate) {
         this.id = id;
         this.name = name;
         this.artists = artists;
@@ -31,6 +31,24 @@ public class SongModel {
         this.releaseDate = releaseDate;
     }
 
+    // Extract artists from ArtistSimplified[] to String[]
+    private static String[] extractArtistNames(ArtistSimplified[] artists) {
+        if (artists == null || artists.length == 0) {
+            return new String[]{"Unknown Artist"};
+        }
+
+        String[] artistNames = new String[artists.length];
+        for (int i = 0; i < artists.length; i++) {
+            artistNames[i] = artists[i].getName();
+        }
+
+        return artistNames;
+    }
+
+    public SongModel(String id, String name, ArtistSimplified[] artists, int duration, String uri, int popularity, String albumName, String albumCoverUrl, Date dateAddedToPlaylist, String releaseDate) {
+        this(id, name, extractArtistNames(artists), duration, uri, popularity, albumName, albumCoverUrl, dateAddedToPlaylist, releaseDate);
+    }
+
     public String getId() {
         return id;
     }
@@ -40,7 +58,7 @@ public class SongModel {
     }
 
     public String getArtist() {
-        return artists[0].getName();
+        return String.join(", ", artists);
     }
 
     public int getDuration() {
