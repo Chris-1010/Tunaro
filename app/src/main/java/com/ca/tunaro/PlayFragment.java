@@ -22,7 +22,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class PlayFragment extends Fragment implements Playlist_RecyclerViewInterface {
-    private MainActivity mainActivity;
     private View view;
     private Playlist_RecyclerViewAdapter adapter;
     private final ArrayList<PlaylistModel> playlistModels = new ArrayList<>();
@@ -35,7 +34,6 @@ public class PlayFragment extends Fragment implements Playlist_RecyclerViewInter
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mainActivity = (MainActivity) requireActivity();
     }
 
     @Override
@@ -169,7 +167,7 @@ public class PlayFragment extends Fragment implements Playlist_RecyclerViewInter
         // Set the selected playlist in the singleton
         SelectedPlaylistHolder.getInstance().setSelectedPlaylist(
                 clickedPlaylist,
-                mainActivity
+                (MainActivity) requireActivity()
         );
 
         // Start the PlaylistView activity
@@ -187,7 +185,8 @@ public class PlayFragment extends Fragment implements Playlist_RecyclerViewInter
 
     private void refreshPlaylists() {
         if (getActivity() == null) return;
-        MainActivity activity = (MainActivity) getActivity();
+        MainActivity activity = (MainActivity) requireActivity();
+
 
         // Only refresh from API if we're coming from archived view to normal view
         if (showingArchived) {
@@ -225,9 +224,9 @@ public class PlayFragment extends Fragment implements Playlist_RecyclerViewInter
     }
 
     public void toggleAPI(View v) {
-        SpotifyAppRemote mSpotifyAppRemote = mainActivity.getSpotifyAppRemote();
+        SpotifyAppRemote spotifyRemote = PlaybackManager.getInstance().getSpotifyAppRemote();
 
-        if (mSpotifyAppRemote == null) {
+        if (spotifyRemote == null) {
             Toast.makeText(getContext(), "Spotify Remote not connected", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -236,10 +235,10 @@ public class PlayFragment extends Fragment implements Playlist_RecyclerViewInter
         String currentState = b.getText().toString();
 
         if (currentState.equals("Play")) {
-            mSpotifyAppRemote.getPlayerApi().resume();
+            spotifyRemote.getPlayerApi().resume();
             b.setText(R.string.pause);
         } else {
-            mSpotifyAppRemote.getPlayerApi().pause();
+            spotifyRemote.getPlayerApi().pause();
             b.setText(R.string.play);
         }
     }
