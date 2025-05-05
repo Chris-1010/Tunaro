@@ -188,7 +188,7 @@ public class PlayFragment extends Fragment implements Playlist_RecyclerViewInter
         MainActivity activity = (MainActivity) requireActivity();
 
 
-        // Only refresh from API if we're coming from archived view to normal view
+        // Only refresh from API if coming from archived view to normal view
         if (showingArchived) {
             // Use cached data since archived playlists don't need fresh API data
             PlaylistSetup.getPlaylistData(activity.getUserID(), activity.getSpotifyApi())

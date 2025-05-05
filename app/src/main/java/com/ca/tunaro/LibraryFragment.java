@@ -64,7 +64,8 @@ public class LibraryFragment extends Fragment implements Library_RecyclerViewInt
     private void setupSearchBar() {
         searchBar.addTextChangedListener(new TextWatcher() {
             @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
 
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
@@ -72,7 +73,8 @@ public class LibraryFragment extends Fragment implements Library_RecyclerViewInt
             }
 
             @Override
-            public void afterTextChanged(Editable s) {}
+            public void afterTextChanged(Editable s) {
+            }
         });
     }
 
@@ -188,7 +190,7 @@ public class LibraryFragment extends Fragment implements Library_RecyclerViewInt
                                 track.getPopularity(),
                                 track.getAlbum().getName(),
                                 track.getAlbum().getImages()[0].getUrl(),
-                                null, // We don't have dateAddedToPlaylist for library view
+                                null,
                                 track.getAlbum().getReleaseDate()
                         );
 

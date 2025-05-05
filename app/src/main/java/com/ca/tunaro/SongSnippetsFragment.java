@@ -258,7 +258,7 @@ public class SongSnippetsFragment extends Fragment {
             if (startMs >= endMs) {
                 startMs += 500; // Add 500ms buffer
 
-                // Make sure we don't exceed song duration
+                // Make sure not to exceed song duration
                 if (startMs < totalDurationMs) {
                     // Convert back to minutes, seconds, milliseconds
                     int newEndMinutes = (int) (startMs / 60000);
@@ -270,7 +270,7 @@ public class SongSnippetsFragment extends Fragment {
                     endSecondsPicker.setValue(newEndSeconds);
                     endMillisecondsPicker.setValue(newEndMillis);
                 } else {
-                    // If we'd exceed song duration, roll back the start time change
+                    // If exceeding song duration, roll back the start time change
                     if (picker == startMinutesPicker) {
                         startMinutesPicker.setValue(oldVal);
                     } else if (picker == startSecondsPicker) {
@@ -285,7 +285,7 @@ public class SongSnippetsFragment extends Fragment {
                 }
             }
 
-            // Also check if we're at the maximum minute and adjust seconds accordingly
+            // Check if at the maximum minute and adjust seconds accordingly
             if (startMinutesPicker.getValue() == maxMinutes) {
                 startSecondsPicker.setMaxValue(maxSecondsInLastMinute);
             } else {
@@ -324,7 +324,7 @@ public class SongSnippetsFragment extends Fragment {
 //                        Toast.LENGTH_SHORT).show();
             }
 
-            // Also check if we're at the maximum minute and adjust seconds accordingly
+            // Check if at the maximum minute and adjust seconds accordingly
             if (endMinutesPicker.getValue() == maxMinutes) {
                 endSecondsPicker.setMaxValue(maxSecondsInLastMinute);
             } else {

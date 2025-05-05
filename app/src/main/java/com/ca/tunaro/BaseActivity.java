@@ -94,7 +94,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
                     MainActivity mainActivity = null;
 
                     if (BaseActivity.this instanceof MainActivity) {
-                        // If we're in MainActivity, use the current activity
+                        // If in MainActivity, use the current activity
                         mainActivity = (MainActivity) BaseActivity.this;
                     } else if (SelectedPlaylistHolder.getInstance().getMainActivity() != null) {
                         mainActivity = SelectedPlaylistHolder.getInstance().getMainActivity();
@@ -102,7 +102,6 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
                         mainActivity = SelectedSongHolder.getInstance().getMainActivity();
                     }
 
-                    // Only continue if we have a valid MainActivity reference
                     if (mainActivity != null) {
                         // Check if the SongView for the clicked song is already open
                         SelectedSongHolder songHolder = SelectedSongHolder.getInstance();
