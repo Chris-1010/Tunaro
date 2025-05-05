@@ -8,6 +8,32 @@
     android:background="@color/purple_700"
     tools:context=".PlaylistView">
 
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/song_recycler_view"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="-300dp"
+        android:clipToPadding="false"
+        android:paddingTop="400dp"
+        android:paddingBottom="120dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@+id/detailed_songCount"
+        app:layout_constraintVertical_bias="0.0"
+        tools:listitem="@layout/song_recycler_view_row" />
+
+    <View
+        android:id="@+id/view"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginBottom="-450dp"
+        android:background="@drawable/home_background_gradient"
+        app:layout_constraintBottom_toTopOf="@+id/song_recycler_view"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <ImageView
         android:id="@+id/search_icon"
         android:layout_width="wrap_content"
@@ -27,16 +53,19 @@
         android:layout_width="0dp"
         android:layout_height="48dp"
         android:layout_margin="8dp"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="20dp"
+        android:layout_marginEnd="20dp"
         android:background="@android:drawable/editbox_background"
         android:hint="Search songs..."
         android:padding="8dp"
         android:textColor="@android:color/black"
         android:textColorHint="@android:color/darker_gray"
         android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@+id/song_recycler_view"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="@+id/button2" />
+        app:layout_constraintTop_toBottomOf="@+id/detailed_songCount"
+        tools:visibility="visible" />
 
     <ImageView
         android:id="@+id/sort_icon"
@@ -55,28 +84,30 @@
     <Spinner
         android:id="@+id/sort_spinner"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_height="50dp"
+        android:layout_marginTop="20dp"
         android:paddingHorizontal="15dp"
         android:paddingVertical="12dp"
         android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@+id/song_recycler_view"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/detailed_songCount" />
+        app:layout_constraintTop_toBottomOf="@+id/detailed_songCount"
+        tools:visibility="visible" />
 
     <ImageView
         android:id="@+id/sort_direction_icon"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_height="50dp"
+        android:layout_marginTop="20dp"
         android:contentDescription="Sort Direction"
         android:padding="8dp"
         android:src="@drawable/ic_arrow_downward"
         android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@+id/song_recycler_view"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.25"
         app:layout_constraintStart_toEndOf="@+id/sort_spinner"
-        app:layout_constraintTop_toBottomOf="@+id/detailed_songCount" />
+        app:layout_constraintTop_toBottomOf="@+id/detailed_songCount"
+        tools:visibility="visible" />
 
     <ImageView
         android:id="@+id/detailed_playlistCover"
@@ -117,17 +148,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/detailed_playlistName"
         tools:text="474 Tracks" />
-
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/song_recycler_view"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/button2"
-        app:layout_constraintVertical_bias="0.0"
-        tools:listitem="@layout/song_recycler_view_row" />
 
     <Button
         android:id="@+id/button2"
@@ -172,6 +192,7 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/loading_view" />
+
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <include
