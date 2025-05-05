@@ -1,6 +1,8 @@
 package com.ca.tunaro;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -29,6 +31,19 @@ public class PlaybackManager {
     private boolean isPlaying = false;
     private boolean isConnected = false;
 
+    // Seeking state
+    private long currentPositionMs = 0;
+    private long durationMs = 0;
+    private final Handler positionHandler = new Handler(Looper.getMainLooper());
+    private final Runnable positionUpdateRunnable = new Runnable() {
+        @Override
+        public void run() {
+            updatePlaybackPosition();
+            positionHandler.postDelayed(this, 500); // Update every 500ms
+        }
+    };
+    private boolean isTrackingPosition = false;
+
     // Listeners
     private final List<PlaybackListener> listeners = new ArrayList<>();
 
@@ -36,6 +51,8 @@ public class PlaybackManager {
         void onPlaybackStateChanged(boolean isPlaying, SongModel currentSong);
 
         void onConnectionStateChanged(boolean isConnected);
+
+        void onPlaybackPositionChanged(long positionMs, long durationMs);
     }
 
     private PlaybackManager() {
@@ -101,6 +118,7 @@ public class PlaybackManager {
     }
 
     public void disconnect() {
+        stopPositionTracking();
         if (spotifyAppRemote != null) {
             SpotifyAppRemote.disconnect(spotifyAppRemote);
             spotifyAppRemote = null;
@@ -147,11 +165,25 @@ public class PlaybackManager {
             if (wasPlaying != isPlaying) {
                 notifyPlaybackStateChanged();
             }
+
+            currentPositionMs = playerState.playbackPosition;
+            durationMs = remoteTrack.duration;
+
+            // Update position tracking state when play state changes
+            if (isPlaying && !isTrackingPosition) {
+                startPositionTracking();
+            } else if (!isPlaying && isTrackingPosition) {
+                stopPositionTracking();
+            }
         } else {
             // No track playing
             if (isPlaying) {
                 isPlaying = false;
                 notifyPlaybackStateChanged();
+            }
+
+            if (isTrackingPosition) {
+                stopPositionTracking();
             }
         }
     }
@@ -237,9 +269,48 @@ public class PlaybackManager {
         }
     }
 
+    private void notifyPlaybackPositionChanged() {
+        for (PlaybackListener listener : listeners) {
+            listener.onPlaybackPositionChanged(currentPositionMs, durationMs);
+        }
+    }
+
     private void notifyConnectionStateChanged() {
         for (PlaybackListener listener : listeners) {
             listener.onConnectionStateChanged(isConnected);
+        }
+    }
+
+    public void startPositionTracking() {
+        if (!isTrackingPosition && isConnected && isPlaying) {
+            isTrackingPosition = true;
+            positionHandler.post(positionUpdateRunnable);
+        }
+    }
+
+    public void stopPositionTracking() {
+        isTrackingPosition = false;
+        positionHandler.removeCallbacks(positionUpdateRunnable);
+    }
+
+    private void updatePlaybackPosition() {
+        if (spotifyAppRemote != null && isConnected) {
+            spotifyAppRemote.getPlayerApi().getPlayerState()
+                    .setResultCallback(playerState -> {
+                        if (playerState.track != null) {
+                            currentPositionMs = playerState.playbackPosition;
+                            durationMs = playerState.track.duration;
+
+                            // Notify listeners with updated position
+                            notifyPlaybackPositionChanged();
+                        }
+                    });
+        }
+    }
+
+    public void seekTo(long positionMs) {
+        if (spotifyAppRemote != null && isConnected) {
+            spotifyAppRemote.getPlayerApi().seekTo(positionMs);
         }
     }
 
@@ -254,6 +325,14 @@ public class PlaybackManager {
 
     public SongModel getCurrentSong() {
         return currentSong;
+    }
+
+    public long getCurrentPositionMs() {
+        return currentPositionMs;
+    }
+
+    public long getDurationMs() {
+        return durationMs;
     }
 
     public SpotifyAppRemote getSpotifyAppRemote() {
