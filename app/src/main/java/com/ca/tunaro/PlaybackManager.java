@@ -153,7 +153,6 @@ public class PlaybackManager {
                 // Create a simplified SongModel from track with string artist names
                 currentSong = createSongModelFromRemoteTrack(remoteTrack, id, artistNames);
 
-                // Now you can safely show toast with context
                 showToast("Now playing: " + remoteTrack.name);
             }
 
@@ -205,7 +204,7 @@ public class PlaybackManager {
                 artistNames,
                 (int) remoteTrack.duration,
                 remoteTrack.uri,
-                0, // We don't have popularity from playback
+                0, // Don't have popularity from playback
                 remoteTrack.album.name,
                 imageUrl,
                 null,

@@ -191,7 +191,7 @@ public class MainActivity extends BaseActivity {
         // Create a new CompletableFuture for this authentication process
         CompletableFuture<Void> authFuture = new CompletableFuture<>();
 
-        // Store this future so we can complete it in onActivityResult
+        // Complete this future in onActivityResult
         this.authenticationFuture = authFuture;
 
         // Return a new CompletableFuture that chains the authentication and user profile fetch
