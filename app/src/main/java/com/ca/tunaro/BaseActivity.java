@@ -5,6 +5,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -13,7 +14,9 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.bumptech.glide.Glide;
 
+import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 public class BaseActivity extends AppCompatActivity implements PlaybackManager.PlaybackListener {
 
@@ -21,10 +24,14 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
 
     // Playback bar views
     protected View playbackBar;
+    protected SeekBar playbackSeekbar;
+    private boolean isSeeking = false;
     protected ImageView albumCover;
     protected TextView songName;
     protected TextView artistName;
     protected ImageButton playPauseButton;
+//    private TextView positionText;
+//    private TextView durationText;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -59,12 +66,15 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     private void setupPlaybackBar() {
         // Find playback bar views
         playbackBar = findViewById(R.id.playback_bar);
-        if (playbackBar == null) return; // Not all layouts might have the playback bar
+        playbackSeekbar = findViewById(R.id.playback_seekbar);
+        if (playbackBar == null) return;
 
         albumCover = findViewById(R.id.playback_album_cover);
         songName = findViewById(R.id.playback_song_name);
         artistName = findViewById(R.id.playback_artist_name);
         playPauseButton = findViewById(R.id.playback_play_pause);
+//        positionText = findViewById(R.id.playback_position);
+//        durationText = findViewById(R.id.playback_duration);
 
         // Set initial visibility
         updatePlaybackBarVisibility();
@@ -111,6 +121,31 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
                 }
             });
         }
+        if (playbackSeekbar != null) {
+            playbackSeekbar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override
+                public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+//                    if (fromUser && isSeeking) {
+//                        // Update position text if it exists
+//                        if (positionText != null) {
+//                            positionText.setText(formatDuration(progress));
+//                        }
+//                    }
+                }
+
+                @Override
+                public void onStartTrackingTouch(SeekBar seekBar) {
+                    isSeeking = true;
+                }
+
+                @Override
+                public void onStopTrackingTouch(SeekBar seekBar) {
+                    int progress = seekBar.getProgress();
+                    playbackManager.seekTo(progress);
+                    isSeeking = false;
+                }
+            });
+        }
     }
 
     private void updatePlaybackBarVisibility() {
@@ -144,6 +179,25 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         updatePlaybackBarVisibility();
     }
 
+    @Override
+    public void onPlaybackPositionChanged(long positionMs, long durationMs) {
+        runOnUiThread(() -> {
+            if (playbackSeekbar != null && !isSeeking) {
+                // Update seekbar max and progress
+                playbackSeekbar.setMax((int) durationMs);
+                playbackSeekbar.setProgress((int) positionMs);
+
+                // Update text views if they exist
+//                if (positionText != null) {
+//                    positionText.setText(formatDuration(positionMs));
+//                }
+//                if (durationText != null) {
+//                    durationText.setText(formatDuration(durationMs));
+//                }
+            }
+        });
+    }
+
     private void updatePlaybackBarUI(boolean isPlaying, SongModel currentSong) {
         if (playbackBar == null) return;
 
@@ -175,5 +229,12 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     @Override
     public void onConnectionStateChanged(boolean isConnected) {
         // You might want to show some UI feedback when connection state changes
+    }
+
+    private String formatDuration(long durationMs) {
+        long minutes = TimeUnit.MILLISECONDS.toMinutes(durationMs);
+        long seconds = TimeUnit.MILLISECONDS.toSeconds(durationMs) -
+                TimeUnit.MINUTES.toSeconds(minutes);
+        return String.format(Locale.getDefault(), "%d:%02d", minutes, seconds);
     }
 }
