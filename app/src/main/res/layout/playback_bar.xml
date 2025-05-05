@@ -9,6 +9,17 @@
     android:visibility="gone"
     tools:visibility="visible">
 
+    <SeekBar
+        android:id="@+id/playback_seekbar"
+        android:layout_width="match_parent"
+        android:layout_height="2dp"
+        android:layout_marginTop="0dp"
+        android:progressDrawable="@drawable/thin_seekbar_progress"
+        android:thumb="@drawable/seekbar_thumb_small"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <ImageView
         android:id="@+id/playback_album_cover"
         android:layout_width="50dp"
