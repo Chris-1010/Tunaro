@@ -49,7 +49,7 @@ dependencies {
     implementation("androidx.navigation:navigation-fragment:2.7.6")
     implementation("androidx.navigation:navigation-ui:2.7.6")
     implementation("com.google.code.gson:gson:2.6.1")
-    implementation(files("../spotify-app-remote-release-0.8.0.aar"))
+    implementation(files("./libs/spotify-app-remote-release-0.8.0.aar"))
     implementation("com.squareup.okhttp3:okhttp:4.9.1");
     implementation("se.michaelthelin.spotify:spotify-web-api-java:8.4.1")
     implementation("com.spotify.android:auth:1.2.5")
