@@ -4,7 +4,6 @@ package com.ca.tunaro;
  * This file passes over an instance of SongModel to start a new SongView Activity
  */
 public class SelectedSongHolder {
-    private MainActivity mainActivity;
     private static SelectedSongHolder instance;
     private SongModel selectedSong;
 
@@ -20,7 +19,6 @@ public class SelectedSongHolder {
 
     public void setSelectedSong(SongModel song, MainActivity activity) {
         this.selectedSong = song;
-        this.mainActivity = activity;
     }
 
     public SongModel getSelectedSong() {
@@ -28,11 +26,10 @@ public class SelectedSongHolder {
     }
 
     public MainActivity getMainActivity() {
-        return mainActivity;
+        return MainActivity.getInstance();
     }
 
     public void clearSelectedSong() {
         selectedSong = null;
-        mainActivity = null;
     }
 }

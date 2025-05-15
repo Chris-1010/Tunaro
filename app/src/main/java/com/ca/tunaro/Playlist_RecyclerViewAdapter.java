@@ -13,16 +13,18 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_RecyclerViewAdapter.ViewHolder> {
     private final Playlist_RecyclerViewInterface recyclerViewInterface;
 
     private final Context context;
-    private final PlayFragment playFragment;
+    private ArrayList<PlaylistModel> playlistModels;
 
-    public Playlist_RecyclerViewAdapter(Context context, PlayFragment playFragment, Playlist_RecyclerViewInterface recyclerViewInterface) {
+    // Modified constructor that accepts a List of playlist models directly
+    public Playlist_RecyclerViewAdapter(Context context, ArrayList<PlaylistModel> playlistModels, Playlist_RecyclerViewInterface recyclerViewInterface) {
         this.context = context;
-        this.playFragment = playFragment;
+        this.playlistModels = playlistModels;
         this.recyclerViewInterface = recyclerViewInterface;
     }
 
@@ -35,7 +37,7 @@ public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_
 
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-        PlaylistModel model = getPlaylistModels().get(position);
+        PlaylistModel model = playlistModels.get(position);
         holder.playlistName.setText(model.getPlaylistName());
         holder.songCount.setText(context.getString(R.string.song_count, model.getSongCount()));
         holder.imageView.setTag(position);    // Store the model index in the tag of the ImageView, to be obtained later
@@ -48,15 +50,13 @@ public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_
 
     @Override
     public int getItemCount() {
-        return getPlaylistModels().size();
+        return playlistModels.size();
     }
 
-//    public void updateData(List<PlaylistModel> newPlaylists) {
-//        DiffUtil.DiffResult diffResult = DiffUtil.calculateDiff(new PlaylistDiffCallback(this.playlistModels, newPlaylists));
-//        this.playlistModels.clear();
-//        this.playlistModels.addAll(newPlaylists);
-//        diffResult.dispatchUpdatesTo(this);
-//    }
+    public void updatePlaylists(ArrayList<PlaylistModel> newPlaylists) {
+        this.playlistModels = newPlaylists;
+        notifyDataSetChanged();
+    }
 
     // Important to have static here:
     public static class ViewHolder extends RecyclerView.ViewHolder {
@@ -81,11 +81,7 @@ public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_
         }
     }
 
-    public PlayFragment getFragment() {
-        return playFragment;
-    }
-
-    private ArrayList<PlaylistModel> getPlaylistModels() {
-        return playFragment.getPlaylistModels();
+    public Context getContext() {
+        return context;
     }
 }
