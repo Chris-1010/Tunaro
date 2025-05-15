@@ -15,6 +15,8 @@ import com.spotify.sdk.android.auth.AuthorizationClient;
 import com.spotify.sdk.android.auth.AuthorizationRequest;
 import com.spotify.sdk.android.auth.AuthorizationResponse;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.net.URI;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -63,6 +65,12 @@ public class MainActivity extends AppCompatActivity {
 
         // Initialize the PlaylistSetup Class
         PlaylistSetup.initialize(this);
+
+        PlaybackManager.getInstance().initialize(
+                getApplicationContext(),
+                CLIENT_ID,
+                REDIRECT_URI.toString()
+        );
 
         // Start authentication
         if (spotifyApi == null) {
@@ -134,8 +142,13 @@ public class MainActivity extends AppCompatActivity {
 
                     public void onFailure(Throwable throwable) {
                         Log.e("MainActivity", "Remote connection failed: " + throwable.getMessage(), throwable);
+                        // Log the full stack trace
+                        StringWriter sw = new StringWriter();
+                        throwable.printStackTrace(new PrintWriter(sw));
+                        Log.e("MainActivity", "Stack trace: " + sw.toString());
+
                         Toast.makeText(MainActivity.this,
-                                "Failed to connect to Spotify. Please ensure the Spotify app is installed.",
+                                "Failed to connect to Spotify. Error: " + throwable.getMessage(),
                                 Toast.LENGTH_LONG).show();
                     }
                 });
@@ -188,6 +201,14 @@ public class MainActivity extends AppCompatActivity {
                     // Authentication successful
                     String token = response.getAccessToken();
                     saveAccessToken(token);
+
+                    spotifyApi = new SpotifyApi.Builder()
+                            .setClientId(CLIENT_ID)
+                            .setClientSecret(CLIENT_SECRET)
+                            .setRedirectUri(REDIRECT_URI)
+                            .setAccessToken(token) // Use the token directly
+                            .build();
+
                     // Complete the future to signal that authentication is done
                     if (authenticationFuture != null) {
                         authenticationFuture.complete(null);
