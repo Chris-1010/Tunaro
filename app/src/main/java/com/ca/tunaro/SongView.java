@@ -5,11 +5,15 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.viewpager2.widget.ViewPager2;
 
 import com.bumptech.glide.Glide;
@@ -30,6 +34,22 @@ public class SongView extends BaseActivity {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_song_view);
+
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
+            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+
+            // Get your playback bar
+            View playbackBar = findViewById(R.id.playback_bar);
+
+            // Apply bottom margin to playback bar equal to navigation bar height
+            if (playbackBar != null) {
+                ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) playbackBar.getLayoutParams();
+                params.bottomMargin = systemBars.bottom;
+                playbackBar.setLayoutParams(params);
+            }
+
+            return insets;
+        });
 
         // Retrieve the selected song
         selectedSong = SelectedSongHolder.getInstance().getSelectedSong();
@@ -154,7 +174,8 @@ public class SongView extends BaseActivity {
             }
 
             @Override
-            public void onTabReselected(TabLayout.Tab tab) {}
+            public void onTabReselected(TabLayout.Tab tab) {
+            }
         });
 
         viewPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
