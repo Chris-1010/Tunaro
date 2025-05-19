@@ -29,6 +29,7 @@ public class PlaybackManager {
     // Current playback state
     private SongModel currentSong;
     private boolean isPlaying = false;
+    private boolean isConnecting = false;
     private boolean isConnected = false;
 
     // Seeking state
@@ -73,21 +74,41 @@ public class PlaybackManager {
     }
 
     public void connectSpotify(Context context, Runnable onSuccess) {
-        if (isConnected && spotifyAppRemote != null) {
+        // Avoid multiple connection attempts while one is in progress
+        if (isConnecting) {
+            Log.d(TAG, "Connection attempt already in progress, ignoring request");
+            return;
+        }
+
+        // Already connected, just run the success callback
+        if (isConnected && spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
+            Log.d(TAG, "Already connected to Spotify remote");
             if (onSuccess != null) onSuccess.run();
             return;
         }
+
+        // Disconnect first if there's a stale connection
+        if (spotifyAppRemote != null) {
+            Log.d(TAG, "Disconnecting previous remote connection before reconnecting");
+            SpotifyAppRemote.disconnect(spotifyAppRemote);
+            spotifyAppRemote = null;
+        }
+
+        isConnecting = true;
+        isConnected = false;
 
         ConnectionParams connectionParams = new ConnectionParams.Builder(clientId)
                 .setRedirectUri(redirectUri)
                 .showAuthView(true)
                 .build();
 
+        Log.d(TAG, "Attempting to connect to Spotify remote");
         SpotifyAppRemote.connect(context, connectionParams, new Connector.ConnectionListener() {
             @Override
             public void onConnected(SpotifyAppRemote spotifyAppRemote) {
                 PlaybackManager.this.spotifyAppRemote = spotifyAppRemote;
                 isConnected = true;
+                isConnecting = false;
 
                 // Subscribe to player state to monitor playback
                 subscribeToPlayerState();
@@ -106,8 +127,11 @@ public class PlaybackManager {
             @Override
             public void onFailure(Throwable throwable) {
                 isConnected = false;
-                Log.e(TAG, "Failed to connect to Spotify: " + throwable.getMessage());
-                Toast.makeText(context,
+                isConnecting = false;
+                spotifyAppRemote = null;
+
+                Log.e(TAG, "Failed to connect to Spotify: " + throwable.getMessage(), throwable);
+                Toast.makeText(context.getApplicationContext(),
                         "Failed to connect to Spotify. Please ensure the Spotify app is installed.",
                         Toast.LENGTH_LONG).show();
 
