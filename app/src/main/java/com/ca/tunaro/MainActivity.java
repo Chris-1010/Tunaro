@@ -3,20 +3,15 @@ package com.ca.tunaro;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.util.Log;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.spotify.android.appremote.api.ConnectionParams;
-import com.spotify.android.appremote.api.Connector;
 import com.spotify.android.appremote.api.SpotifyAppRemote;
 import com.spotify.sdk.android.auth.AuthorizationClient;
 import com.spotify.sdk.android.auth.AuthorizationRequest;
 import com.spotify.sdk.android.auth.AuthorizationResponse;
 
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.net.URI;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -125,33 +120,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void connectSpotifyAppRemote() {
-        // Connect to Spotify App Remote here
-        ConnectionParams connectionParams =
-                new ConnectionParams.Builder(CLIENT_ID)
-                        .setRedirectUri(REDIRECT_URI.toString())
-                        .showAuthView(true)
-                        .build();
-
-        SpotifyAppRemote.connect(this, connectionParams,
-                new Connector.ConnectionListener() {
-                    public void onConnected(SpotifyAppRemote spotifyAppRemote) {
-                        mSpotifyAppRemote = spotifyAppRemote;
-                        Log.d("MainActivity", "Connected to remote");
-                        Toast.makeText(MainActivity.this, "Connected to Spotify", Toast.LENGTH_SHORT).show();
-                    }
-
-                    public void onFailure(Throwable throwable) {
-                        Log.e("MainActivity", "Remote connection failed: " + throwable.getMessage(), throwable);
-                        // Log the full stack trace
-                        StringWriter sw = new StringWriter();
-                        throwable.printStackTrace(new PrintWriter(sw));
-                        Log.e("MainActivity", "Stack trace: " + sw.toString());
-
-                        Toast.makeText(MainActivity.this,
-                                "Failed to connect to Spotify. Error: " + throwable.getMessage(),
-                                Toast.LENGTH_LONG).show();
-                    }
-                });
+        PlaybackManager.getInstance().connectSpotify(this, null);
     }
 
     private CompletableFuture<Void> getCurrentUsersProfile_Async() {

@@ -191,7 +191,7 @@ public class SongView extends BaseActivity {
 
     private void playSong() {
         if (!playbackManager.isConnected()) {
-            Toast.makeText(this, "Attempting to reconnect to Spotify...", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Connecting to Spotify...", Toast.LENGTH_SHORT).show();
             // Use PlaybackManager to reconnect
             playbackManager.connectSpotify(this, () -> {
                 // After connection, play the song
