@@ -9,7 +9,6 @@ import android.widget.PopupMenu;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
@@ -17,17 +16,13 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import java.util.ArrayList;
 import java.util.List;
 
-public class PlaylistsActivity extends AppCompatActivity implements Playlist_RecyclerViewInterface {
+public class PlaylistsActivity extends BaseActivity implements Playlist_RecyclerViewInterface {
     private MainActivity mainActivity;
     private DatabaseHelper dbHelper;
     private Playlist_RecyclerViewAdapter adapter;
     private RecyclerView recyclerView;
     private ArrayList<PlaylistModel> playlistModels = new ArrayList<>();
     private SwipeRefreshLayout swipeRefreshLayout;
-    private Playlist_RecyclerViewAdapter adapter;
-    private ArrayList<PlaylistModel> playlistModels = new ArrayList<>();
-    private DatabaseHelper dbHelper;
-    private MainActivity mainActivity;
     private ImageView archiveToggleButton;
     private boolean showingArchived = false;
     private PopupMenu activePopupMenu;
