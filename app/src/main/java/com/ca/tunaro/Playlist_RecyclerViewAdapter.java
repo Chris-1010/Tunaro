@@ -13,26 +13,31 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
 
 import java.util.ArrayList;
-import java.util.List;
 
 public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_RecyclerViewAdapter.ViewHolder> {
+    public interface OnItemLongClickListener {
+        void onItemLongClick(View itemView, int position);
+    }
+
     private final Playlist_RecyclerViewInterface recyclerViewInterface;
 
     private final Context context;
     private ArrayList<PlaylistModel> playlistModels;
 
-    // Modified constructor that accepts a List of playlist models directly
-    public Playlist_RecyclerViewAdapter(Context context, ArrayList<PlaylistModel> playlistModels, Playlist_RecyclerViewInterface recyclerViewInterface) {
+    private final OnItemLongClickListener longClickListener;
+
+    public Playlist_RecyclerViewAdapter(Context context, ArrayList<PlaylistModel> playlistModels, Playlist_RecyclerViewInterface recyclerViewInterface, OnItemLongClickListener longClickListener) {
         this.context = context;
         this.playlistModels = playlistModels;
         this.recyclerViewInterface = recyclerViewInterface;
+        this.longClickListener = longClickListener;
     }
 
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(context).inflate(R.layout.recycler_view_row, parent, false);
-        return new ViewHolder(view, recyclerViewInterface);
+        return new ViewHolder(view, recyclerViewInterface, longClickListener);
     }
 
     @Override
@@ -63,11 +68,19 @@ public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_
         ImageView imageView;
         TextView playlistName, songCount;
 
-        public ViewHolder(@NonNull View itemView, Playlist_RecyclerViewInterface recyclerViewInterface) {
+        public ViewHolder(@NonNull View itemView, Playlist_RecyclerViewInterface recyclerViewInterface, OnItemLongClickListener longClickListener) {
             super(itemView);
             playlistName = itemView.findViewById(R.id.songNameView);
             songCount = itemView.findViewById(R.id.artistView);
             imageView = itemView.findViewById(R.id.albumCoverView);
+
+            // Anchor view for popup menu if it doesn't exist
+            if (itemView.findViewById(R.id.options_anchor) == null) {
+                View anchor = new View(itemView.getContext());
+                anchor.setId(R.id.options_anchor);
+                ((ViewGroup) itemView).addView(anchor);
+                anchor.setVisibility(View.INVISIBLE);
+            }
 
             itemView.setOnClickListener(view -> {
                 if (recyclerViewInterface != null) {
@@ -77,6 +90,18 @@ public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_
                         recyclerViewInterface.onItemClick(position, itemView);
                     }
                 }
+            });
+
+            itemView.setOnLongClickListener(view -> {
+                if (longClickListener != null) {
+                    int position = getAdapterPosition();
+
+                    if (position != RecyclerView.NO_POSITION) {
+                        longClickListener.onItemLongClick(itemView, position);
+                        return true;
+                    }
+                }
+                return false;
             });
         }
     }
