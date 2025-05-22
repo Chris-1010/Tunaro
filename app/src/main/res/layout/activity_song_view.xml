@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/main"
@@ -133,16 +132,16 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/fixed_header"
             app:tabGravity="fill"
+            app:tabIndicator="@null"
             app:tabMode="fixed"
             app:tabPaddingStart="4dp"
-            app:tabPaddingEnd="4dp"
-            app:tabIndicator="@null" />
+            app:tabPaddingEnd="4dp" />
 
         <androidx.viewpager2.widget.ViewPager2
             android:id="@+id/view_pager"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:background="@color/blueBlack"
+            android:background="@drawable/radial_gradient"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
@@ -155,13 +154,19 @@
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:layout_gravity="bottom|center"
-        android:layout_marginBottom="50dp"
+        android:layout_marginBottom="80dp"
         android:background="@drawable/circle_background"
         android:clickable="true"
         android:contentDescription="@string/play"
         android:focusable="true"
-        android:padding="8dp"
-        android:src="@android:drawable/ic_media_play"
+        android:src="@drawable/play_circle_outline"
         app:tint="@color/white" />
+
+    <include
+        android:id="@+id/playback_bar"
+        layout="@layout/playback_bar"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/playback_bar_height"
+        android:layout_gravity="bottom" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -1,26 +1,26 @@
 package com.ca.tunaro;
 
+import android.annotation.SuppressLint;
 import android.graphics.Color;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
-import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.viewpager2.widget.ViewPager2;
 
 import com.bumptech.glide.Glide;
 import com.google.android.material.appbar.AppBarLayout;
 import com.google.android.material.tabs.TabLayout;
-import com.spotify.android.appremote.api.SpotifyAppRemote;
 
-import java.util.Objects;
-
-public class SongView extends AppCompatActivity {
+public class SongView extends BaseActivity {
     // Fields
     private SongModel selectedSong;
     private TabLayout tabLayout;
@@ -34,6 +34,22 @@ public class SongView extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_song_view);
+
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
+            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+
+            // Get your playback bar
+            View playbackBar = findViewById(R.id.playback_bar);
+
+            // Apply bottom margin to playback bar equal to navigation bar height
+            if (playbackBar != null) {
+                ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) playbackBar.getLayoutParams();
+                params.bottomMargin = systemBars.bottom;
+                playbackBar.setLayoutParams(params);
+            }
+
+            return insets;
+        });
 
         // Retrieve the selected song
         selectedSong = SelectedSongHolder.getInstance().getSelectedSong();
@@ -53,7 +69,7 @@ public class SongView extends AppCompatActivity {
 
         // Add play button functionality
         ImageView playButton = findViewById(R.id.play_button);
-        playButton.setOnClickListener(v -> playSong(getIntent().getStringExtra("source")));
+        playButton.setOnClickListener(v -> playSong());
 
         // Force the collapsible details part to be collapsed initially
         appBarLayout.setExpanded(false, false);
@@ -103,7 +119,7 @@ public class SongView extends AppCompatActivity {
         String[] tabTitles = {"Notes", "Snippets"};
         for (int i = 0; i < tabTitles.length; i++) {
             TabLayout.Tab tab = tabLayout.newTab();
-            View customView = LayoutInflater.from(this).inflate(R.layout.custom_tab, null);
+            @SuppressLint("InflateParams") View customView = LayoutInflater.from(this).inflate(R.layout.custom_tab, null, false);
 
             TextView tabTitleView = customView.findViewById(R.id.tab_title);
             TextView tabBadgeView = customView.findViewById(R.id.tab_badge);
@@ -120,7 +136,7 @@ public class SongView extends AppCompatActivity {
                 count = dbHelper.getSongNotes(selectedSong.getId()).size();
             } else if (i == 1) {
                 // For snippets tab (placeholder for now)
-                count = 0; // Replace with actual count when you implement snippets
+                count = dbHelper.getSongSnippets(selectedSong.getId()).size();
             }
 
             if (count > 0) {
@@ -158,7 +174,8 @@ public class SongView extends AppCompatActivity {
             }
 
             @Override
-            public void onTabReselected(TabLayout.Tab tab) {}
+            public void onTabReselected(TabLayout.Tab tab) {
+            }
         });
 
         viewPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
@@ -172,52 +189,22 @@ public class SongView extends AppCompatActivity {
         viewPager.setCurrentItem(0);
     }
 
-    private void playSong(String source) {
-        MainActivity mainActivity;
-        if (Objects.equals(source, "playlist")) mainActivity = SelectedPlaylistHolder.getInstance().getMainActivity();
-        else mainActivity = SelectedSongHolder.getInstance().getMainActivity();
-        SpotifyAppRemote mSpotifyAppRemote = mainActivity.getSpotifyAppRemote();
-
-        // Try to reconnect Spotify if MainActivity is available
-        if (!mSpotifyAppRemote.isConnected()) {
-            Toast.makeText(this, "Attempting to reconnect to Spotify...", Toast.LENGTH_SHORT).show();
-            // Call a method in MainActivity to reconnect
-            mainActivity.connectSpotifyAppRemote();
-        }
-
-        if (selectedSong != null) {
-            try {
-                // Play the song
-                mSpotifyAppRemote.getPlayerApi().play(selectedSong.getUri())
-                        .setResultCallback(empty -> {
-                            // Create a "Date Listened" note
-//                            String currentDate = new java.text.SimpleDateFormat("dd-MM-yyyy HH:mm")
-//                                    .format(new java.util.Date());
-//                            SongNote note = new SongNote(
-//                                    selectedSong.getId(),
-//                                    SongNote.NoteType.DATE_LISTENED.getDisplayName(),
-//                                    currentDate
-//                            );
-//
-//                            // Save to database
-//                            dbHelper.addNote(note);
-//
-//                            // Refresh notes display
-//                            loadExistingNotes();
-//
-                            Toast.makeText(this, "Playing " + selectedSong.getName(),
-                                    Toast.LENGTH_SHORT).show();
-                        })
-                        .setErrorCallback(throwable -> {
-                            Toast.makeText(this, "Error playing song: " + throwable.getMessage(),
-                                    Toast.LENGTH_SHORT).show();
-                            Log.e("SongView", "PlaybackError: " + throwable.getMessage());
-                        });
-            } catch (Exception e) {
-                Log.e("SongView", "PlaybackException: " + e.getMessage());
-            }
-        } else {
-            Toast.makeText(this, "Unable to play song. Please check Spotify connection.",
+    private void playSong() {
+        if (!playbackManager.isConnected()) {
+            Toast.makeText(this, "Connecting to Spotify...", Toast.LENGTH_SHORT).show();
+            // Use PlaybackManager to reconnect
+            playbackManager.connectSpotify(this, () -> {
+                // After connection, play the song
+                if (selectedSong != null) {
+                    playbackManager.playSong(selectedSong);
+                    Toast.makeText(this, "Playing " + selectedSong.getName(),
+                            Toast.LENGTH_SHORT).show();
+                }
+            });
+        } else if (selectedSong != null) {
+            // Already connected, just play
+            playbackManager.playSong(selectedSong);
+            Toast.makeText(this, "Playing " + selectedSong.getName(),
                     Toast.LENGTH_SHORT).show();
         }
     }

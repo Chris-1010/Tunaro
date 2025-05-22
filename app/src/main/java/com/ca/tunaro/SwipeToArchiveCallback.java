@@ -23,13 +23,14 @@ public class SwipeToArchiveCallback extends ItemTouchHelper.SimpleCallback {
         void onArchive(int position);
     }
 
+    // Updated constructor that doesn't depend on PlayFragment
     public SwipeToArchiveCallback(Playlist_RecyclerViewAdapter adapter, OnSwipeListener listener, boolean isArchiveView) {
         super(0, ItemTouchHelper.RIGHT);
         this.adapter = adapter;
         this.swipeListener = listener;
         this.isArchiveView = isArchiveView;
 
-        archiveIcon = ContextCompat.getDrawable(adapter.getFragment().requireContext(),
+        archiveIcon = ContextCompat.getDrawable(adapter.getContext(),
                 isArchiveView ? R.drawable.show : R.drawable.hide);
         archiveBackground = new ColorDrawable(isArchiveView ? Color.GREEN : Color.GRAY);
         iconMargin = 16;
