@@ -91,16 +91,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
             playbackBar.setOnClickListener(v -> {
                 SongModel currentSong = playbackManager.getCurrentSong();
                 if (currentSong != null) {
-                    MainActivity mainActivity = null;
-
-                    if (BaseActivity.this instanceof MainActivity) {
-                        // If in MainActivity, use the current activity
-                        mainActivity = (MainActivity) BaseActivity.this;
-                    } else if (SelectedPlaylistHolder.getInstance().getMainActivity() != null) {
-                        mainActivity = SelectedPlaylistHolder.getInstance().getMainActivity();
-                    } else if (SelectedSongHolder.getInstance().getMainActivity() != null) {
-                        mainActivity = SelectedSongHolder.getInstance().getMainActivity();
-                    }
+                    MainActivity mainActivity = MainActivity.getInstance();
 
                     if (mainActivity != null) {
                         // Check if the SongView for the clicked song is already open
@@ -156,7 +147,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
             View mainContent = findViewById(android.R.id.content);
             if (mainContent instanceof ViewGroup && (BaseActivity.this instanceof SongView || BaseActivity.this instanceof PlaylistView)) {
                 // Add bottom padding to main content if bar is visible
-                // This is a simplified approach - you might need to adjust based on your layouts
+                // This is a simplified approach - might need to adjust based on layouts
                 int bottomPadding = shouldShowBar ?
                         getResources().getDimensionPixelSize(R.dimen.playback_bar_height) : 0;
 //                mainContent.setPadding(
@@ -227,7 +218,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
 
     @Override
     public void onConnectionStateChanged(boolean isConnected) {
-        // You might want to show some UI feedback when connection state changes
+        // might want to show some UI feedback when connection state changes
     }
 
     private String formatDuration(long durationMs) {

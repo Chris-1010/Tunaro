@@ -1,5 +1,7 @@
 package com.ca.tunaro;
 
+import static java.lang.System.exit;
+
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
@@ -65,6 +67,21 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     + COLUMN_END_TIME +             " INTEGER NOT NULL,"
                     + COLUMN_INCLUDE_IN_RANKINGS +  " INTEGER DEFAULT 1"
                     + ")";
+    private static final String CREATE_TABLE_ARCHIVED_PLAYLISTS =
+            "CREATE TABLE " + TABLE_ARCHIVED_PLAYLISTS + "("
+                    + COLUMN_ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + COLUMN_PLAYLIST_ID + " TEXT UNIQUE NOT NULL"
+                    + ")";
+    private static final String CREATE_TABLE_SONG_SNIPPETS =
+            "CREATE TABLE " + TABLE_SONG_SNIPPETS + "("
+                    + COLUMN_ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + COLUMN_SONG_ID + " TEXT NOT NULL,"
+                    + COLUMN_SNIPPET_NO + " INTEGER NOT NULL,"
+                    + COLUMN_TITLE + " TEXT,"
+                    + COLUMN_START_TIME + " INTEGER NOT NULL,"
+                    + COLUMN_END_TIME + " INTEGER NOT NULL,"
+                    + COLUMN_INCLUDE_IN_RANKINGS + " INTEGER DEFAULT 1"
+                    + ")";
 
     public DatabaseHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -84,8 +101,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             try {
                 db.execSQL(UPGRADE_TIMESTAMP_FORMAT);
             } catch (Exception e) {
-                db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONG_NOTES);
-                onCreate(db);
+//                db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONG_NOTES);
+//                onCreate(db);
+                exit(1);
             }
         }
 
