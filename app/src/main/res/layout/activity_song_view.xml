@@ -122,6 +122,20 @@
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 
+        <ImageView
+            android:id="@+id/play_button"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/circle_background"
+            android:clickable="true"
+            android:contentDescription="@string/play"
+            android:focusable="true"
+            android:src="@drawable/play_circle_outline"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/fixed_header"
+            app:tint="@color/white" />
+
         <com.google.android.material.tabs.TabLayout
             android:id="@+id/tab_layout"
             android:layout_width="match_parent"
@@ -130,12 +144,12 @@
             android:contentDescription="@string/songViewTabsDesc"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/fixed_header"
+            app:layout_constraintTop_toBottomOf="@+id/play_button"
             app:tabGravity="fill"
             app:tabIndicator="@null"
             app:tabMode="fixed"
-            app:tabPaddingStart="4dp"
-            app:tabPaddingEnd="4dp" />
+            app:tabPaddingEnd="4dp"
+            app:tabPaddingStart="4dp" />
 
         <androidx.viewpager2.widget.ViewPager2
             android:id="@+id/view_pager"
@@ -148,19 +162,6 @@
             app:layout_constraintTop_toBottomOf="@+id/tab_layout" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
-
-    <ImageView
-        android:id="@+id/play_button"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_gravity="bottom|center"
-        android:layout_marginBottom="80dp"
-        android:background="@drawable/circle_background"
-        android:clickable="true"
-        android:contentDescription="@string/play"
-        android:focusable="true"
-        android:src="@drawable/play_circle_outline"
-        app:tint="@color/white" />
 
     <include
         android:id="@+id/playback_bar"
