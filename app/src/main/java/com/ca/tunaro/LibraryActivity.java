@@ -60,6 +60,9 @@ public class LibraryActivity extends AppCompatActivity implements Library_Recycl
         searchBar = findViewById(R.id.search_bar);
         setupSearchBar();
 
+        Button importButton = findViewById(R.id.import_button);
+        importButton.setOnClickListener(v -> importData());
+
         Button exportButton = findViewById(R.id.export_button);
         exportButton.setOnClickListener(v -> exportData());
 
@@ -224,8 +227,37 @@ public class LibraryActivity extends AppCompatActivity implements Library_Recycl
         }
     }
 
+    // Handle the import button click
+    public void importData() {
+        importLauncher.launch(new String[]{"application/json"});
+    }
+
+    private ActivityResultLauncher<String[]> importLauncher = registerForActivityResult(
+            new ActivityResultContracts.OpenDocument(),
+            uri -> {
+                if (uri != null) {
+                    try {
+                        DatabaseHelper.ImportStats stats = DatabaseHelper.importFromUri(this, uri);
+                        Toast.makeText(this, stats.getSummary(), Toast.LENGTH_LONG).show();
+
+                        // Reload the songs list to reflect any imported data
+                        loadSongsWithNotes();
+                    } catch (Exception e) {
+                        Toast.makeText(this, "Import failed: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                }
+            }
+    );
+
     // Handle the export button click
-    private ActivityResultLauncher<String> exportLauncher = registerForActivityResult(
+    public void exportData() {
+        String fileName = "tunaro_backup_" +
+                new java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault()).format(new java.util.Date()) +
+                ".json";
+        exportLauncher.launch(fileName);
+    }
+
+    private final ActivityResultLauncher<String> exportLauncher = registerForActivityResult(
             new ActivityResultContracts.CreateDocument("application/json"),
             uri -> {
                 if (uri != null) {
@@ -239,11 +271,4 @@ public class LibraryActivity extends AppCompatActivity implements Library_Recycl
                 }
             }
     );
-
-    public void exportData() {
-        String fileName = "tunaro_backup_" +
-                new java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault()).format(new java.util.Date()) +
-                ".json";
-        exportLauncher.launch(fileName);
-    }
 }

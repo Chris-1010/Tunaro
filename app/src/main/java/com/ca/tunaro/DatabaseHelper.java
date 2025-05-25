@@ -431,7 +431,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         }
     }
 
-    public static void importFromUri(Context context, Uri uri) throws IOException, IllegalArgumentException {
+    public static ImportStats importFromUri(Context context, Uri uri) throws IOException, IllegalArgumentException {
         String jsonData = readTextFromUri(context, uri);
 
         Gson gson = new Gson();
@@ -442,13 +442,17 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         }
 
         DatabaseHelper dbHelper = new DatabaseHelper(context);
+        ImportStats stats = new ImportStats();
 
         // Import notes
         if (importData.notes != null) {
             for (SongNote note : importData.notes) {
                 // Create new note without ID to avoid conflicts
                 SongNote newNote = new SongNote(note.getSongId(), note.getNoteType(), note.getContent());
-                dbHelper.addNote(newNote);
+                long result = dbHelper.addNote(newNote);
+                if (result != -1) {
+                    stats.notesAdded++;
+                }
             }
         }
 
@@ -457,6 +461,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             for (String playlistId : importData.archivedPlaylists) {
                 if (!dbHelper.isPlaylistArchived(playlistId)) {
                     dbHelper.archivePlaylist(playlistId);
+                    stats.playlistsArchived++;
                 }
             }
         }
@@ -473,9 +478,14 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                         snippet.getEndTime(),
                         snippet.getIncludeInRankings()
                 );
-                dbHelper.addSnippet(newSnippet);
+                long result = dbHelper.addSnippet(newSnippet);
+                if (result != -1) {
+                    stats.snippetsAdded++;
+                }
             }
         }
+
+        return stats;
     }
 
     private static String readTextFromUri(Context context, Uri uri) throws IOException {
@@ -542,5 +552,24 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         cursor.close();
         db.close();
         return allSnippets;
+    }
+
+    public static class ImportStats {
+        public int notesAdded = 0;
+        public int playlistsArchived = 0;
+        public int snippetsAdded = 0;
+
+        public String getSummary() {
+            List<String> parts = new ArrayList<>();
+            if (notesAdded > 0) parts.add(notesAdded + " note" + (notesAdded == 1 ? "" : "s"));
+            if (playlistsArchived > 0) parts.add(playlistsArchived + " playlist" + (playlistsArchived == 1 ? "" : "s") + " archived");
+            if (snippetsAdded > 0) parts.add(snippetsAdded + " snippet" + (snippetsAdded == 1 ? "" : "s"));
+
+            if (parts.isEmpty()) {
+                return "No new data imported";
+            }
+
+            return "Imported: " + String.join(", ", parts);
+        }
     }
 }
