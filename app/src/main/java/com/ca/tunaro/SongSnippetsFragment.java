@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.Locale;
 
 public class SongSnippetsFragment extends Fragment {
-    private MainActivity mainActivity;
     private SpotifyAppRemote spotifyAppRemote;
     private SongModel song;
     private DatabaseHelper dbHelper;
@@ -33,7 +32,7 @@ public class SongSnippetsFragment extends Fragment {
     private List<SongSnippet> snippets = new ArrayList<>();
 
     private int activeTimers = 0;
-    private android.os.Handler snippetHandler = new android.os.Handler();
+    private final android.os.Handler snippetHandler = new android.os.Handler();
     private Runnable pauseRunnable;
 
     public static SongSnippetsFragment newInstance(SongModel song) {
@@ -49,22 +48,7 @@ public class SongSnippetsFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_song_snippets, container, false);
 
-        // Initialize MainActivity reference
-        if (getActivity() instanceof MainActivity) {
-            mainActivity = (MainActivity) getActivity();
-        }
-        else if (SelectedSongHolder.getInstance().getMainActivity() != null) {
-            mainActivity = SelectedSongHolder.getInstance().getMainActivity();
-        }
-        else if (SelectedPlaylistHolder.getInstance().getMainActivity() != null) {
-            mainActivity = SelectedPlaylistHolder.getInstance().getMainActivity();
-        }
-
-        if (mainActivity == null) {
-            Toast.makeText(requireContext(), "Warning: Cannot access Spotify playback",
-                    Toast.LENGTH_SHORT).show();
-        }
-        else spotifyAppRemote = mainActivity.getSpotifyAppRemote();
+        spotifyAppRemote = PlaybackManager.getInstance().getSpotifyAppRemote();
 
 
         dbHelper = new DatabaseHelper(requireContext());
@@ -138,7 +122,10 @@ public class SongSnippetsFragment extends Fragment {
                     });
         } else {
             Toast.makeText(requireContext(), "Spotify reconnecting...", Toast.LENGTH_SHORT).show();
-            mainActivity.connectSpotifyAppRemote();
+            PlaybackManager.getInstance().connectSpotify(requireContext(), () -> {
+                // Once connected, try to play the snippet again
+                playSnippet(snippet);
+            });
         }
     }
 
@@ -147,8 +134,6 @@ public class SongSnippetsFragment extends Fragment {
 
         // Create a handler and runnable to pause playback after duration
         pauseRunnable = () -> {
-            SpotifyAppRemote spotifyAppRemote = mainActivity.getSpotifyAppRemote();
-
             // Decrement the counter
             activeTimers--;
 
@@ -273,7 +258,7 @@ public class SongSnippetsFragment extends Fragment {
             if (startMs >= endMs) {
                 startMs += 500; // Add 500ms buffer
 
-                // Make sure we don't exceed song duration
+                // Make sure not to exceed song duration
                 if (startMs < totalDurationMs) {
                     // Convert back to minutes, seconds, milliseconds
                     int newEndMinutes = (int) (startMs / 60000);
@@ -285,7 +270,7 @@ public class SongSnippetsFragment extends Fragment {
                     endSecondsPicker.setValue(newEndSeconds);
                     endMillisecondsPicker.setValue(newEndMillis);
                 } else {
-                    // If we'd exceed song duration, roll back the start time change
+                    // If exceeding song duration, roll back the start time change
                     if (picker == startMinutesPicker) {
                         startMinutesPicker.setValue(oldVal);
                     } else if (picker == startSecondsPicker) {
@@ -300,7 +285,7 @@ public class SongSnippetsFragment extends Fragment {
                 }
             }
 
-            // Also check if we're at the maximum minute and adjust seconds accordingly
+            // Check if at the maximum minute and adjust seconds accordingly
             if (startMinutesPicker.getValue() == maxMinutes) {
                 startSecondsPicker.setMaxValue(maxSecondsInLastMinute);
             } else {
@@ -339,7 +324,7 @@ public class SongSnippetsFragment extends Fragment {
 //                        Toast.LENGTH_SHORT).show();
             }
 
-            // Also check if we're at the maximum minute and adjust seconds accordingly
+            // Check if at the maximum minute and adjust seconds accordingly
             if (endMinutesPicker.getValue() == maxMinutes) {
                 endSecondsPicker.setMaxValue(maxSecondsInLastMinute);
             } else {
@@ -562,7 +547,7 @@ public class SongSnippetsFragment extends Fragment {
 
     // Calculate milliseconds from components
     private long calculateTimeInMs(int minutes, int seconds, int milliseconds) {
-        return (minutes * 60 * 1000) + (seconds * 1000) + milliseconds;
+        return ((long) minutes * 60 * 1000) + (seconds * 1000L) + milliseconds;
     }
 
     private void showEditSnippetDialog(SongSnippet snippet) {
