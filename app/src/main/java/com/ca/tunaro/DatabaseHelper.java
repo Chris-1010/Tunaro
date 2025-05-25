@@ -16,8 +16,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private static final int DATABASE_VERSION = 4;
 
     // Table name
-    private static final String TABLE_SONG_NOTES = "song_notes";
     private static final String TABLE_ARCHIVED_PLAYLISTS = "archived_playlists";
+    private static final String TABLE_SONG_NOTES = "song_notes";
     private static final String TABLE_SONG_SNIPPETS = "song_snippets";
 
     // Column names

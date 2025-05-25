@@ -51,8 +51,8 @@ public class MainActivity extends AppCompatActivity {
         instance = this;
 
         // Initialize these here
-        CLIENT_ID = getString(R.string.client_id);
-        CLIENT_SECRET = getString(R.string.client_secret);
+        CLIENT_ID = getString(R.string.spotify_client_id);
+        CLIENT_SECRET = getString(R.string.spotify_client_secret);
         REDIRECT_URI = SpotifyHttpManager.makeUri(getString(R.string.redirect_uri));
 
         // Initialize the CompletableFuture
