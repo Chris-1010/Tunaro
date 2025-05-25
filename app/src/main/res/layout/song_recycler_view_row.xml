@@ -78,9 +78,22 @@
                 android:visibility="visible"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="@+id/albumCoverView"
+                app:layout_constraintHorizontal_bias="0.2"
                 app:layout_constraintStart_toStartOf="@+id/albumCoverView"
                 app:layout_constraintTop_toBottomOf="@+id/albumCoverView"
                 app:tint="@android:color/holo_blue_dark" />
+
+            <ImageView
+                android:id="@+id/hasSnippetsIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/snippet"
+                android:visibility="visible"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="@+id/albumCoverView"
+                app:layout_constraintHorizontal_bias="0.8"
+                app:layout_constraintStart_toStartOf="@+id/albumCoverView"
+                app:layout_constraintTop_toBottomOf="@+id/albumCoverView" />
 
             <ToggleButton
                 android:id="@+id/toggleButton"

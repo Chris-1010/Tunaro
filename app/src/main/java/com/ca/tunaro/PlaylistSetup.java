@@ -166,7 +166,6 @@ public class PlaylistSetup {
         synchronized (lock) {
             playlistCache.clearCache();
         }
-        // Return the future so we can wait for it to complete
         return getAllPlaylists(userID, spotifyApi, 0, new ArrayList<>())
                 .thenApply(playlists -> {
                     synchronized (lock) {

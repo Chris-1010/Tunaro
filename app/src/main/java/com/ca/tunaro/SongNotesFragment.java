@@ -50,7 +50,7 @@ public class SongNotesFragment extends Fragment {
 
         addNoteButton.setOnClickListener(v -> showAddNoteDialog());
         setupNotesList();
-        loadExistingNotes();
+        loadNotes();
 
         return view;
     }
@@ -93,13 +93,13 @@ public class SongNotesFragment extends Fragment {
         if (id != -1) {
             Toast.makeText(requireContext(), "Note added successfully", Toast.LENGTH_SHORT).show();
             noteInput.setText("");
-            loadExistingNotes(); // Refresh the notes list
+            loadNotes(); // Refresh the notes list
         } else {
             Toast.makeText(requireContext(), "Error saving note", Toast.LENGTH_SHORT).show();
         }
     }
 
-    private void loadExistingNotes() {
+    private void loadNotes() {
         notes = dbHelper.getSongNotes(song.getId());
         notesAdapter.updateNotes(notes);
     }
@@ -157,7 +157,7 @@ public class SongNotesFragment extends Fragment {
                     long id = dbHelper.addNote(note);
                     if (id != -1) {
                         Toast.makeText(requireContext(), "Note added successfully", Toast.LENGTH_SHORT).show();
-                        loadExistingNotes(); // Refresh the notes list
+                        loadNotes(); // Refresh the notes list
                     } else {
                         Toast.makeText(requireContext(), "Error saving note", Toast.LENGTH_SHORT).show();
                     }
@@ -199,7 +199,7 @@ public class SongNotesFragment extends Fragment {
                     note.setNoteType(typeSpinner.getSelectedItem().toString());
                     note.setContent(contentInput.getText().toString());
                     dbHelper.editNote(note);
-                    loadExistingNotes();
+                    loadNotes();
                     Toast.makeText(requireContext(), "Note updated", Toast.LENGTH_SHORT).show();
                 })
                 .setNegativeButton("Cancel", (dialog, which) -> {
