@@ -1,6 +1,8 @@
 package com.ca.tunaro;
 
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
@@ -21,6 +23,8 @@ import java.util.concurrent.TimeUnit;
 public class BaseActivity extends AppCompatActivity implements PlaybackManager.PlaybackListener {
 
     protected PlaybackManager playbackManager;
+    private SongModel currentDisplayedSong;
+    private static SongModel lastGlobalSong;
 
     // Playback bar views
     protected View playbackBar;
@@ -30,9 +34,11 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     protected TextView songName;
     protected TextView artistName;
     protected ImageButton playPauseButton;
-    private SongModel currentDisplayedSong;
 //    private TextView positionText;
 //    private TextView durationText;
+
+    private final Handler animationHandler = new Handler(Looper.getMainLooper());
+    private Runnable pendingAnimation;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -44,6 +50,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     protected void onStart() {
         super.onStart();
         playbackManager.addListener(this);
+        syncPlaybackBarState();
     }
 
     @Override
@@ -200,20 +207,50 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
             }
 
             if (currentSong != null) {
-                // Check if this is a different song to trigger animation
-                boolean isDifferentSong = this.currentDisplayedSong == null ||
-                        !currentSong.getId().equals(this.currentDisplayedSong.getId());
+                // Check if this is a different song to trigger animation (not just activity recreation)
+                boolean isNewSong = lastGlobalSong == null ||
+                        !currentSong.getId().equals(lastGlobalSong.getId());
 
-                if (isDifferentSong) {
-                    animateTrackChange(currentSong);
+                // Only animate if it's a new song AND there was a previous song displayed
+                boolean shouldAnimate = isNewSong &&
+                        lastGlobalSong != null &&
+                        currentDisplayedSong != null;
+
+                if (shouldAnimate) {
+                    // Cancel any pending animation
+                    if (pendingAnimation != null) {
+                        animationHandler.removeCallbacks(pendingAnimation);
+                    }
+
+                    // Delay animation slightly to avoid false triggers during rapid updates
+                    pendingAnimation = () -> {
+                        if (currentSong.equals(playbackManager.getCurrentSong())) {
+                            animateTrackChange(currentSong);
+                        }
+                    };
+                    animationHandler.postDelayed(pendingAnimation, 100); // 100ms delay
                 } else {
-                    // Same song, just update without animation
                     updateTrackInfo(currentSong);
                 }
 
                 this.currentDisplayedSong = currentSong;
+                lastGlobalSong = currentSong;
             }
         });
+    }
+
+    private void syncPlaybackBarState() {
+        SongModel currentSong = playbackManager.getCurrentSong();
+        boolean isPlaying = playbackManager.isPlaying();
+        long currentPosition = playbackManager.getCurrentPositionMs();
+        long duration = playbackManager.getDurationMs();
+
+        // Update UI immediately without waiting for callbacks
+        if (currentSong != null) {
+            updatePlaybackBarUI(isPlaying, currentSong);
+            onPlaybackPositionChanged(currentPosition, duration);
+            updatePlaybackBarVisibility();
+        }
     }
 
     private void animateTrackChange(SongModel newSong) {

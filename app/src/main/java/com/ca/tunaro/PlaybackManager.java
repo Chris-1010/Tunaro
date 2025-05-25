@@ -271,7 +271,7 @@ public class PlaybackManager {
         }
     }
 
-    // Add methods for next/previous if needed
+    // TODO Methods for next/previous track switching
 
     public void addListener(PlaybackListener listener) {
         if (!listeners.contains(listener)) {
@@ -281,6 +281,10 @@ public class PlaybackManager {
             if (listener != null) {
                 listener.onConnectionStateChanged(isConnected);
                 listener.onPlaybackStateChanged(isPlaying, currentSong);
+
+                if (currentSong != null && durationMs > 0) {
+                    listener.onPlaybackPositionChanged(currentPositionMs, durationMs);
+                }
             }
         }
     }
