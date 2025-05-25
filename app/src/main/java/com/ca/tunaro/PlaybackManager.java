@@ -40,7 +40,7 @@ public class PlaybackManager {
         @Override
         public void run() {
             updatePlaybackPosition();
-            positionHandler.postDelayed(this, 500); // Update every 500ms
+            positionHandler.postDelayed(this, 100);
         }
     };
     private boolean isTrackingPosition = false;

@@ -30,6 +30,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     protected TextView songName;
     protected TextView artistName;
     protected ImageButton playPauseButton;
+    private SongModel currentDisplayedSong;
 //    private TextView positionText;
 //    private TextView durationText;
 
@@ -199,23 +200,119 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
             }
 
             if (currentSong != null) {
-                // Update song info
-                if (songName != null) {
-                    songName.setText(currentSong.getName());
+                // Check if this is a different song to trigger animation
+                boolean isDifferentSong = this.currentDisplayedSong == null ||
+                        !currentSong.getId().equals(this.currentDisplayedSong.getId());
+
+                if (isDifferentSong) {
+                    animateTrackChange(currentSong);
+                } else {
+                    // Same song, just update without animation
+                    updateTrackInfo(currentSong);
                 }
 
-                if (artistName != null) {
-                    artistName.setText(currentSong.getArtist());
-                }
-
-                // Load album artwork
-                if (albumCover != null) {
-                    Glide.with(this)
-                            .load(currentSong.getAlbumCoverUrl())
-                            .into(albumCover);
-                }
+                this.currentDisplayedSong = currentSong;
             }
         });
+    }
+
+    private void animateTrackChange(SongModel newSong) {
+        if (songName == null || artistName == null || albumCover == null) {
+            updateTrackInfo(newSong);
+            return;
+        }
+
+        int animationDuration = 1350;
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+
+        songName.animate()
+                .translationX(-screenWidth * 0.3f)
+                .alpha(0f)
+                .scaleX(0.8f)
+                .setDuration(animationDuration)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                .start();
+
+        artistName.animate()
+                .translationX(-screenWidth * 0.3f)
+                .alpha(0f)
+                .scaleX(0.8f)
+                .setDuration(animationDuration)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                .start();
+
+        albumCover.animate()
+                .translationX(-screenWidth * 0.4f)
+                .alpha(0f)
+                .scaleX(0.7f)
+                .scaleY(0.7f)
+                .rotation(15f)
+                .setDuration(animationDuration)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                .withEndAction(() -> {
+                    updateTrackInfo(newSong);
+
+                    // Reset positions for slide-in
+                    songName.setTranslationX(screenWidth * 0.3f);
+                    songName.setScaleX(0.8f);
+                    songName.setAlpha(0f);
+
+                    artistName.setTranslationX(screenWidth * 0.3f);
+                    artistName.setScaleX(0.8f);
+                    artistName.setAlpha(0f);
+
+                    albumCover.setTranslationX(screenWidth * 0.4f);
+                    albumCover.setScaleX(0.7f);
+                    albumCover.setScaleY(0.7f);
+                    albumCover.setRotation(-15f);
+                    albumCover.setAlpha(0f);
+
+                    // Animate in with spring-like effect
+                    songName.animate()
+                            .translationX(0)
+                            .alpha(1f)
+                            .scaleX(1f)
+                            .setDuration(animationDuration)
+                            .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                            .start();
+
+                    artistName.animate()
+                            .translationX(0)
+                            .alpha(1f)
+                            .scaleX(1f)
+                            .setDuration(animationDuration)
+                            .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                            .start();
+
+                    albumCover.animate()
+                            .translationX(0)
+                            .alpha(1f)
+                            .scaleX(1f)
+                            .scaleY(1f)
+                            .rotation(0f)
+                            .setDuration(animationDuration)
+                            .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                            .start();
+                })
+                .start();
+    }
+
+    private void updateTrackInfo(SongModel song) {
+        // Update song info without animation
+        if (songName != null) {
+            songName.setText(song.getName());
+        }
+
+        if (artistName != null) {
+            artistName.setText(song.getArtist());
+        }
+
+        // Load album artwork
+        if (albumCover != null) {
+            Glide.with(this)
+                    .load(song.getAlbumCoverUrl())
+                    .into(albumCover);
+        }
     }
 
     @Override
