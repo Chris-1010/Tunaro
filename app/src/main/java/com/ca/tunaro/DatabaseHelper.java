@@ -7,9 +7,24 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.net.Uri;
+import android.os.Environment;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String DATABASE_NAME = "TunaroDB";
@@ -374,5 +389,158 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         cursor.close();
         db.close();
         return songIds;
+    }
+
+
+    // ======== EXPORT/IMPORT METHODS (Updated for Storage Access Framework) ========
+    public static class ExportData {
+        public List<SongNote> notes;
+        public List<String> archivedPlaylists;
+        public List<SongSnippet> snippets;
+        public String exportDate;
+        public int databaseVersion;
+
+        public ExportData() {
+            this.exportDate = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(new java.util.Date());
+            this.databaseVersion = DATABASE_VERSION;
+        }
+    }
+
+    public static String generateExportJson(Context context) {
+        DatabaseHelper dbHelper = new DatabaseHelper(context);
+        ExportData exportData = new ExportData();
+
+        // Export all notes
+        exportData.notes = dbHelper.getAllNotes();
+
+        // Export archived playlists
+        exportData.archivedPlaylists = dbHelper.getArchivedPlaylistIds();
+
+        // Export all snippets
+        exportData.snippets = dbHelper.getAllSnippets();
+
+        // Return JSON string
+        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+        return gson.toJson(exportData);
+    }
+
+    public static void writeExportToUri(Context context, Uri uri, String jsonData) throws IOException {
+        try (OutputStream outputStream = context.getContentResolver().openOutputStream(uri);
+             OutputStreamWriter writer = new OutputStreamWriter(Objects.requireNonNull(outputStream))) {
+            writer.write(jsonData);
+        }
+    }
+
+    public static void importFromUri(Context context, Uri uri) throws IOException, IllegalArgumentException {
+        String jsonData = readTextFromUri(context, uri);
+
+        Gson gson = new Gson();
+        ExportData importData = gson.fromJson(jsonData, ExportData.class);
+
+        if (importData == null) {
+            throw new IllegalArgumentException("Invalid or corrupted backup file");
+        }
+
+        DatabaseHelper dbHelper = new DatabaseHelper(context);
+
+        // Import notes
+        if (importData.notes != null) {
+            for (SongNote note : importData.notes) {
+                // Create new note without ID to avoid conflicts
+                SongNote newNote = new SongNote(note.getSongId(), note.getNoteType(), note.getContent());
+                dbHelper.addNote(newNote);
+            }
+        }
+
+        // Import archived playlists
+        if (importData.archivedPlaylists != null) {
+            for (String playlistId : importData.archivedPlaylists) {
+                if (!dbHelper.isPlaylistArchived(playlistId)) {
+                    dbHelper.archivePlaylist(playlistId);
+                }
+            }
+        }
+
+        // Import snippets
+        if (importData.snippets != null) {
+            for (SongSnippet snippet : importData.snippets) {
+                // Create new snippet without ID to avoid conflicts
+                SongSnippet newSnippet = new SongSnippet(
+                        snippet.getSongId(),
+                        snippet.getSnippetNo(),
+                        snippet.getTitle(),
+                        snippet.getStartTime(),
+                        snippet.getEndTime(),
+                        snippet.getIncludeInRankings()
+                );
+                dbHelper.addSnippet(newSnippet);
+            }
+        }
+    }
+
+    private static String readTextFromUri(Context context, Uri uri) throws IOException {
+        StringBuilder stringBuilder = new StringBuilder();
+        try (InputStream inputStream = context.getContentResolver().openInputStream(uri);
+             BufferedReader reader = new BufferedReader(
+                     new InputStreamReader(Objects.requireNonNull(inputStream)))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                stringBuilder.append(line).append('\n');
+            }
+        }
+        return stringBuilder.toString();
+    }
+
+    // Keep the existing helper methods
+    private List<SongNote> getAllNotes() {
+        List<SongNote> allNotes = new ArrayList<>();
+        String selectQuery = "SELECT * FROM " + TABLE_SONG_NOTES + " ORDER BY " + COLUMN_TIMESTAMP + " ASC";
+
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(selectQuery, null);
+
+        if (cursor.moveToFirst()) {
+            do {
+                SongNote note = new SongNote(
+                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_ID)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SONG_ID)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_NOTE_TYPE)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_CONTENT)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TIMESTAMP))
+                );
+                allNotes.add(note);
+            } while (cursor.moveToNext());
+        }
+
+        cursor.close();
+        db.close();
+        return allNotes;
+    }
+
+    private List<SongSnippet> getAllSnippets() {
+        List<SongSnippet> allSnippets = new ArrayList<>();
+        String selectQuery = "SELECT * FROM " + TABLE_SONG_SNIPPETS + " ORDER BY " + COLUMN_ID + " ASC";
+
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(selectQuery, null);
+
+        if (cursor.moveToFirst()) {
+            do {
+                SongSnippet snippet = new SongSnippet(
+                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_ID)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SONG_ID)),
+                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SNIPPET_NO)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TITLE)),
+                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_START_TIME)),
+                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_END_TIME)),
+                        cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_INCLUDE_IN_RANKINGS)) == 1
+                );
+                allSnippets.add(snippet);
+            } while (cursor.moveToNext());
+        }
+
+        cursor.close();
+        db.close();
+        return allSnippets;
     }
 }
