@@ -93,36 +93,64 @@ public class SongSnippetsFragment extends Fragment {
     }
 
     private void playSnippet(SongSnippet snippet) {
+        PlaybackManager playbackManager = PlaybackManager.getInstance();
+
         if (spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
             // Cancel any existing timer
             if (pauseRunnable != null) {
                 snippetHandler.removeCallbacks(pauseRunnable);
                 activeTimers = 0; // Reset count when starting a new playback
             }
-            spotifyAppRemote.getPlayerApi().play(song.getUri())
-                    .setResultCallback(empty -> {
-                        // Add a delay to ensure the song has loaded
-                        new android.os.Handler().postDelayed(() -> {
-                            // Pause first to make seeking more reliable
-                            spotifyAppRemote.getPlayerApi().pause()
-                                    .setResultCallback(pauseResult -> {
-                                        // Another small delay to ensure pause completes
-                                        new android.os.Handler().postDelayed(() -> {
-                                            // Seek to the position
-                                            spotifyAppRemote.getPlayerApi().seekTo(snippet.getStartTime())
-                                                    .setResultCallback(seekResult -> {
-                                                        // Resume playback after seeking
-                                                        spotifyAppRemote.getPlayerApi().resume();
-                                                        // Start a timer to pause after the duration
-                                                        startSnippetEndTimer(snippet.getEndTime() - snippet.getStartTime());
-                                                    });
-                                        }, 50); // Delay after pause
-                                    });
-                        }, 50); // Delay after play
-                    });
+            if (!snippet.getSongId().equals(playbackManager.getCurrentSong().getId())) {
+                spotifyAppRemote.getPlayerApi().play(song.getUri())
+                        .setResultCallback(empty -> {
+                            // Add a delay to ensure the song has loaded
+                            new android.os.Handler().postDelayed(() -> {
+                                // Pause first to make seeking more reliable
+                                spotifyAppRemote.getPlayerApi().pause()
+                                        .setResultCallback(pauseResult -> {
+                                            // Another small delay to ensure pause completes
+                                            new android.os.Handler().postDelayed(() -> {
+                                                // Seek to the position
+                                                spotifyAppRemote.getPlayerApi().seekTo(snippet.getStartTime())
+                                                        .setResultCallback(seekResult -> {
+                                                            // Resume playback after seeking
+                                                            spotifyAppRemote.getPlayerApi().resume();
+                                                            // Start a timer to pause after the duration
+                                                            startSnippetEndTimer(snippet.getEndTime() - snippet.getStartTime());
+                                                        });
+                                            }, 100); // Delay after pause
+                                        });
+                            }, 100); // Delay after play
+                        })
+                        .setErrorCallback(throwable -> {
+                            Toast.makeText(requireContext(),
+                                    "Error playing song: " + throwable.getMessage(),
+                                    Toast.LENGTH_SHORT).show();
+                        });
+            } else {
+                // The currently requested snippet is from the same song currently being played
+                if (playbackManager.isPlaying()) {
+                    spotifyAppRemote.getPlayerApi().seekTo(snippet.getStartTime())
+                            .setResultCallback(seekResult -> {
+                                startSnippetEndTimer(snippet.getEndTime() - snippet.getStartTime());
+                            });
+                } else {
+                    spotifyAppRemote.getPlayerApi().seekTo(snippet.getStartTime())
+                            .setResultCallback(seekResult -> {
+                                spotifyAppRemote.getPlayerApi().resume()
+                                        .setResultCallback(playResult -> {
+                                            startSnippetEndTimer(snippet.getEndTime() - snippet.getStartTime());
+                                        });
+                            });
+                }
+            }
         } else {
-            Toast.makeText(requireContext(), "Spotify reconnecting...", Toast.LENGTH_SHORT).show();
-            PlaybackManager.getInstance().connectSpotify(requireContext(), () -> {
+            Toast.makeText(requireContext(), "Connecting to Spotify...", Toast.LENGTH_SHORT).show();
+            playbackManager.connectSpotify(requireContext(), () -> {
+                // Get the updated remote after connection
+                spotifyAppRemote = playbackManager.getSpotifyAppRemote();
+
                 // Once connected, try to play the snippet again
                 playSnippet(snippet);
             });
