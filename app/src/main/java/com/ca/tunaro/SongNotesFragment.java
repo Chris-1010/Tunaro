@@ -87,7 +87,7 @@ public class SongNotesFragment extends Fragment {
         }
 
         String noteType = noteTypeSpinner.getSelectedItem().toString();
-        SongNote note = new SongNote(song.getId(), noteType, content);
+        SongNote note = new SongNote(null, song.getId(), noteType, content);
 
         long id = dbHelper.addNote(note);
         if (id != -1) {
@@ -152,7 +152,7 @@ public class SongNotesFragment extends Fragment {
                     }
 
                     String selectedNoteType = typeSpinner.getSelectedItem().toString();
-                    SongNote note = new SongNote(song.getId(), selectedNoteType, content);
+                    SongNote note = new SongNote(null, song.getId(), selectedNoteType, content);
 
                     long id = dbHelper.addNote(note);
                     if (id != -1) {
