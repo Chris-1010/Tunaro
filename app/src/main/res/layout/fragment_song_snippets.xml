@@ -11,7 +11,7 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <!-- Add Snippet button -->
+        <!-- Add SongSnippet button -->
         <Button
             android:id="@+id/addSnippetButton"
             android:layout_width="match_parent"

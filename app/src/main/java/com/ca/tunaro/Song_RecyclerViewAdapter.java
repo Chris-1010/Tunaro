@@ -47,12 +47,12 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
                 .load(model.getAlbumCoverUrl())
                 .into(holder.imageCoverView);
 
-        // Check if the song has notes and show/hide the info icon accordingly
-        if (dbHelper.hasSongNotes(model.getId())) {
-            holder.hasNotesIcon.setVisibility(View.VISIBLE);
-        } else {
-            holder.hasNotesIcon.setVisibility(View.GONE);
-        }
+        // Check if the song has notes/snippets and show/hide the corresponding icon accordingly
+        if (dbHelper.hasSongNotes(model.getId())) holder.hasNotesIcon.setVisibility(View.VISIBLE);
+        else holder.hasNotesIcon.setVisibility(View.GONE);
+        if (dbHelper.hasSongSnippets(model.getId())) holder.hasSnippetsIcon.setVisibility(View.VISIBLE);
+        else holder.hasSnippetsIcon.setVisibility(View.GONE);
+
     }
 
     @Override
@@ -63,6 +63,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
     public static class ViewHolder extends RecyclerView.ViewHolder {
         ImageView imageCoverView;
         ImageView hasNotesIcon;
+        ImageView hasSnippetsIcon;
         TextView songNameView, artistView;
 
         public ViewHolder(@NonNull View itemView, Song_RecyclerViewInterface recyclerViewInterface) {
@@ -71,6 +72,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
             artistView = itemView.findViewById(R.id.artistView);
             imageCoverView = itemView.findViewById(R.id.albumCoverView);
             hasNotesIcon = itemView.findViewById(R.id.hasNotesIcon);
+            hasSnippetsIcon = itemView.findViewById(R.id.hasSnippetsIcon);
 
             itemView.setOnClickListener(view -> {
                 if (recyclerViewInterface != null) {

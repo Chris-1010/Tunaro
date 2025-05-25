@@ -15,7 +15,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -30,7 +29,7 @@ import java.util.concurrent.CompletionException;
 
 import se.michaelthelin.spotify.SpotifyApi;
 
-public class PlaylistView extends AppCompatActivity implements Song_RecyclerViewInterface {
+public class PlaylistView extends BaseActivity implements Song_RecyclerViewInterface {
     private PlaylistModel selectedPlaylist;
     private Song_RecyclerViewAdapter adapter;
 
@@ -315,7 +314,6 @@ public class PlaylistView extends AppCompatActivity implements Song_RecyclerView
 
         // Start the SongView activity
         Intent intent = new Intent(this, SongView.class);
-        intent.putExtra("source", "playlist");
         startActivity(intent);
     }
 }
