@@ -8,15 +8,11 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.net.Uri;
-import android.os.Environment;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
 import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -28,7 +24,7 @@ import java.util.Objects;
 
 public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String DATABASE_NAME = "TunaroDB";
-    private static final int DATABASE_VERSION = 4;
+    private static final int DATABASE_VERSION = 5;
 
     // Table name
     private static final String TABLE_ARCHIVED_PLAYLISTS = "archived_playlists";
@@ -36,6 +32,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String TABLE_SONG_SNIPPETS = "song_snippets";
 
     // Column names
+    private static final String COLUMN_UUID = "uuid";
     private static final String COLUMN_ID = "id";
     private static final String COLUMN_SONG_ID = "song_id";
 
@@ -61,6 +58,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     // Create table queries
     private static final String CREATE_TABLE_SONG_NOTES =
             "CREATE TABLE " + TABLE_SONG_NOTES + "("
+                    + COLUMN_UUID +         " TEXT UNIQUE NOT NULL,"
                     + COLUMN_ID +           " INTEGER PRIMARY KEY AUTOINCREMENT,"
                     + COLUMN_SONG_ID +      " TEXT NOT NULL,"
                     + COLUMN_NOTE_TYPE +    " TEXT NOT NULL,"
@@ -74,6 +72,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     + ")";
     private static final String CREATE_TABLE_SONG_SNIPPETS =
             "CREATE TABLE " + TABLE_SONG_SNIPPETS + "("
+                    + COLUMN_UUID +                 " TEXT UNIQUE NOT NULL,"
                     + COLUMN_ID +                   " INTEGER PRIMARY KEY AUTOINCREMENT,"
                     + COLUMN_SONG_ID +              " TEXT NOT NULL,"
                     + COLUMN_SNIPPET_NO +           " INTEGER NOT NULL,"
@@ -119,14 +118,111 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             // Create the song_snippets table for version 4
             db.execSQL(CREATE_TABLE_SONG_SNIPPETS);
         }
+
+        if (oldVersion < 5) {
+            // Add UUID columns to existing tables
+            db.execSQL("ALTER TABLE " + TABLE_SONG_NOTES + " ADD COLUMN uuid TEXT");
+            db.execSQL("ALTER TABLE " + TABLE_SONG_SNIPPETS + " ADD COLUMN uuid TEXT");
+
+            // Generate UUIDs for existing records
+            generateUUIDsForExistingRecords(db);
+        }
+    }
+
+    private void generateUUIDsForExistingRecords(SQLiteDatabase db) {
+        // Update notes with UUIDs
+        Cursor notesCursor = db.rawQuery("SELECT id FROM " + TABLE_SONG_NOTES + " WHERE uuid IS NULL", null);
+        if (notesCursor.moveToFirst()) {
+            do {
+                long id = notesCursor.getLong(0);
+                String uuid = java.util.UUID.randomUUID().toString();
+                db.execSQL("UPDATE " + TABLE_SONG_NOTES + " SET uuid = ? WHERE id = ?", new Object[]{uuid, id});
+            } while (notesCursor.moveToNext());
+        }
+        notesCursor.close();
+
+        // Update snippets with UUIDs
+        Cursor snippetsCursor = db.rawQuery("SELECT id FROM " + TABLE_SONG_SNIPPETS + " WHERE uuid IS NULL", null);
+        if (snippetsCursor.moveToFirst()) {
+            do {
+                long id = snippetsCursor.getLong(0);
+                String uuid = java.util.UUID.randomUUID().toString();
+                db.execSQL("UPDATE " + TABLE_SONG_SNIPPETS + " SET uuid = ? WHERE id = ?", new Object[]{uuid, id});
+            } while (snippetsCursor.moveToNext());
+        }
+        snippetsCursor.close();
     }
 
     // ======== NOTES METHODS ========
+
+    // Get all notes
+    private List<SongNote> getAllNotes() {
+        List<SongNote> allNotes = new ArrayList<>();
+        String selectQuery = "SELECT * FROM " + TABLE_SONG_NOTES + " ORDER BY " + COLUMN_TIMESTAMP + " ASC";
+
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(selectQuery, null);
+
+        if (cursor.moveToFirst()) {
+            do {
+                SongNote note = new SongNote(
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_UUID)),
+                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_ID)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SONG_ID)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_NOTE_TYPE)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_CONTENT)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TIMESTAMP))
+                );
+                allNotes.add(note);
+            } while (cursor.moveToNext());
+        }
+
+        cursor.close();
+        db.close();
+        return allNotes;
+    }
+
+    // Get all notes for a specific song
+    public List<SongNote> getSongNotes(String songId) {
+        List<SongNote> notes = new ArrayList<>();
+        String selectQuery = "SELECT * FROM " + TABLE_SONG_NOTES +
+                " WHERE " + COLUMN_SONG_ID + " = ?" +
+                " ORDER BY " + COLUMN_TIMESTAMP + " ASC";
+
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(selectQuery, new String[]{songId});
+
+        if (cursor.moveToFirst()) {
+            do {
+                SongNote note = new SongNote(
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_UUID)),
+                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_ID)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SONG_ID)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_NOTE_TYPE)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_CONTENT)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TIMESTAMP))
+                );
+                notes.add(note);
+            } while (cursor.moveToNext());
+        }
+
+        cursor.close();
+        db.close();
+        return notes;
+    }
+
     // Add
     public long addNote(SongNote note) {
         SQLiteDatabase db = this.getWritableDatabase();
+
+        if (note.getUuid() != null && dataExistsByUUID(db, TABLE_SONG_NOTES, note.getUuid())) {
+            db.close();
+            return -1; // Already exists
+        }
+
         ContentValues values = new ContentValues();
 
+        values.put(COLUMN_UUID, note.getUuid());
         values.put(COLUMN_SONG_ID, note.getSongId());
         values.put(COLUMN_NOTE_TYPE, note.getNoteType());
         values.put(COLUMN_CONTENT, note.getContent());
@@ -164,34 +260,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.delete(TABLE_SONG_NOTES, COLUMN_ID + " = ?",
                 new String[]{String.valueOf(noteId)});
         db.close();
-    }
-
-    // Get all notes for a specific song
-    public List<SongNote> getSongNotes(String songId) {
-        List<SongNote> notes = new ArrayList<>();
-        String selectQuery = "SELECT * FROM " + TABLE_SONG_NOTES +
-                " WHERE " + COLUMN_SONG_ID + " = ?" +
-                " ORDER BY " + COLUMN_TIMESTAMP + " ASC";
-
-        SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(selectQuery, new String[]{songId});
-
-        if (cursor.moveToFirst()) {
-            do {
-                SongNote note = new SongNote(
-                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_ID)),
-                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SONG_ID)),
-                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_NOTE_TYPE)),
-                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_CONTENT)),
-                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TIMESTAMP))
-                );
-                notes.add(note);
-            } while (cursor.moveToNext());
-        }
-
-        cursor.close();
-        db.close();
-        return notes;
     }
 
     // Check if a song has any notes
@@ -233,8 +301,10 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return songIds;
     }
 
+
     // ======== ARCHIVED PLAYLISTS METHODS ========
-    // Add a playlist to the archived playlists table
+
+    // Add
     public void archivePlaylist(String playlistId) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
@@ -243,6 +313,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.close();
     }
 
+    // Delete
     public void unarchivePlaylist(String playlistId) {
         SQLiteDatabase db = this.getWritableDatabase();
         db.delete(TABLE_ARCHIVED_PLAYLISTS, COLUMN_PLAYLIST_ID + " = ?",
@@ -250,6 +321,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.close();
     }
 
+    // Check if a playlist is archived
     public boolean isPlaylistArchived(String playlistId) {
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.query(TABLE_ARCHIVED_PLAYLISTS,
@@ -263,6 +335,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return isArchived;
     }
 
+    // Get all archived playlists
     public List<String> getArchivedPlaylistIds() {
         List<String> playlistIds = new ArrayList<>();
         SQLiteDatabase db = this.getReadableDatabase();
@@ -279,12 +352,81 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return playlistIds;
     }
 
+
     // ======== SNIPPETS METHODS ========
+
+    // Get all snippets
+    private List<SongSnippet> getAllSnippets() {
+        List<SongSnippet> allSnippets = new ArrayList<>();
+        String selectQuery = "SELECT * FROM " + TABLE_SONG_SNIPPETS + " ORDER BY " + COLUMN_ID + " ASC";
+
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(selectQuery, null);
+
+        if (cursor.moveToFirst()) {
+            do {
+                SongSnippet snippet = new SongSnippet(
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_UUID)),
+                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_ID)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SONG_ID)),
+                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SNIPPET_NO)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TITLE)),
+                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_START_TIME)),
+                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_END_TIME)),
+                        cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_INCLUDE_IN_RANKINGS)) == 1
+                );
+                allSnippets.add(snippet);
+            } while (cursor.moveToNext());
+        }
+
+        cursor.close();
+        db.close();
+        return allSnippets;
+    }
+
+    // Get all snippets for a specific song
+    public List<SongSnippet> getSongSnippets(String songId) {
+        List<SongSnippet> snippets = new ArrayList<>();
+        String selectQuery = "SELECT * FROM " + TABLE_SONG_SNIPPETS +
+                " WHERE " + COLUMN_SONG_ID + " = ?" +
+                " ORDER BY " + COLUMN_SNIPPET_NO + " ASC";
+
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(selectQuery, new String[]{songId});
+
+        if (cursor.moveToFirst()) {
+            do {
+                SongSnippet snippet = new SongSnippet(
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_UUID)),
+                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_ID)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SONG_ID)),
+                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SNIPPET_NO)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TITLE)),
+                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_START_TIME)),
+                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_END_TIME)),
+                        cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_INCLUDE_IN_RANKINGS)) == 1
+                );
+                snippets.add(snippet);
+            } while (cursor.moveToNext());
+        }
+
+        cursor.close();
+        db.close();
+        return snippets;
+    }
+
     // Add
     public long addSnippet(SongSnippet snippet) {
         SQLiteDatabase db = this.getWritableDatabase();
+
+        if (snippet.getUuid() != null && dataExistsByUUID(db, TABLE_SONG_SNIPPETS, snippet.getUuid())) {
+            db.close();
+            return -1; // Already exists
+        }
+
         ContentValues values = new ContentValues();
 
+        values.put(COLUMN_UUID, snippet.getUuid());
         values.put(COLUMN_SONG_ID, snippet.getSongId());
         values.put(COLUMN_SNIPPET_NO, snippet.getSnippetNo());
         values.put(COLUMN_TITLE, snippet.getTitle());
@@ -320,36 +462,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.delete(TABLE_SONG_SNIPPETS, COLUMN_ID + " = ?",
                 new String[]{String.valueOf(snippetId)});
         db.close();
-    }
-
-    // Get all snippets for a specific song
-    public List<SongSnippet> getSongSnippets(String songId) {
-        List<SongSnippet> snippets = new ArrayList<>();
-        String selectQuery = "SELECT * FROM " + TABLE_SONG_SNIPPETS +
-                " WHERE " + COLUMN_SONG_ID + " = ?" +
-                " ORDER BY " + COLUMN_SNIPPET_NO + " ASC";
-
-        SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(selectQuery, new String[]{songId});
-
-        if (cursor.moveToFirst()) {
-            do {
-                SongSnippet snippet = new SongSnippet(
-                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_ID)),
-                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SONG_ID)),
-                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SNIPPET_NO)),
-                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TITLE)),
-                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_START_TIME)),
-                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_END_TIME)),
-                        cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_INCLUDE_IN_RANKINGS)) == 1
-                );
-                snippets.add(snippet);
-            } while (cursor.moveToNext());
-        }
-
-        cursor.close();
-        db.close();
-        return snippets;
     }
 
     // Check if a song has any snippets
@@ -392,7 +504,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
 
-    // ======== EXPORT/IMPORT METHODS (Updated for Storage Access Framework) ========
+    // ======== EXPORT/IMPORT METHODS ========
     public static class ExportData {
         public List<SongNote> notes;
         public List<String> archivedPlaylists;
@@ -448,7 +560,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         if (importData.notes != null) {
             for (SongNote note : importData.notes) {
                 // Create new note without ID to avoid conflicts
-                SongNote newNote = new SongNote(note.getSongId(), note.getNoteType(), note.getContent());
+                SongNote newNote = new SongNote(note.getUuid(), note.getSongId(), note.getNoteType(), note.getContent());
                 long result = dbHelper.addNote(newNote);
                 if (result != -1) {
                     stats.notesAdded++;
@@ -471,6 +583,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             for (SongSnippet snippet : importData.snippets) {
                 // Create new snippet without ID to avoid conflicts
                 SongSnippet newSnippet = new SongSnippet(
+                        snippet.getUuid(),
                         snippet.getSongId(),
                         snippet.getSnippetNo(),
                         snippet.getTitle(),
@@ -501,58 +614,13 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return stringBuilder.toString();
     }
 
-    // Keep the existing helper methods
-    private List<SongNote> getAllNotes() {
-        List<SongNote> allNotes = new ArrayList<>();
-        String selectQuery = "SELECT * FROM " + TABLE_SONG_NOTES + " ORDER BY " + COLUMN_TIMESTAMP + " ASC";
-
-        SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(selectQuery, null);
-
-        if (cursor.moveToFirst()) {
-            do {
-                SongNote note = new SongNote(
-                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_ID)),
-                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SONG_ID)),
-                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_NOTE_TYPE)),
-                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_CONTENT)),
-                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TIMESTAMP))
-                );
-                allNotes.add(note);
-            } while (cursor.moveToNext());
-        }
-
+    private boolean dataExistsByUUID(SQLiteDatabase db, String table, String uuid) {
+        Cursor cursor = db.query(table, new String[]{"id"}, "uuid = ?", new String[]{uuid}, null, null, null);
+        boolean exists = cursor.moveToFirst();
         cursor.close();
-        db.close();
-        return allNotes;
+        return exists;
     }
 
-    private List<SongSnippet> getAllSnippets() {
-        List<SongSnippet> allSnippets = new ArrayList<>();
-        String selectQuery = "SELECT * FROM " + TABLE_SONG_SNIPPETS + " ORDER BY " + COLUMN_ID + " ASC";
-
-        SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(selectQuery, null);
-
-        if (cursor.moveToFirst()) {
-            do {
-                SongSnippet snippet = new SongSnippet(
-                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_ID)),
-                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SONG_ID)),
-                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SNIPPET_NO)),
-                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TITLE)),
-                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_START_TIME)),
-                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_END_TIME)),
-                        cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_INCLUDE_IN_RANKINGS)) == 1
-                );
-                allSnippets.add(snippet);
-            } while (cursor.moveToNext());
-        }
-
-        cursor.close();
-        db.close();
-        return allSnippets;
-    }
 
     public static class ImportStats {
         public int notesAdded = 0;
