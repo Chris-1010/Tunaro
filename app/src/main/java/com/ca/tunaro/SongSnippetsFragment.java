@@ -373,6 +373,7 @@ public class SongSnippetsFragment extends Fragment {
                 // Preview start position (play 3 seconds starting from the selected position)
                 long previewEndMs = Math.min(startMs + 3000, totalDurationMs);
                 SongSnippet previewSnippet = new SongSnippet(
+                        null,
                         song.getId(),
                         1, // Temporary number
                         "Preview End",
@@ -396,6 +397,7 @@ public class SongSnippetsFragment extends Fragment {
                 // Preview end position (play 3 seconds leading up to the end position)
                 long previewStartMs = Math.max(0, endMs - 3000);
                 SongSnippet previewSnippet = new SongSnippet(
+                        null,
                         song.getId(),
                         1, // Temporary number
                         "Preview End",
@@ -502,6 +504,7 @@ public class SongSnippetsFragment extends Fragment {
 
             // Create temporary snippet for testing
             SongSnippet testSnippet = new SongSnippet(
+                    null,
                     song.getId(),
                     1, // Temporary number
                     titleInput.getText().toString(),
@@ -551,6 +554,7 @@ public class SongSnippetsFragment extends Fragment {
 
                     // Create and save the snippet
                     SongSnippet newSnippet = new SongSnippet(
+                            null,
                             song.getId(),
                             snippetNo,
                             title,
