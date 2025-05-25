@@ -169,28 +169,30 @@ public class PlaybackManager {
                 artistNames[i] = remoteTrack.artists.get(i).name;
             }
 
-            // Only update current song if it's different
+            boolean trackChanged = false;
             if (currentSong == null || !remoteTrack.uri.equals(currentSong.getUri())) {
                 // Extract ID from URI (format: spotify:track:id)
                 String id = remoteTrack.uri.split(":")[2];
 
                 // Create a simplified SongModel from track with string artist names
                 currentSong = createSongModelFromRemoteTrack(remoteTrack, id, artistNames);
-
-                showToast("Now playing: " + remoteTrack.name);
+                trackChanged = true;
             }
 
             // Update playing state
             boolean wasPlaying = isPlaying;
             isPlaying = !playerState.isPaused;
 
-            // Only notify if state actually changed
-            if (wasPlaying != isPlaying) {
+            // Notify if state or track changed
+            if (wasPlaying != isPlaying || trackChanged) {
                 notifyPlaybackStateChanged();
             }
 
             currentPositionMs = playerState.playbackPosition;
             durationMs = remoteTrack.duration;
+
+            // Always notify position change when we get player state
+            notifyPlaybackPositionChanged();
 
             // Update position tracking state when play state changes
             if (isPlaying && !isTrackingPosition) {
@@ -200,8 +202,9 @@ public class PlaybackManager {
             }
         } else {
             // No track playing
-            if (isPlaying) {
+            if (isPlaying || currentSong != null) {
                 isPlaying = false;
+                currentSong = null;
                 notifyPlaybackStateChanged();
             }
 

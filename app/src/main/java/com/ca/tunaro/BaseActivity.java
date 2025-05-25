@@ -191,29 +191,31 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     private void updatePlaybackBarUI(boolean isPlaying, SongModel currentSong) {
         if (playbackBar == null) return;
 
-        if (playPauseButton != null) {
-            // Update play/pause button icon
-            playPauseButton.setImageResource(
-                    isPlaying ? R.drawable.pause_circle_filled : R.drawable.play_circle_filled);
-        }
-
-        if (currentSong != null) {
-            // Update song info
-            if (songName != null) {
-                songName.setText(currentSong.getName());
+        runOnUiThread(() -> {
+            if (playPauseButton != null) {
+                // Update play/pause button icon
+                playPauseButton.setImageResource(
+                        isPlaying ? R.drawable.pause_circle_filled : R.drawable.play_circle_filled);
             }
 
-            if (artistName != null) {
-                artistName.setText(currentSong.getArtist());
-            }
+            if (currentSong != null) {
+                // Update song info
+                if (songName != null) {
+                    songName.setText(currentSong.getName());
+                }
 
-            // Load album artwork
-            if (albumCover != null) {
-                Glide.with(this)
-                        .load(currentSong.getAlbumCoverUrl())
-                        .into(albumCover);
+                if (artistName != null) {
+                    artistName.setText(currentSong.getArtist());
+                }
+
+                // Load album artwork
+                if (albumCover != null) {
+                    Glide.with(this)
+                            .load(currentSong.getAlbumCoverUrl())
+                            .into(albumCover);
+                }
             }
-        }
+        });
     }
 
     @Override
