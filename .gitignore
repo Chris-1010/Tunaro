@@ -51,7 +51,6 @@ vcs.xml
 
 # Secrets
 apikey.properties
-secrets.xml
 
 # Database files
 *.db
