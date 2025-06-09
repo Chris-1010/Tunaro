@@ -48,6 +48,10 @@ public class SongSnippetsFragment extends Fragment {
     private final android.os.Handler snippetHandler = new android.os.Handler();
     private Runnable pauseRunnable;
 
+    private Handler playbackUpdateHandler;
+    private Runnable playbackUpdateRunnable;
+    private boolean isUpdatingPlayback = false;
+
     public static SongSnippetsFragment newInstance(SongModel song) {
         SongSnippetsFragment fragment = new SongSnippetsFragment();
         Bundle args = new Bundle();
@@ -73,7 +77,10 @@ public class SongSnippetsFragment extends Fragment {
         // Setup button click handler
         addSnippetButton.setOnClickListener(v -> showAddSnippetDialog());
         setupSnippetsList();
-        loadSnippets();
+
+        // Load snippets
+        snippets = dbHelper.getSongSnippets(song.getId());
+        snippetAdapter.updateSnippets(snippets);
 
         return view;
     }
@@ -351,7 +358,37 @@ public class SongSnippetsFragment extends Fragment {
 
         // Play/pause button
         ImageButton playPauseButton = snippetCreationOverlay.findViewById(R.id.snippet_play_pause);
-        playPauseButton.setOnClickListener(v -> playbackManager.togglePlayPause());
+        playPauseButton.setOnClickListener(v -> {
+            if (!isCorrectSongPlaying()) {
+                // Wrong song is playing, play the correct song
+                if (playbackManager.isConnected()) {
+                    playbackManager.playSong(song);
+                    Toast.makeText(requireContext(), "Playing " + song.getName() + " for snippet creation", Toast.LENGTH_SHORT).show();
+                } else {
+                    playbackManager.connectSpotify(requireContext(), () -> {
+                        playbackManager.playSong(song);
+                        Toast.makeText(requireContext(), "Playing " + song.getName() + " for snippet creation", Toast.LENGTH_SHORT).show();
+                    });
+                }
+            } else {
+                // Correct song is playing, toggle play/pause
+                playbackManager.togglePlayPause();
+            }
+        });
+
+        // Warning play button
+        ImageButton warningPlayButton = snippetCreationOverlay.findViewById(R.id.snippet_warning_play_button);
+        warningPlayButton.setOnClickListener(v -> {
+            if (playbackManager.isConnected()) {
+                playbackManager.playSong(song);
+                Toast.makeText(requireContext(), "Playing " + song.getName() + " for snippet creation", Toast.LENGTH_SHORT).show();
+            } else {
+                playbackManager.connectSpotify(requireContext(), () -> {
+                    playbackManager.playSong(song);
+                    Toast.makeText(requireContext(), "Playing " + song.getName() + " for snippet creation", Toast.LENGTH_SHORT).show();
+                });
+            }
+        });
     }
 
     private void setupTimeInputListeners() {
@@ -416,20 +453,30 @@ public class SongSnippetsFragment extends Fragment {
     }
 
     private void setupSnippetPlaybackBar() {
-        if (song == null) return;
-
         ImageView albumCover = snippetCreationOverlay.findViewById(R.id.snippet_album_cover);
         TextView songName = snippetCreationOverlay.findViewById(R.id.snippet_song_name);
         TextView artistName = snippetCreationOverlay.findViewById(R.id.snippet_artist_name);
         ImageButton playPauseButton = snippetCreationOverlay.findViewById(R.id.snippet_play_pause);
 
-        // Load song info
-        Glide.with(requireContext()).load(song.getAlbumCoverUrl()).into(albumCover);
-        songName.setText(song.getName());
-        artistName.setText(song.getArtist());
+        // Get the currently playing song, not the target snippet song
+        SongModel currentlyPlaying = playbackManager.getCurrentSong();
 
-        // Setup seekbar with song duration
-        snippetSeekBar.setMax(song.getDuration());
+        if (currentlyPlaying != null) {
+            // Load currently playing song info
+            Glide.with(requireContext()).load(currentlyPlaying.getAlbumCoverUrl()).into(albumCover);
+            songName.setText(currentlyPlaying.getName());
+            artistName.setText(currentlyPlaying.getArtist());
+
+            // Setup seekbar with current song duration
+            snippetSeekBar.setMax(currentlyPlaying.getDuration());
+        } else {
+            // No song playing - show snippet target song but indicate it's not playing
+            Glide.with(requireContext()).load(song.getAlbumCoverUrl()).into(albumCover);
+            songName.setText(song.getName());
+            artistName.setText(song.getArtist());
+            snippetSeekBar.setMax(song.getDuration());
+        }
+
         snippetSeekBar.setProgress((int) playbackManager.getCurrentPositionMs());
 
         // Update play/pause button
@@ -441,17 +488,31 @@ public class SongSnippetsFragment extends Fragment {
     }
 
     private void startPlaybackUpdates() {
-        Handler handler = new Handler();
-        Runnable updateRunnable = new Runnable() {
+        if (isUpdatingPlayback) {
+            return;
+        }
+
+        isUpdatingPlayback = true;
+        playbackUpdateHandler = new Handler();
+        playbackUpdateRunnable = new Runnable() {
             @Override
             public void run() {
-                if (snippetCreationOverlay != null && snippetCreationOverlay.getVisibility() == View.VISIBLE) {
+                if (snippetCreationOverlay != null && snippetCreationOverlay.getVisibility() == View.VISIBLE && isUpdatingPlayback) {
                     updatePlaybackUI();
-                    handler.postDelayed(this, 100);
+                    playbackUpdateHandler.postDelayed(this, 100);
+                } else {
+                    isUpdatingPlayback = false;
                 }
             }
         };
-        handler.post(updateRunnable);
+        playbackUpdateHandler.post(playbackUpdateRunnable);
+    }
+
+    private void stopPlaybackUpdates() {
+        if (playbackUpdateHandler != null && playbackUpdateRunnable != null) {
+            playbackUpdateHandler.removeCallbacks(playbackUpdateRunnable);
+        }
+        isUpdatingPlayback = false;
     }
 
     private void updatePlaybackUI() {
@@ -459,8 +520,21 @@ public class SongSnippetsFragment extends Fragment {
             snippetSeekBar.setProgress((int) playbackManager.getCurrentPositionMs());
 
             ImageButton playPauseButton = snippetCreationOverlay.findViewById(R.id.snippet_play_pause);
-            playPauseButton.setImageResource(playbackManager.isPlaying() ?
-                    R.drawable.pause_circle_filled : R.drawable.play_circle_filled);
+
+            if (!isCorrectSongPlaying()) {
+                // Wrong song playing - show play icon to indicate user should play this song
+                playPauseButton.setImageResource(R.drawable.play_circle_filled);
+            } else {
+                // Correct song playing - show actual play/pause state
+                playPauseButton.setImageResource(playbackManager.isPlaying() ?
+                        R.drawable.pause_circle_filled : R.drawable.play_circle_filled);
+            }
+
+            // Update warning message
+            updateSnippetCreationWarning();
+
+            // Update song info in case it changed
+            setupSnippetPlaybackBar();
         }
     }
 
@@ -528,16 +602,12 @@ public class SongSnippetsFragment extends Fragment {
     private void hideSnippetCreationOverlay() {
         if (snippetCreationOverlay != null) {
             snippetCreationOverlay.setVisibility(View.GONE);
+            stopPlaybackUpdates();
         }
     }
 
     private void showEditSnippetDialog(SongSnippet snippet) {
         Toast.makeText(requireContext(), "Edit snippet not implemented yet", Toast.LENGTH_SHORT).show();
-    }
-
-    private void loadSnippets() {
-        snippets = dbHelper.getSongSnippets(song.getId());
-        snippetAdapter.updateSnippets(snippets);
     }
 
     // Helper method to preview a position with a specified duration
@@ -608,11 +678,34 @@ public class SongSnippetsFragment extends Fragment {
         return String.format(Locale.getDefault(), "%d:%02d.%03d", minutes, seconds, milliseconds);
     }
 
+    private void updateSnippetCreationWarning() {
+        TextView warningText = snippetCreationOverlay.findViewById(R.id.snippet_warning_text);
+        ImageButton warningPlayButton = snippetCreationOverlay.findViewById(R.id.snippet_warning_play_button);
+
+        if (warningText != null && warningPlayButton != null) {
+            if (!isCorrectSongPlaying()) {
+                warningText.setVisibility(View.VISIBLE);
+                warningText.setText("Play this song to create a snippet");
+                warningText.setTextColor(getResources().getColor(android.R.color.holo_orange_light));
+                warningPlayButton.setVisibility(View.VISIBLE);
+            } else {
+                warningText.setVisibility(View.GONE);
+                warningPlayButton.setVisibility(View.GONE);
+            }
+        }
+    }
+
+    private boolean isCorrectSongPlaying() {
+        SongModel currentlyPlaying = playbackManager.getCurrentSong();
+        return currentlyPlaying != null && currentlyPlaying.getId().equals(song.getId());
+    }
+
     @Override
     public void onDestroy() {
         super.onDestroy();
         if (snippetHandler != null && pauseRunnable != null) {
             snippetHandler.removeCallbacks(pauseRunnable);
         }
+        stopPlaybackUpdates(); // Clean up playback updates
     }
 }
