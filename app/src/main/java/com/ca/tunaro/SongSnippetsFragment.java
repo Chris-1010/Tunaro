@@ -45,7 +45,9 @@ public class SongSnippetsFragment extends Fragment {
     private SongSnippetsAdapter snippetAdapter;
     private List<SongSnippet> snippets = new ArrayList<>();
 
+    // edit/delete operations
     private SongSnippet editingSnippet;
+    private ImageButton deleteSnippetButton;
 
     private int activeTimers = 0;
     private final android.os.Handler snippetHandler = new android.os.Handler();
@@ -251,6 +253,7 @@ public class SongSnippetsFragment extends Fragment {
         Button setEndButton = snippetCreationOverlay.findViewById(R.id.set_end_button);
         saveSnippetButton = snippetCreationOverlay.findViewById(R.id.save_snippet_button);
         Button cancelButton = snippetCreationOverlay.findViewById(R.id.cancel_snippet_button);
+        deleteSnippetButton = snippetCreationOverlay.findViewById(R.id.delete_snippet_button);
 
         snippetSeekBar = snippetCreationOverlay.findViewById(R.id.snippet_seekbar);
         snippetRangeOverlay = snippetCreationOverlay.findViewById(R.id.snippet_range_overlay);
@@ -379,6 +382,24 @@ public class SongSnippetsFragment extends Fragment {
 
         // Cancel button
         cancelButton.setOnClickListener(v -> hideSnippetCreationOverlay());
+
+        // Delete button
+        deleteSnippetButton.setOnClickListener(v -> {
+            if (editingSnippet != null) {
+                new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                        .setTitle("Delete Snippet")
+                        .setMessage("Are you sure you want to delete this snippet?")
+                        .setPositiveButton("Delete", (dialog, which) -> {
+                            dbHelper.deleteSnippet(editingSnippet.getId());
+                            snippets.removeIf(snippet -> snippet.getId() == editingSnippet.getId());
+                            snippetAdapter.updateSnippets(snippets);
+                            Toast.makeText(requireContext(), "Snippet deleted", Toast.LENGTH_SHORT).show();
+                            hideSnippetCreationOverlay();
+                        })
+                        .setNegativeButton("Cancel", null)
+                        .show();
+            }
+        });
 
         // Play/pause button
         ImageButton playPauseButton = snippetCreationOverlay.findViewById(R.id.snippet_play_pause);
@@ -631,6 +652,11 @@ public class SongSnippetsFragment extends Fragment {
             // Reset editing state
             editingSnippet = null;
 
+            // Hide delete button
+            if (deleteSnippetButton != null) {
+                deleteSnippetButton.setVisibility(View.GONE);
+            }
+
             // Reset button text
             Button saveButton = snippetCreationOverlay.findViewById(R.id.save_snippet_button);
             if (saveButton != null) {
@@ -656,6 +682,8 @@ public class SongSnippetsFragment extends Fragment {
 
             titleInput.setText(snippet.getTitle());
             includeInRankings.setChecked(snippet.getIncludeInRankings());
+
+            deleteSnippetButton.setVisibility(View.VISIBLE);
 
             // Update the time displays
             updateTimeDisplays();
