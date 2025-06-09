@@ -122,7 +122,7 @@
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 
-        <ImageView
+        <ImageButton
             android:id="@+id/play_button"
             android:layout_width="48dp"
             android:layout_height="48dp"
@@ -130,6 +130,7 @@
             android:clickable="true"
             android:contentDescription="@string/play"
             android:focusable="true"
+            android:scaleType="fitCenter"
             android:src="@drawable/play_circle_outline"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"

@@ -1,14 +1,17 @@
 package com.ca.tunaro;
 
 import android.os.Bundle;
+import android.os.Handler;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.NumberPicker;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -24,6 +27,16 @@ import java.util.List;
 import java.util.Locale;
 
 public class SongSnippetsFragment extends Fragment {
+    private View snippetCreationOverlay;
+    private long snippetStartTime = -1;
+    private long snippetEndTime = -1;
+    private TextView snippetTimeDisplay;
+    private EditText startTimeInput, endTimeInput;
+    private Button previewStartButton, previewEndButton, saveSnippetButton;
+    private View snippetRangeOverlay, snippetStartMarker, snippetEndMarker;
+    private SeekBar snippetSeekBar;
+    private PlaybackManager playbackManager;
+
     private SpotifyAppRemote spotifyAppRemote;
     private SongModel song;
     private DatabaseHelper dbHelper;
@@ -34,6 +47,10 @@ public class SongSnippetsFragment extends Fragment {
     private int activeTimers = 0;
     private final android.os.Handler snippetHandler = new android.os.Handler();
     private Runnable pauseRunnable;
+
+    private Handler playbackUpdateHandler;
+    private Runnable playbackUpdateRunnable;
+    private boolean isUpdatingPlayback = false;
 
     public static SongSnippetsFragment newInstance(SongModel song) {
         SongSnippetsFragment fragment = new SongSnippetsFragment();
@@ -60,7 +77,10 @@ public class SongSnippetsFragment extends Fragment {
         // Setup button click handler
         addSnippetButton.setOnClickListener(v -> showAddSnippetDialog());
         setupSnippetsList();
-        loadSnippets();
+
+        // Load snippets
+        snippets = dbHelper.getSongSnippets(song.getId());
+        snippetAdapter.updateSnippets(snippets);
 
         return view;
     }
@@ -188,407 +208,406 @@ public class SongSnippetsFragment extends Fragment {
     }
 
     private void showAddSnippetDialog() {
-        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_add_snippet, null);
-
-        // Get references to all the views
-        ImageView previewAlbumCover = dialogView.findViewById(R.id.preview_album_cover);
-        TextView previewSongTitle = dialogView.findViewById(R.id.preview_song_title);
-        TextView previewArtist = dialogView.findViewById(R.id.preview_artist);
-
-        EditText titleInput = dialogView.findViewById(R.id.snippet_title_input);
-        CheckBox includeInRankingsCheckbox = dialogView.findViewById(R.id.include_in_rankings);
-
-        // Set up the preview section
-        Glide.with(requireContext())
-                .load(song.getAlbumCoverUrl())
-                .into(previewAlbumCover);
-        previewSongTitle.setText(song.getName());
-        previewArtist.setText(song.getArtist());
-
-        CheckBox previewStartCheckbox = dialogView.findViewById(R.id.preview_start_checkbox);
-        CheckBox previewEndCheckbox = dialogView.findViewById(R.id.preview_end_checkbox);
-
-        // Get song duration and break down into components
-        int totalDurationMs = song.getDuration();
-        int totalSeconds = totalDurationMs / 1000;
-        int maxMinutes = totalSeconds / 60;
-        int maxSecondsInLastMinute = totalSeconds % 60;
-
-        // Initialize start time pickers
-        NumberPicker startMinutesPicker = dialogView.findViewById(R.id.start_minutes_picker);
-        NumberPicker startSecondsPicker = dialogView.findViewById(R.id.start_seconds_picker);
-        NumberPicker startMillisecondsPicker = dialogView.findViewById(R.id.start_milliseconds_picker);
-
-        // Initialize end time pickers
-        NumberPicker endMinutesPicker = dialogView.findViewById(R.id.end_minutes_picker);
-        NumberPicker endSecondsPicker = dialogView.findViewById(R.id.end_seconds_picker);
-        NumberPicker endMillisecondsPicker = dialogView.findViewById(R.id.end_milliseconds_picker);
-
-        // Configure minutes pickers
-        startMinutesPicker.setMinValue(0);
-        startMinutesPicker.setMaxValue(maxMinutes);
-
-        endMinutesPicker.setMinValue(0);
-        endMinutesPicker.setMaxValue(maxMinutes);
-
-        // Configure seconds pickers (initially full range)
-        startSecondsPicker.setMinValue(0);
-        startSecondsPicker.setMaxValue(59);
-
-        endSecondsPicker.setMinValue(0);
-        endSecondsPicker.setMaxValue(59);
-
-        // Configure milliseconds pickers (using steps of 100ms for better usability)
-        startMillisecondsPicker.setMinValue(0);
-        startMillisecondsPicker.setMaxValue(9);
-        startMillisecondsPicker.setDisplayedValues(new String[]{"000", "100", "200", "300", "400", "500", "600", "700", "800", "900"});
-
-        endMillisecondsPicker.setMinValue(0);
-        endMillisecondsPicker.setMaxValue(9);
-        endMillisecondsPicker.setDisplayedValues(new String[]{"000", "100", "200", "300", "400", "500", "600", "700", "800", "900"});
-
-        // Add listeners to handle constraints between minutes and seconds
-        startMinutesPicker.setOnValueChangedListener((picker, oldVal, newVal) -> {
-            // Adjust seconds maximum if at the maximum minute
-            if (newVal == maxMinutes) {
-                startSecondsPicker.setMaxValue(maxSecondsInLastMinute);
-            } else {
-                startSecondsPicker.setMaxValue(59);
-            }
-        });
-
-        endMinutesPicker.setOnValueChangedListener((picker, oldVal, newVal) -> {
-            // Adjust seconds maximum if at the maximum minute
-            if (newVal == maxMinutes) {
-                endSecondsPicker.setMaxValue(maxSecondsInLastMinute);
-            } else {
-                endSecondsPicker.setMaxValue(59);
-            }
-        });
-
-        // Value listener that updates the end time if start time becomes greater
-        NumberPicker.OnValueChangeListener startTimeListener = (picker, oldVal, newVal) -> {
-            // Calculate current start and end times in milliseconds
-            long startMs = calculateTimeInMs(
-                    startMinutesPicker.getValue(),
-                    startSecondsPicker.getValue(),
-                    startMillisecondsPicker.getValue() * 100
-            );
-
-            long endMs = calculateTimeInMs(
-                    endMinutesPicker.getValue(),
-                    endSecondsPicker.getValue(),
-                    endMillisecondsPicker.getValue() * 100
-            );
-
-            // If start time becomes greater than or equal to end time,
-            // adjust end time to be at least 500ms after start time
-            if (startMs >= endMs) {
-                startMs += 500; // Add 500ms buffer
-
-                // Make sure not to exceed song duration
-                if (startMs < totalDurationMs) {
-                    // Convert back to minutes, seconds, milliseconds
-                    int newEndMinutes = (int) (startMs / 60000);
-                    int newEndSeconds = (int) ((startMs % 60000) / 1000);
-                    int newEndMillis = (int) ((startMs % 1000) / 100);
-
-                    // Update end time pickers without triggering their listeners
-                    endMinutesPicker.setValue(newEndMinutes);
-                    endSecondsPicker.setValue(newEndSeconds);
-                    endMillisecondsPicker.setValue(newEndMillis);
-                } else {
-                    // If exceeding song duration, roll back the start time change
-                    if (picker == startMinutesPicker) {
-                        startMinutesPicker.setValue(oldVal);
-                    } else if (picker == startSecondsPicker) {
-                        startSecondsPicker.setValue(oldVal);
-                    } else if (picker == startMillisecondsPicker) {
-                        startMillisecondsPicker.setValue(oldVal);
-                    }
-
-                    Toast.makeText(requireContext(),
-                            "Cannot set start time this high - would exceed song duration",
-                            Toast.LENGTH_SHORT).show();
-                }
-            }
-
-            // Check if at the maximum minute and adjust seconds accordingly
-            if (startMinutesPicker.getValue() == maxMinutes) {
-                startSecondsPicker.setMaxValue(maxSecondsInLastMinute);
-            } else {
-                startSecondsPicker.setMaxValue(59);
-            }
-        };
-
-        // Value listener that updates the start time if end time becomes smaller
-        NumberPicker.OnValueChangeListener endTimeListener = (picker, oldVal, newVal) -> {
-            // Calculate current start and end times in milliseconds
-            long startMs = calculateTimeInMs(
-                    startMinutesPicker.getValue(),
-                    startSecondsPicker.getValue(),
-                    startMillisecondsPicker.getValue() * 100
-            );
-
-            long endMs = calculateTimeInMs(
-                    endMinutesPicker.getValue(),
-                    endSecondsPicker.getValue(),
-                    endMillisecondsPicker.getValue() * 100
-            );
-
-            // If end time becomes less than or equal to start time,
-            // prevent the change by resetting to old value
-            if (endMs <= startMs) {
-                if (picker == endMinutesPicker) {
-                    endMinutesPicker.setValue(oldVal);
-                } else if (picker == endSecondsPicker) {
-                    endSecondsPicker.setValue(oldVal);
-                } else if (picker == endMillisecondsPicker) {
-                    endMillisecondsPicker.setValue(oldVal);
-                }
-
-//                Toast.makeText(requireContext(),
-//                        "End time must be after start time",
-//                        Toast.LENGTH_SHORT).show();
-            }
-
-            // Check if at the maximum minute and adjust seconds accordingly
-            if (endMinutesPicker.getValue() == maxMinutes) {
-                endSecondsPicker.setMaxValue(maxSecondsInLastMinute);
-            } else {
-                endSecondsPicker.setMaxValue(59);
-            }
-        };
-
-        // Listeners for preview functionality
-        NumberPicker.OnValueChangeListener startTimePreviewListener = (picker, oldVal, newVal) -> {
-            if (previewStartCheckbox.isChecked() && spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
-                // Calculate current start time in milliseconds
-                long startMs = calculateTimeInMs(
-                        startMinutesPicker.getValue(),
-                        startSecondsPicker.getValue(),
-                        startMillisecondsPicker.getValue() * 100
-                );
-
-                // Preview start position (play 3 seconds starting from the selected position)
-                long previewEndMs = Math.min(startMs + 3000, totalDurationMs);
-                SongSnippet previewSnippet = new SongSnippet(
-                        null,
-                        song.getId(),
-                        1, // Temporary number
-                        "Preview End",
-                        startMs,
-                        previewEndMs,
-                        false);
-
-                playSnippet(previewSnippet);
-            }
-        };
-
-        NumberPicker.OnValueChangeListener endTimePreviewListener = (picker, oldVal, newVal) -> {
-            if (previewEndCheckbox.isChecked() && spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
-                // Calculate current end time in milliseconds
-                long endMs = calculateTimeInMs(
-                        endMinutesPicker.getValue(),
-                        endSecondsPicker.getValue(),
-                        endMillisecondsPicker.getValue() * 100
-                );
-
-                // Preview end position (play 3 seconds leading up to the end position)
-                long previewStartMs = Math.max(0, endMs - 3000);
-                SongSnippet previewSnippet = new SongSnippet(
-                        null,
-                        song.getId(),
-                        1, // Temporary number
-                        "Preview End",
-                        previewStartMs,
-                        endMs,
-                        false);
-
-                playSnippet(previewSnippet);
-            }
-        };
-
-        // Add a way to apply the preview listeners when checkboxes are checked
-        previewStartCheckbox.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            if (isChecked) {
-                // When checkbox is checked, add the preview listener to all start time pickers
-                startMinutesPicker.setOnValueChangedListener(
-                        (picker, oldVal, newVal) -> {
-                            startTimeListener.onValueChange(picker, oldVal, newVal);
-                            startTimePreviewListener.onValueChange(picker, oldVal, newVal);
-                        });
-                startSecondsPicker.setOnValueChangedListener(
-                        (picker, oldVal, newVal) -> {
-                            startTimeListener.onValueChange(picker, oldVal, newVal);
-                            startTimePreviewListener.onValueChange(picker, oldVal, newVal);
-                        });
-                startMillisecondsPicker.setOnValueChangedListener(
-                        (picker, oldVal, newVal) -> {
-                            startTimeListener.onValueChange(picker, oldVal, newVal);
-                            startTimePreviewListener.onValueChange(picker, oldVal, newVal);
-                        });
-
-                // Trigger preview with current values
-                startTimePreviewListener.onValueChange(startMinutesPicker, 0, startMinutesPicker.getValue());
-            } else {
-                // When unchecked, revert to original listeners
-                startMinutesPicker.setOnValueChangedListener(startTimeListener);
-                startSecondsPicker.setOnValueChangedListener(startTimeListener);
-                startMillisecondsPicker.setOnValueChangedListener(startTimeListener);
-            }
-        });
-
-        previewEndCheckbox.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            if (isChecked) {
-                // When checkbox is checked, add the preview listener to all end time pickers
-                endMinutesPicker.setOnValueChangedListener(
-                        (picker, oldVal, newVal) -> {
-                            endTimeListener.onValueChange(picker, oldVal, newVal);
-                            endTimePreviewListener.onValueChange(picker, oldVal, newVal);
-                        });
-                endSecondsPicker.setOnValueChangedListener(
-                        (picker, oldVal, newVal) -> {
-                            endTimeListener.onValueChange(picker, oldVal, newVal);
-                            endTimePreviewListener.onValueChange(picker, oldVal, newVal);
-                        });
-                endMillisecondsPicker.setOnValueChangedListener(
-                        (picker, oldVal, newVal) -> {
-                            endTimeListener.onValueChange(picker, oldVal, newVal);
-                            endTimePreviewListener.onValueChange(picker, oldVal, newVal);
-                        });
-
-                // Trigger preview with current values
-                endTimePreviewListener.onValueChange(endMinutesPicker, 0, endMinutesPicker.getValue());
-            } else {
-                // When unchecked, revert to original listeners
-                endMinutesPicker.setOnValueChangedListener(endTimeListener);
-                endSecondsPicker.setOnValueChangedListener(endTimeListener);
-                endMillisecondsPicker.setOnValueChangedListener(endTimeListener);
-            }
-        });
-
-        // Apply listeners
-        startMinutesPicker.setOnValueChangedListener(startTimeListener);
-        startSecondsPicker.setOnValueChangedListener(startTimeListener);
-        startMillisecondsPicker.setOnValueChangedListener(startTimeListener);
-        endMinutesPicker.setOnValueChangedListener(endTimeListener);
-        endSecondsPicker.setOnValueChangedListener(endTimeListener);
-        endMillisecondsPicker.setOnValueChangedListener(endTimeListener);
-
-        // Set default values (start at 0, end at 25% of the song)
-        startMinutesPicker.setValue(0);
-        startSecondsPicker.setValue(0);
-        startMillisecondsPicker.setValue(0);
-
-        int quarterDurationSecs = totalSeconds / 4;
-        endMinutesPicker.setValue(quarterDurationSecs / 60);
-        endSecondsPicker.setValue(quarterDurationSecs % 60);
-        endMillisecondsPicker.setValue(0);
-
-        // Test playback button
-        Button testPlaybackButton = dialogView.findViewById(R.id.test_playback_button);
-        testPlaybackButton.setOnClickListener(v -> {
-            // Calculate time values in milliseconds
-            long startMs = calculateTimeInMs(
-                    startMinutesPicker.getValue(),
-                    startSecondsPicker.getValue(),
-                    startMillisecondsPicker.getValue() * 100
-            );
-
-            long endMs = calculateTimeInMs(
-                    endMinutesPicker.getValue(),
-                    endSecondsPicker.getValue(),
-                    endMillisecondsPicker.getValue() * 100
-            );
-
-            // Create temporary snippet for testing
-            SongSnippet testSnippet = new SongSnippet(
-                    null,
-                    song.getId(),
-                    1, // Temporary number
-                    titleInput.getText().toString(),
-                    startMs,
-                    endMs,
-                    includeInRankingsCheckbox.isChecked()
-            );
-
-            playSnippet(testSnippet);
-        });
-
-        // Show the dialog
-        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                .setTitle("Add Snippet")
-                .setView(dialogView)
-                .setPositiveButton("Save", (dialog, which) -> {
-                    // Get title and rankings checkbox
-                    String title = titleInput.getText().toString();
-                    boolean includeInRankings = includeInRankingsCheckbox.isChecked();
-
-                    // Calculate time values in milliseconds
-                    long startMs = calculateTimeInMs(
-                            startMinutesPicker.getValue(),
-                            startSecondsPicker.getValue(),
-                            startMillisecondsPicker.getValue() * 100
-                    );
-
-                    long endMs = calculateTimeInMs(
-                            endMinutesPicker.getValue(),
-                            endSecondsPicker.getValue(),
-                            endMillisecondsPicker.getValue() * 100
-                    );
-
-                    // Validate
-                    if (startMs >= endMs) {
-//                        Toast.makeText(requireContext(), "End time must be after start time", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-
-                    // Get the next snippet number
-                    long snippetNo = snippets.size() + 1;
-                    for (SongSnippet existingSnippet : snippets) {
-                        if (existingSnippet.getSnippetNo() >= snippetNo) {
-                            snippetNo = existingSnippet.getSnippetNo() + 1;
-                        }
-                    }
-
-                    // Create and save the snippet
-                    SongSnippet newSnippet = new SongSnippet(
-                            null,
-                            song.getId(),
-                            snippetNo,
-                            title,
-                            startMs,
-                            endMs,
-                            includeInRankings
-                    );
-
-                    long id = dbHelper.addSnippet(newSnippet);
-                    if (id != -1) {
-                        newSnippet.setId(id);
-                        snippets.add(newSnippet);
-                        snippetAdapter.updateSnippets(snippets);
-                        Toast.makeText(requireContext(), "Snippet saved", Toast.LENGTH_SHORT).show();
-                    } else {
-                        Toast.makeText(requireContext(), "Error saving snippet", Toast.LENGTH_SHORT).show();
-                    }
-                })
-                .setNegativeButton("Cancel", null)
-                .show();
+        showSnippetCreationOverlay();
     }
 
-    // Calculate milliseconds from components
-    private long calculateTimeInMs(int minutes, int seconds, int milliseconds) {
-        return ((long) minutes * 60 * 1000) + (seconds * 1000L) + milliseconds;
+    private void showSnippetCreationOverlay() {
+        // Initialize playback manager
+        playbackManager = PlaybackManager.getInstance();
+
+        // Find or create the overlay
+        if (snippetCreationOverlay == null) {
+            View parentView = getActivity().findViewById(android.R.id.content);
+            if (parentView instanceof ViewGroup) {
+                ViewGroup parent = (ViewGroup) parentView;
+                snippetCreationOverlay = LayoutInflater.from(requireContext())
+                        .inflate(R.layout.snippet_creation_overlay, parent, false);
+                parent.addView(snippetCreationOverlay);
+                setupSnippetCreationOverlay();
+            }
+        }
+
+        // Reset state
+        snippetStartTime = -1;
+        snippetEndTime = -1;
+        updateTimeDisplays();
+        updateSnippetMarkers();
+
+        // Show the overlay
+        snippetCreationOverlay.setVisibility(View.VISIBLE);
+
+        // Setup playback bar with current song
+        setupSnippetPlaybackBar();
+    }
+
+    private void setupSnippetCreationOverlay() {
+        EditText titleInput = snippetCreationOverlay.findViewById(R.id.snippet_title_input);
+        CheckBox includeInRankings = snippetCreationOverlay.findViewById(R.id.include_in_rankings);
+
+        previewStartButton = snippetCreationOverlay.findViewById(R.id.preview_start_button);
+        previewEndButton = snippetCreationOverlay.findViewById(R.id.preview_end_button);
+        Button setStartButton = snippetCreationOverlay.findViewById(R.id.set_start_button);
+        Button setEndButton = snippetCreationOverlay.findViewById(R.id.set_end_button);
+        saveSnippetButton = snippetCreationOverlay.findViewById(R.id.save_snippet_button);
+        Button cancelButton = snippetCreationOverlay.findViewById(R.id.cancel_snippet_button);
+
+        snippetSeekBar = snippetCreationOverlay.findViewById(R.id.snippet_seekbar);
+        snippetRangeOverlay = snippetCreationOverlay.findViewById(R.id.snippet_range_overlay);
+        snippetStartMarker = snippetCreationOverlay.findViewById(R.id.snippet_start_marker);
+        snippetEndMarker = snippetCreationOverlay.findViewById(R.id.snippet_end_marker);
+
+        startTimeInput = snippetCreationOverlay.findViewById(R.id.start_time_input);
+        endTimeInput = snippetCreationOverlay.findViewById(R.id.end_time_input);
+        setupTimeInputListeners();
+
+        // Setup seekbar
+        snippetSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser) {
+                    updateSnippetMarkers();
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {}
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                if (playbackManager.isConnected()) {
+                    playbackManager.seekTo(seekBar.getProgress());
+                }
+            }
+        });
+
+        // Set Start button
+        setStartButton.setOnClickListener(v -> {
+            snippetStartTime = playbackManager.getCurrentPositionMs();
+            updateTimeDisplays();
+            updateSnippetMarkers();
+            updateButtonStates();
+        });
+
+        // Set End button
+        setEndButton.setOnClickListener(v -> {
+            long currentPos = playbackManager.getCurrentPositionMs();
+            if (snippetStartTime != -1 && currentPos > snippetStartTime) {
+                snippetEndTime = currentPos;
+                updateTimeDisplays();
+                updateSnippetMarkers();
+                updateButtonStates();
+            } else {
+                Toast.makeText(requireContext(), "End time must be after start time", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        // Preview buttons
+        previewStartButton.setOnClickListener(v -> {
+            if (snippetStartTime != -1) {
+                long previewEnd = Math.min(snippetStartTime + 3000, song.getDuration());
+                SongSnippet previewSnippet = new SongSnippet(null, song.getId(), 1, "Preview",
+                        snippetStartTime, previewEnd, false);
+                playSnippet(previewSnippet);
+            }
+        });
+
+        previewEndButton.setOnClickListener(v -> {
+            if (snippetEndTime != -1) {
+                long previewStart = Math.max(snippetEndTime - 3000, 0);
+                SongSnippet previewSnippet = new SongSnippet(null, song.getId(), 1, "Preview",
+                        previewStart, snippetEndTime, false);
+                playSnippet(previewSnippet);
+            }
+        });
+
+        // Save button
+        saveSnippetButton.setOnClickListener(v -> {
+            String title = titleInput.getText().toString();
+            boolean includeRankings = includeInRankings.isChecked();
+
+            if (snippetStartTime == -1 || snippetEndTime == -1) {
+                Toast.makeText(requireContext(), "Please set both start and end times", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            // Get the next snippet number
+            long snippetNo = snippets.size() + 1;
+            for (SongSnippet existingSnippet : snippets) {
+                if (existingSnippet.getSnippetNo() >= snippetNo) {
+                    snippetNo = existingSnippet.getSnippetNo() + 1;
+                }
+            }
+
+            SongSnippet newSnippet = new SongSnippet(null, song.getId(), snippetNo, title,
+                    snippetStartTime, snippetEndTime, includeRankings);
+
+            long id = dbHelper.addSnippet(newSnippet);
+            if (id != -1) {
+                newSnippet.setId(id);
+                snippets.add(newSnippet);
+                snippetAdapter.updateSnippets(snippets);
+                Toast.makeText(requireContext(), "Snippet saved", Toast.LENGTH_SHORT).show();
+                hideSnippetCreationOverlay();
+            } else {
+                Toast.makeText(requireContext(), "Error saving snippet", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        // Cancel button
+        cancelButton.setOnClickListener(v -> hideSnippetCreationOverlay());
+
+        // Play/pause button
+        ImageButton playPauseButton = snippetCreationOverlay.findViewById(R.id.snippet_play_pause);
+        playPauseButton.setOnClickListener(v -> {
+            if (!isCorrectSongPlaying()) {
+                // Wrong song is playing, play the correct song
+                if (playbackManager.isConnected()) {
+                    playbackManager.playSong(song);
+                    Toast.makeText(requireContext(), "Playing " + song.getName() + " for snippet creation", Toast.LENGTH_SHORT).show();
+                } else {
+                    playbackManager.connectSpotify(requireContext(), () -> {
+                        playbackManager.playSong(song);
+                        Toast.makeText(requireContext(), "Playing " + song.getName() + " for snippet creation", Toast.LENGTH_SHORT).show();
+                    });
+                }
+            } else {
+                // Correct song is playing, toggle play/pause
+                playbackManager.togglePlayPause();
+            }
+        });
+
+        // Warning play button
+        ImageButton warningPlayButton = snippetCreationOverlay.findViewById(R.id.snippet_warning_play_button);
+        warningPlayButton.setOnClickListener(v -> {
+            if (playbackManager.isConnected()) {
+                playbackManager.playSong(song);
+                Toast.makeText(requireContext(), "Playing " + song.getName() + " for snippet creation", Toast.LENGTH_SHORT).show();
+            } else {
+                playbackManager.connectSpotify(requireContext(), () -> {
+                    playbackManager.playSong(song);
+                    Toast.makeText(requireContext(), "Playing " + song.getName() + " for snippet creation", Toast.LENGTH_SHORT).show();
+                });
+            }
+        });
+    }
+
+    private void setupTimeInputListeners() {
+        startTimeInput.setOnEditorActionListener((v, actionId, event) -> {
+            String timeText = startTimeInput.getText().toString();
+            long timeMs = parseTimeString(timeText);
+            if (timeMs != -1 && timeMs < song.getDuration()) {
+                snippetStartTime = timeMs;
+                updateSnippetMarkers();
+                updateButtonStates();
+                return true;
+            } else {
+                Toast.makeText(requireContext(), "Invalid start time format. Use M:SS.mmm", Toast.LENGTH_SHORT).show();
+                updateTimeDisplays();
+                return false;
+            }
+        });
+
+        endTimeInput.setOnEditorActionListener((v, actionId, event) -> {
+            String timeText = endTimeInput.getText().toString();
+            long timeMs = parseTimeString(timeText);
+            if (timeMs != -1 && timeMs < song.getDuration() && (snippetStartTime == -1 || timeMs > snippetStartTime)) {
+                snippetEndTime = timeMs;
+                updateSnippetMarkers();
+                updateButtonStates();
+                return true;
+            } else {
+                Toast.makeText(requireContext(), "Invalid end time format or must be after start time", Toast.LENGTH_SHORT).show();
+                updateTimeDisplays();
+                return false;
+            }
+        });
+
+        // Also update on focus lost
+        startTimeInput.setOnFocusChangeListener((v, hasFocus) -> {
+            if (!hasFocus) {
+                String timeText = startTimeInput.getText().toString();
+                long timeMs = parseTimeString(timeText);
+                if (timeMs != -1 && timeMs < song.getDuration()) {
+                    snippetStartTime = timeMs;
+                    updateSnippetMarkers();
+                    updateButtonStates();
+                } else {
+                    updateTimeDisplays(); // Reset to valid value
+                }
+            }
+        });
+
+        endTimeInput.setOnFocusChangeListener((v, hasFocus) -> {
+            if (!hasFocus) {
+                String timeText = endTimeInput.getText().toString();
+                long timeMs = parseTimeString(timeText);
+                if (timeMs != -1 && timeMs < song.getDuration() && (snippetStartTime == -1 || timeMs > snippetStartTime)) {
+                    snippetEndTime = timeMs;
+                    updateSnippetMarkers();
+                    updateButtonStates();
+                } else {
+                    updateTimeDisplays(); // Reset to valid value
+                }
+            }
+        });
+    }
+
+    private void setupSnippetPlaybackBar() {
+        ImageView albumCover = snippetCreationOverlay.findViewById(R.id.snippet_album_cover);
+        TextView songName = snippetCreationOverlay.findViewById(R.id.snippet_song_name);
+        TextView artistName = snippetCreationOverlay.findViewById(R.id.snippet_artist_name);
+        ImageButton playPauseButton = snippetCreationOverlay.findViewById(R.id.snippet_play_pause);
+
+        // Get the currently playing song, not the target snippet song
+        SongModel currentlyPlaying = playbackManager.getCurrentSong();
+
+        if (currentlyPlaying != null) {
+            // Load currently playing song info
+            Glide.with(requireContext()).load(currentlyPlaying.getAlbumCoverUrl()).into(albumCover);
+            songName.setText(currentlyPlaying.getName());
+            artistName.setText(currentlyPlaying.getArtist());
+
+            // Setup seekbar with current song duration
+            snippetSeekBar.setMax(currentlyPlaying.getDuration());
+        } else {
+            // No song playing - show snippet target song but indicate it's not playing
+            Glide.with(requireContext()).load(song.getAlbumCoverUrl()).into(albumCover);
+            songName.setText(song.getName());
+            artistName.setText(song.getArtist());
+            snippetSeekBar.setMax(song.getDuration());
+        }
+
+        snippetSeekBar.setProgress((int) playbackManager.getCurrentPositionMs());
+
+        // Update play/pause button
+        playPauseButton.setImageResource(playbackManager.isPlaying() ?
+                R.drawable.pause_circle_filled : R.drawable.play_circle_filled);
+
+        // Start listening for playback updates
+        startPlaybackUpdates();
+    }
+
+    private void startPlaybackUpdates() {
+        if (isUpdatingPlayback) {
+            return;
+        }
+
+        isUpdatingPlayback = true;
+        playbackUpdateHandler = new Handler();
+        playbackUpdateRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (snippetCreationOverlay != null && snippetCreationOverlay.getVisibility() == View.VISIBLE && isUpdatingPlayback) {
+                    updatePlaybackUI();
+                    playbackUpdateHandler.postDelayed(this, 100);
+                } else {
+                    isUpdatingPlayback = false;
+                }
+            }
+        };
+        playbackUpdateHandler.post(playbackUpdateRunnable);
+    }
+
+    private void stopPlaybackUpdates() {
+        if (playbackUpdateHandler != null && playbackUpdateRunnable != null) {
+            playbackUpdateHandler.removeCallbacks(playbackUpdateRunnable);
+        }
+        isUpdatingPlayback = false;
+    }
+
+    private void updatePlaybackUI() {
+        if (playbackManager.isConnected()) {
+            snippetSeekBar.setProgress((int) playbackManager.getCurrentPositionMs());
+
+            ImageButton playPauseButton = snippetCreationOverlay.findViewById(R.id.snippet_play_pause);
+
+            if (!isCorrectSongPlaying()) {
+                // Wrong song playing - show play icon to indicate user should play this song
+                playPauseButton.setImageResource(R.drawable.play_circle_filled);
+            } else {
+                // Correct song playing - show actual play/pause state
+                playPauseButton.setImageResource(playbackManager.isPlaying() ?
+                        R.drawable.pause_circle_filled : R.drawable.play_circle_filled);
+            }
+
+            // Update warning message
+            updateSnippetCreationWarning();
+
+            // Update song info in case it changed
+            setupSnippetPlaybackBar();
+        }
+    }
+
+    private void updateTimeDisplays() {
+        String startText = snippetStartTime != -1 ? formatTimeWithMilliseconds(snippetStartTime) : "";
+        String endText = snippetEndTime != -1 ? formatTimeWithMilliseconds(snippetEndTime) : "";
+
+        startTimeInput.setText(startText);
+        endTimeInput.setText(endText);
+    }
+
+    private void updateSnippetMarkers() {
+        if (snippetSeekBar == null) return;
+
+        int seekBarWidth = snippetSeekBar.getWidth() - snippetSeekBar.getPaddingLeft() - snippetSeekBar.getPaddingRight();
+        int maxValue = snippetSeekBar.getMax();
+
+        if (seekBarWidth <= 0 || maxValue <= 0) return;
+
+        // Update start marker
+        if (snippetStartTime != -1) {
+            snippetStartMarker.setVisibility(View.VISIBLE);
+            float startPercent = (float) snippetStartTime / maxValue;
+            int startX = (int) (seekBarWidth * startPercent);
+            snippetStartMarker.setTranslationX(startX);
+        } else {
+            snippetStartMarker.setVisibility(View.GONE);
+        }
+
+        // Update end marker
+        if (snippetEndTime != -1) {
+            snippetEndMarker.setVisibility(View.VISIBLE);
+            float endPercent = (float) snippetEndTime / maxValue;
+            int endX = (int) (seekBarWidth * endPercent);
+            snippetEndMarker.setTranslationX(endX);
+        } else {
+            snippetEndMarker.setVisibility(View.GONE);
+        }
+
+        // Update range overlay
+        if (snippetStartTime != -1 && snippetEndTime != -1) {
+            snippetRangeOverlay.setVisibility(View.VISIBLE);
+            float startPercent = (float) snippetStartTime / maxValue;
+            float endPercent = (float) snippetEndTime / maxValue;
+
+            int startX = (int) (seekBarWidth * startPercent);
+            int endX = (int) (seekBarWidth * endPercent);
+            int width = endX - startX;
+
+            snippetRangeOverlay.setTranslationX(startX);
+            ViewGroup.LayoutParams params = snippetRangeOverlay.getLayoutParams();
+            params.width = width;
+            snippetRangeOverlay.setLayoutParams(params);
+        } else {
+            snippetRangeOverlay.setVisibility(View.GONE);
+        }
+    }
+
+    private void updateButtonStates() {
+        previewStartButton.setEnabled(snippetStartTime != -1);
+        previewEndButton.setEnabled(snippetEndTime != -1);
+        saveSnippetButton.setEnabled(snippetStartTime != -1 && snippetEndTime != -1);
+    }
+
+    private void hideSnippetCreationOverlay() {
+        if (snippetCreationOverlay != null) {
+            snippetCreationOverlay.setVisibility(View.GONE);
+            stopPlaybackUpdates();
+        }
     }
 
     private void showEditSnippetDialog(SongSnippet snippet) {
         Toast.makeText(requireContext(), "Edit snippet not implemented yet", Toast.LENGTH_SHORT).show();
-    }
-
-    private void loadSnippets() {
-        snippets = dbHelper.getSongSnippets(song.getId());
-        snippetAdapter.updateSnippets(snippets);
     }
 
     // Helper method to preview a position with a specified duration
@@ -616,12 +635,69 @@ public class SongSnippetsFragment extends Fragment {
         }
     }
 
-    // Format milliseconds into MM:SS format
-    private String formatTime(long timeMs) {
-        int totalSeconds = (int) (timeMs / 1000);
-        int minutes = totalSeconds / 60;
-        int seconds = totalSeconds % 60;
-        return String.format(Locale.getDefault(), "%d:%02d", minutes, seconds);
+    private long parseTimeString(String timeStr) {
+        if (timeStr == null || timeStr.trim().isEmpty()) {
+            return -1;
+        }
+
+        try {
+            // Expected format: M:SS.mmm or MM:SS.mmm
+            String[] parts = timeStr.split(":");
+            if (parts.length != 2) return -1;
+
+            int minutes = Integer.parseInt(parts[0]);
+
+            String[] secondsParts = parts[1].split("\\.");
+            if (secondsParts.length != 2) return -1;
+
+            int seconds = Integer.parseInt(secondsParts[0]);
+            int milliseconds = Integer.parseInt(secondsParts[1]);
+
+            // Ensure milliseconds is 3 digits (pad or truncate)
+            if (secondsParts[1].length() == 1) {
+                milliseconds *= 100;
+            } else if (secondsParts[1].length() == 2) {
+                milliseconds *= 10;
+            } else if (secondsParts[1].length() > 3) {
+                milliseconds = Integer.parseInt(secondsParts[1].substring(0, 3));
+            }
+
+            return (minutes * 60 * 1000L) + (seconds * 1000L) + milliseconds;
+
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    private String formatTimeWithMilliseconds(long timeMs) {
+        int totalMs = (int) timeMs;
+        int minutes = totalMs / (60 * 1000);
+        int seconds = (totalMs % (60 * 1000)) / 1000;
+        int milliseconds = totalMs % 1000;
+
+        return String.format(Locale.getDefault(), "%d:%02d.%03d", minutes, seconds, milliseconds);
+    }
+
+    private void updateSnippetCreationWarning() {
+        TextView warningText = snippetCreationOverlay.findViewById(R.id.snippet_warning_text);
+        ImageButton warningPlayButton = snippetCreationOverlay.findViewById(R.id.snippet_warning_play_button);
+
+        if (warningText != null && warningPlayButton != null) {
+            if (!isCorrectSongPlaying()) {
+                warningText.setVisibility(View.VISIBLE);
+                warningText.setText("Play this song to create a snippet");
+                warningText.setTextColor(getResources().getColor(android.R.color.holo_orange_light));
+                warningPlayButton.setVisibility(View.VISIBLE);
+            } else {
+                warningText.setVisibility(View.GONE);
+                warningPlayButton.setVisibility(View.GONE);
+            }
+        }
+    }
+
+    private boolean isCorrectSongPlaying() {
+        SongModel currentlyPlaying = playbackManager.getCurrentSong();
+        return currentlyPlaying != null && currentlyPlaying.getId().equals(song.getId());
     }
 
     @Override
@@ -630,5 +706,6 @@ public class SongSnippetsFragment extends Fragment {
         if (snippetHandler != null && pauseRunnable != null) {
             snippetHandler.removeCallbacks(pauseRunnable);
         }
+        stopPlaybackUpdates(); // Clean up playback updates
     }
 }
