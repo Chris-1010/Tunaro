@@ -703,9 +703,16 @@ public class SongSnippetsFragment extends Fragment {
     @Override
     public void onDestroy() {
         super.onDestroy();
+
+        if (snippetCreationOverlay != null && snippetCreationOverlay.getParent() != null) {
+            ((ViewGroup) snippetCreationOverlay.getParent()).removeView(snippetCreationOverlay);
+            snippetCreationOverlay = null;
+        }
+
         if (snippetHandler != null && pauseRunnable != null) {
             snippetHandler.removeCallbacks(pauseRunnable);
         }
-        stopPlaybackUpdates(); // Clean up playback updates
+
+        stopPlaybackUpdates();
     }
 }

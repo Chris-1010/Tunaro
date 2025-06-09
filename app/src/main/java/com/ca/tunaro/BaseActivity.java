@@ -62,7 +62,23 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // Don't disconnect here - only disconnect when app is fully closing
+
+        // Cancel any pending animations
+        if (pendingAnimation != null) {
+            animationHandler.removeCallbacks(pendingAnimation);
+            pendingAnimation = null;
+        }
+
+        // Clear animation references
+        if (albumCover != null) {
+            albumCover.clearAnimation();
+        }
+        if (songName != null) {
+            songName.clearAnimation();
+        }
+        if (artistName != null) {
+            artistName.clearAnimation();
+        }
     }
 
     @Override
