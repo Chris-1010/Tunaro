@@ -10,6 +10,7 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.NumberPicker;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -25,12 +26,12 @@ import com.spotify.android.appremote.api.SpotifyAppRemote;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 public class SongSnippetsFragment extends Fragment {
     private View snippetCreationOverlay;
     private long snippetStartTime = -1;
     private long snippetEndTime = -1;
-    private TextView snippetTimeDisplay;
     private EditText startTimeInput, endTimeInput;
     private Button previewStartButton, previewEndButton, saveSnippetButton;
     private View snippetRangeOverlay, snippetStartMarker, snippetEndMarker;
@@ -43,6 +44,10 @@ public class SongSnippetsFragment extends Fragment {
     private RecyclerView snippetsRecyclerView;
     private SongSnippetsAdapter snippetAdapter;
     private List<SongSnippet> snippets = new ArrayList<>();
+
+    // edit/delete operations
+    private SongSnippet editingSnippet;
+    private ImageButton deleteSnippetButton;
 
     private int activeTimers = 0;
     private final android.os.Handler snippetHandler = new android.os.Handler();
@@ -75,7 +80,7 @@ public class SongSnippetsFragment extends Fragment {
         snippetsRecyclerView = view.findViewById(R.id.snippetsRecyclerView);
 
         // Setup button click handler
-        addSnippetButton.setOnClickListener(v -> showAddSnippetDialog());
+        addSnippetButton.setOnClickListener(v -> showSnippetCreationOverlay());
         setupSnippetsList();
 
         // Load snippets
@@ -207,17 +212,13 @@ public class SongSnippetsFragment extends Fragment {
         Toast.makeText(requireContext(), "Playback will continue after snippet end", Toast.LENGTH_SHORT).show();
     }
 
-    private void showAddSnippetDialog() {
-        showSnippetCreationOverlay();
-    }
-
     private void showSnippetCreationOverlay() {
         // Initialize playback manager
         playbackManager = PlaybackManager.getInstance();
 
         // Find or create the overlay
         if (snippetCreationOverlay == null) {
-            View parentView = getActivity().findViewById(android.R.id.content);
+            View parentView = requireActivity().findViewById(android.R.id.content);
             if (parentView instanceof ViewGroup) {
                 ViewGroup parent = (ViewGroup) parentView;
                 snippetCreationOverlay = LayoutInflater.from(requireContext())
@@ -227,9 +228,11 @@ public class SongSnippetsFragment extends Fragment {
             }
         }
 
-        // Reset state
-        snippetStartTime = -1;
-        snippetEndTime = -1;
+        // Reset state if creating a new snippet
+        if (editingSnippet == null) {
+            snippetStartTime = -1;
+            snippetEndTime = -1;
+        }
         updateTimeDisplays();
         updateSnippetMarkers();
 
@@ -250,6 +253,7 @@ public class SongSnippetsFragment extends Fragment {
         Button setEndButton = snippetCreationOverlay.findViewById(R.id.set_end_button);
         saveSnippetButton = snippetCreationOverlay.findViewById(R.id.save_snippet_button);
         Button cancelButton = snippetCreationOverlay.findViewById(R.id.cancel_snippet_button);
+        deleteSnippetButton = snippetCreationOverlay.findViewById(R.id.delete_snippet_button);
 
         snippetSeekBar = snippetCreationOverlay.findViewById(R.id.snippet_seekbar);
         snippetRangeOverlay = snippetCreationOverlay.findViewById(R.id.snippet_range_overlay);
@@ -330,31 +334,72 @@ public class SongSnippetsFragment extends Fragment {
                 return;
             }
 
-            // Get the next snippet number
-            long snippetNo = snippets.size() + 1;
-            for (SongSnippet existingSnippet : snippets) {
-                if (existingSnippet.getSnippetNo() >= snippetNo) {
-                    snippetNo = existingSnippet.getSnippetNo() + 1;
+            if (editingSnippet != null) {
+                // Update existing snippet
+                editingSnippet.setTitle(title);
+                editingSnippet.setStartTime(snippetStartTime);
+                editingSnippet.setEndTime(snippetEndTime);
+                editingSnippet.setIncludeInRankings(includeRankings);
+
+                dbHelper.editSnippet(editingSnippet);
+
+                // Update the list
+                for (int i = 0; i < snippets.size(); i++) {
+                    if (snippets.get(i).getId() == editingSnippet.getId()) {
+                        snippets.set(i, editingSnippet);
+                        break;
+                    }
+                }
+
+                snippetAdapter.updateSnippets(snippets);
+                Toast.makeText(requireContext(), "Snippet updated", Toast.LENGTH_SHORT).show();
+                editingSnippet = null; // Clear the editing state
+            } else {
+                // Create new snippet (existing code)
+                long snippetNo = snippets.size() + 1;
+                for (SongSnippet existingSnippet : snippets) {
+                    if (existingSnippet.getSnippetNo() >= snippetNo) {
+                        snippetNo = existingSnippet.getSnippetNo() + 1;
+                    }
+                }
+
+                SongSnippet newSnippet = new SongSnippet(null, song.getId(), snippetNo, title,
+                        snippetStartTime, snippetEndTime, includeRankings);
+
+                long id = dbHelper.addSnippet(newSnippet);
+                if (id != -1) {
+                    newSnippet.setId(id);
+                    snippets.add(newSnippet);
+                    snippetAdapter.updateSnippets(snippets);
+                    Toast.makeText(requireContext(), "Snippet saved", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(requireContext(), "Error saving snippet", Toast.LENGTH_SHORT).show();
                 }
             }
 
-            SongSnippet newSnippet = new SongSnippet(null, song.getId(), snippetNo, title,
-                    snippetStartTime, snippetEndTime, includeRankings);
-
-            long id = dbHelper.addSnippet(newSnippet);
-            if (id != -1) {
-                newSnippet.setId(id);
-                snippets.add(newSnippet);
-                snippetAdapter.updateSnippets(snippets);
-                Toast.makeText(requireContext(), "Snippet saved", Toast.LENGTH_SHORT).show();
-                hideSnippetCreationOverlay();
-            } else {
-                Toast.makeText(requireContext(), "Error saving snippet", Toast.LENGTH_SHORT).show();
-            }
+            hideSnippetCreationOverlay();
         });
 
         // Cancel button
         cancelButton.setOnClickListener(v -> hideSnippetCreationOverlay());
+
+        // Delete button
+        deleteSnippetButton.setOnClickListener(v -> {
+            if (editingSnippet != null) {
+                new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                        .setTitle("Delete Snippet")
+                        .setMessage("Are you sure you want to delete this snippet?")
+                        .setPositiveButton("Delete", (dialog, which) -> {
+                            dbHelper.deleteSnippet(editingSnippet.getId());
+                            snippets.removeIf(snippet -> snippet.getId() == editingSnippet.getId());
+                            snippetAdapter.updateSnippets(snippets);
+                            Toast.makeText(requireContext(), "Snippet deleted", Toast.LENGTH_SHORT).show();
+                            hideSnippetCreationOverlay();
+                        })
+                        .setNegativeButton("Cancel", null)
+                        .show();
+            }
+        });
 
         // Play/pause button
         ImageButton playPauseButton = snippetCreationOverlay.findViewById(R.id.snippet_play_pause);
@@ -603,11 +648,52 @@ public class SongSnippetsFragment extends Fragment {
         if (snippetCreationOverlay != null) {
             snippetCreationOverlay.setVisibility(View.GONE);
             stopPlaybackUpdates();
+
+            // Reset editing state
+            editingSnippet = null;
+
+            // Hide delete button
+            if (deleteSnippetButton != null) {
+                deleteSnippetButton.setVisibility(View.GONE);
+            }
+
+            // Reset button text
+            Button saveButton = snippetCreationOverlay.findViewById(R.id.save_snippet_button);
+            if (saveButton != null) {
+                saveButton.setText("Save Snippet");
+            }
         }
     }
 
     private void showEditSnippetDialog(SongSnippet snippet) {
-        Toast.makeText(requireContext(), "Edit snippet not implemented yet", Toast.LENGTH_SHORT).show();
+        // Store the snippet being edited
+        editingSnippet = snippet;
+
+        // Set the current snippet times
+        snippetStartTime = snippet.getStartTime();
+        snippetEndTime = snippet.getEndTime();
+
+        showSnippetCreationOverlay();
+
+        // Pre-fill the form with existing snippet data
+        if (snippetCreationOverlay != null) {
+            EditText titleInput = snippetCreationOverlay.findViewById(R.id.snippet_title_input);
+            CheckBox includeInRankings = snippetCreationOverlay.findViewById(R.id.include_in_rankings);
+
+            titleInput.setText(snippet.getTitle());
+            includeInRankings.setChecked(snippet.getIncludeInRankings());
+
+            deleteSnippetButton.setVisibility(View.VISIBLE);
+
+            // Update the time displays
+            updateTimeDisplays();
+            updateSnippetMarkers();
+            updateButtonStates();
+
+            // Change the save button text to indicate editing
+            Button saveButton = snippetCreationOverlay.findViewById(R.id.save_snippet_button);
+            saveButton.setText("Update Snippet");
+        }
     }
 
     // Helper method to preview a position with a specified duration
@@ -703,9 +789,16 @@ public class SongSnippetsFragment extends Fragment {
     @Override
     public void onDestroy() {
         super.onDestroy();
+
+        if (snippetCreationOverlay != null && snippetCreationOverlay.getParent() != null) {
+            ((ViewGroup) snippetCreationOverlay.getParent()).removeView(snippetCreationOverlay);
+            snippetCreationOverlay = null;
+        }
+
         if (snippetHandler != null && pauseRunnable != null) {
             snippetHandler.removeCallbacks(pauseRunnable);
         }
-        stopPlaybackUpdates(); // Clean up playback updates
+
+        stopPlaybackUpdates();
     }
 }
