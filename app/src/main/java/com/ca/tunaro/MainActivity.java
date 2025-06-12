@@ -151,12 +151,21 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        super.onDestroy();
-        // Disconnect when the app is closing
+        // Clear singleton reference first
+        instance = null;
+
+        // Disconnect Spotify
         if (mSpotifyAppRemote != null) {
             SpotifyAppRemote.disconnect(mSpotifyAppRemote);
+            mSpotifyAppRemote = null;
         }
-        instance = null;
+
+        // Shutdown executor
+        if (executor != null && !executor.isShutdown()) {
+            executor.shutdown();
+        }
+
+        super.onDestroy();
     }
 
     @Override
