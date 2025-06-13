@@ -119,6 +119,7 @@ public class SongSnippetsFragment extends Fragment {
 
     private void playSnippet(SongSnippet snippet) {
         PlaybackManager playbackManager = PlaybackManager.getInstance();
+        playbackManager.setSnippetMode(true); // Enable snippet mode
 
         if (spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
             // Cancel any existing timer
@@ -204,6 +205,8 @@ public class SongSnippetsFragment extends Fragment {
     }
 
     private void detachSnippet() {
+        PlaybackManager.getInstance().setSnippetMode(false); // Disable snippet mode
+
         if (pauseRunnable != null) {
             snippetHandler.removeCallbacks(pauseRunnable);
             activeTimers = 0; // Reset count when starting a new playback
