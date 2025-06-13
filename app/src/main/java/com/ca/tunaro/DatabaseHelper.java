@@ -294,7 +294,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     //#endregion
 
-    // ======== ARCHIVED PLAYLISTS METHODS ========
+    //#region ======== ARCHIVED PLAYLISTS METHODS ========
 
     // Add
     public void archivePlaylist(String playlistId) {
@@ -498,8 +498,61 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     //#endregion
 
+    //#region ======== LISTEN HISTORY METHODS ========
 
-    // ======== EXPORT/IMPORT METHODS ========
+    public void addListenRecord(String songId) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+
+        String uuid = java.util.UUID.randomUUID().toString();
+        String timestamp = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault())
+                .format(new java.util.Date());
+
+        values.put(COLUMN_UUID, uuid);
+        values.put(COLUMN_SONG_ID, songId);
+        values.put(COLUMN_LISTEN_TIMESTAMP, timestamp);
+
+        db.insert(TABLE_LISTEN_HISTORY, null, values);
+        db.close();
+
+        Log.d("ListenHistory", "Added listen record for song ID: " + songId);
+    }
+
+    public List<String> getListenHistory(String songId) {
+        List<String> timestamps = new ArrayList<>();
+        String selectQuery = "SELECT " + COLUMN_LISTEN_TIMESTAMP + " FROM " + TABLE_LISTEN_HISTORY +
+                " WHERE " + COLUMN_SONG_ID + " = ?" +
+                " ORDER BY " + COLUMN_LISTEN_TIMESTAMP + " DESC";
+
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(selectQuery, new String[]{songId});
+
+        if (cursor.moveToFirst()) {
+            do {
+                timestamps.add(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_LISTEN_TIMESTAMP)));
+            } while (cursor.moveToNext());
+        }
+
+        cursor.close();
+        db.close();
+        return timestamps;
+    }
+
+    public int getListenCount(String songId) {
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery("SELECT COUNT(*) FROM " + TABLE_LISTEN_HISTORY +
+                " WHERE " + COLUMN_SONG_ID + " = ?", new String[]{songId});
+
+        int count = 0;
+        if (cursor.moveToFirst()) {
+            count = cursor.getInt(0);
+        }
+        cursor.close();
+        db.close();
+        return count;
+    }
+
+    //#endregion
 
     //#region ======== EXPORT/IMPORT METHODS ========
     public static class ExportData {
