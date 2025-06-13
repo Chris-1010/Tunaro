@@ -191,7 +191,7 @@ public class PlaybackManager {
             currentPositionMs = playerState.playbackPosition;
             durationMs = remoteTrack.duration;
 
-            // Always notify position change when we get player state
+            // Always notify position change when getting player state
             notifyPlaybackPositionChanged();
 
             // Update position tracking state when play state changes
@@ -273,6 +273,8 @@ public class PlaybackManager {
 
     // TODO Methods for next/previous track switching
 
+    //#region Listeners
+
     public void addListener(PlaybackListener listener) {
         if (!listeners.contains(listener)) {
             listeners.add(listener);
@@ -293,6 +295,7 @@ public class PlaybackManager {
         listeners.remove(listener);
     }
 
+    //#endregion
     private void notifyPlaybackStateChanged() {
         for (PlaybackListener listener : listeners) {
             listener.onPlaybackStateChanged(isPlaying, currentSong);
@@ -344,7 +347,8 @@ public class PlaybackManager {
         }
     }
 
-    // Getters
+    //#region Getters
+
     public boolean isPlaying() {
         return isPlaying;
     }
@@ -368,6 +372,8 @@ public class PlaybackManager {
     public SpotifyAppRemote getSpotifyAppRemote() {
         return spotifyAppRemote;
     }
+
+    //#endregion
 
     private void showToast(String message) {
         if (applicationContext != null) {

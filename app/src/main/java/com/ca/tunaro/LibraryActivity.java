@@ -195,7 +195,7 @@ public class LibraryActivity extends AppCompatActivity implements Library_Recycl
                                 track.getPopularity(),
                                 track.getAlbum().getName(),
                                 track.getAlbum().getImages()[0].getUrl(),
-                                null, // We don't have dateAddedToPlaylist for library view
+                                null, // Unnecessary for library view
                                 track.getAlbum().getReleaseDate()
                         );
 

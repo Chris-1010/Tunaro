@@ -98,7 +98,7 @@ public class SongView extends BaseActivity {
                 .into(albumCoverImageView);
         albumView.setText(albumName);
         durationView.setText(duration);
-        if (!popularity.equals('0')) popularityView.setText("Popularity: " + popularity + "%");
+        if (!popularity.equals("0")) popularityView.setText("Popularity: " + popularity + "%");
     }
 
     private void setupTabs() {

@@ -202,7 +202,7 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
         }
 
         runOnUiThread(() -> {
-            // Update title to show if we're in archived mode
+            // Update title to show if in archived mode
             TextView titleView = findViewById(R.id.playlists_title);
             if (titleView != null) {
                 titleView.setText(showingArchived ? "Archived Playlists" : "Your Playlists");
