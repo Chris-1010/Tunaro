@@ -84,7 +84,6 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             spotifyApi = SelectedPlaylistHolder.getInstance().getMainActivity().getSpotifyApi();
             if (spotifyApi == null) throw new Exception("SpotifyApi not available");
         } catch (Exception e) {
-            Toast.makeText(this, "Error: Spotify API not available", Toast.LENGTH_SHORT).show();
             finish();
             return;
         }

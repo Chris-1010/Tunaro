@@ -82,12 +82,14 @@ public class SongView extends BaseActivity {
         String albumCover = selectedSong.getAlbumCoverUrl();
         String albumName = selectedSong.getAlbumName();
         String duration = selectedSong.getDurationString();
+        String popularity = String.valueOf(selectedSong.getPopularity());
 
         TextView nameView = findViewById(R.id.SongView_SongName);
         TextView artistView = findViewById(R.id.SongView_ArtistName);
         ImageView albumCoverImageView = findViewById(R.id.SongView_AlbumCover);
         TextView albumView = findViewById(R.id.SongView_AlbumName);
         TextView durationView = findViewById(R.id.SongView_SongDuration);
+        TextView popularityView = findViewById(R.id.SongView_SongPopularity);
 
         nameView.setText(name);
         artistView.setText(artist);
@@ -96,6 +98,7 @@ public class SongView extends BaseActivity {
                 .into(albumCoverImageView);
         albumView.setText(albumName);
         durationView.setText(duration);
+        if (!popularity.equals('0')) popularityView.setText("Popularity: " + popularity + "%");
     }
 
     private void setupTabs() {
