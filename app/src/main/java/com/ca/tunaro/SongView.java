@@ -6,7 +6,10 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -14,11 +17,14 @@ import androidx.activity.EdgeToEdge;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager2.widget.ViewPager2;
 
 import com.bumptech.glide.Glide;
 import com.google.android.material.appbar.AppBarLayout;
 import com.google.android.material.tabs.TabLayout;
+
+import java.util.List;
 
 public class SongView extends BaseActivity {
     // Fields
@@ -64,8 +70,8 @@ public class SongView extends BaseActivity {
         // Set up basic song info
         setupBasicSongInfo();
 
-        // Set up tabs
         setupTabs();
+        setupListeningHistory();
 
         // Add play button functionality
         ImageView playButton = findViewById(R.id.play_button);
@@ -190,6 +196,63 @@ public class SongView extends BaseActivity {
 
         // Select Notes tab by default. TODO Allow preference in settings
         viewPager.setCurrentItem(0);
+    }
+
+    private void setupListeningHistory() {
+        LinearLayout historySection = findViewById(R.id.listening_history_section);
+        RecyclerView historyRecycler = findViewById(R.id.listening_history_recycler);
+
+        if (selectedSong == null) return;
+
+        DatabaseHelper dbHelper = new DatabaseHelper(this);
+        List<String> listenHistory = dbHelper.getListenHistory(selectedSong.getId());
+
+        if (listenHistory.isEmpty()) {
+            historySection.setVisibility(View.GONE);
+            return;
+        }
+
+        // Show the history section
+        historySection.setVisibility(View.VISIBLE);
+
+        // Create simple adapter for timestamps
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, listenHistory) {
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+                if (convertView == null) {
+                    convertView = LayoutInflater.from(getContext()).inflate(android.R.layout.simple_list_item_1, parent, false);
+                }
+
+                TextView textView = convertView.findViewById(android.R.id.text1);
+                String timestamp = getItem(position);
+
+                // Format the timestamp nicely
+                try {
+                    java.text.SimpleDateFormat inputFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
+                    java.text.SimpleDateFormat outputFormat = new java.text.SimpleDateFormat("MMM dd, yyyy 'at' HH:mm", java.util.Locale.getDefault());
+                    java.util.Date date = inputFormat.parse(timestamp);
+                    textView.setText(outputFormat.format(date));
+                } catch (Exception e) {
+                    textView.setText(timestamp); // Fallback to raw timestamp
+                }
+
+                textView.setTextColor(getResources().getColor(android.R.color.white));
+                textView.setTextSize(14f);
+                textView.setPadding(0, 8, 0, 8);
+
+                return convertView;
+            }
+        };
+
+        ListView listView = new ListView(this);
+        listView.setAdapter(adapter);
+        listView.setDivider(null);
+
+        // Replace RecyclerView with ListView in the layout
+        ViewGroup parent = (ViewGroup) historyRecycler.getParent();
+        int index = parent.indexOfChild(historyRecycler);
+        parent.removeView(historyRecycler);
+        parent.addView(listView, index);
     }
 
     private void playSong() {
