@@ -209,6 +209,10 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         isAscending = prefs.getBoolean(SORT_DIRECTION_KEY, false); // Default to descending
 
         sortSpinner.setSelection(savedSortOption);
+
+        // Apply initial sort with contextual info
+        sortSongs(savedSortOption);
+
         updateSortDirectionIcon();
 
         // Set up click listeners
@@ -314,6 +318,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             }
             songs.sort(comparator);
             adapter.updateSongs(songs);
+
+            adapter.updateSortContext(sortOption);
         }
     }
 
