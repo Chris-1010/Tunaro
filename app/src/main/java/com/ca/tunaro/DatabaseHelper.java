@@ -538,6 +538,21 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return timestamps;
     }
 
+    public String getMostRecentListenTimestamp(String songId) {
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery("SELECT " + COLUMN_LISTEN_TIMESTAMP + " FROM " + TABLE_LISTEN_HISTORY +
+                " WHERE " + COLUMN_SONG_ID + " = ?" +
+                " ORDER BY " + COLUMN_LISTEN_TIMESTAMP + " DESC LIMIT 1", new String[]{songId});
+
+        String timestamp = null;
+        if (cursor.moveToFirst()) {
+            timestamp = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_LISTEN_TIMESTAMP));
+        }
+        cursor.close();
+        db.close();
+        return timestamp;
+    }
+
     public int getListenCount(String songId) {
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery("SELECT COUNT(*) FROM " + TABLE_LISTEN_HISTORY +
