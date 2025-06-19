@@ -25,6 +25,7 @@ import com.bumptech.glide.Glide;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.concurrent.CompletionException;
 
 import se.michaelthelin.spotify.SpotifyApi;
@@ -84,7 +85,6 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             spotifyApi = SelectedPlaylistHolder.getInstance().getMainActivity().getSpotifyApi();
             if (spotifyApi == null) throw new Exception("SpotifyApi not available");
         } catch (Exception e) {
-            Toast.makeText(this, "Error: Spotify API not available", Toast.LENGTH_SHORT).show();
             finish();
             return;
         }
@@ -153,7 +153,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
         searchBar.addTextChangedListener(new TextWatcher() {
             @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
 
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
@@ -161,7 +162,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             }
 
             @Override
-            public void afterTextChanged(Editable s) {}
+            public void afterTextChanged(Editable s) {
+            }
         });
     }
 
@@ -207,6 +209,10 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         isAscending = prefs.getBoolean(SORT_DIRECTION_KEY, false); // Default to descending
 
         sortSpinner.setSelection(savedSortOption);
+
+        // Apply initial sort with contextual info
+        sortSongs(savedSortOption);
+
         updateSortDirectionIcon();
 
         // Set up click listeners
@@ -235,7 +241,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             }
 
             @Override
-            public void onNothingSelected(AdapterView<?> parent) {}
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
         });
     }
 
@@ -255,8 +262,45 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             case 0: // Date Added
                 comparator = Comparator.comparing(SongModel::getDateAddedToPlaylist);
                 break;
-            case 1: // Last Listened (placeholder for future implementation)
-                return;
+            case 1: // Last Listened
+                DatabaseHelper dbHelper = new DatabaseHelper(this);
+                java.text.SimpleDateFormat inputFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
+
+                comparator = (song1, song2) -> {
+                    // Get timestamps for both songs
+                    String timestamp1 = dbHelper.getMostRecentListenTimestamp(song1.getId());
+                    String timestamp2 = dbHelper.getMostRecentListenTimestamp(song2.getId());
+
+                    Date date1 = null;
+                    Date date2 = null;
+
+                    if (timestamp1 != null) {
+                        try {
+                            date1 = inputFormat.parse(timestamp1);
+                        } catch (java.text.ParseException e) {
+                            // Leave as null
+                        }
+                    }
+                    if (timestamp2 != null) {
+                        try {
+                            date2 = inputFormat.parse(timestamp2);
+                        } catch (java.text.ParseException e) {
+                            // Leave as null
+                        }
+                    }
+
+                    // Compare dates
+                    if (date1 != null && date2 != null) {
+                        return date1.compareTo(date2);
+                    } else if (date1 != null) {
+                        return 1; // date1 comes after null dates
+                    } else if (date2 != null) {
+                        return -1; // date2 comes after null dates
+                    } else {
+                        return 0; // both null, equal
+                    }
+                };
+                break;
             case 2: // Title
                 comparator = Comparator.comparing(SongModel::getName, String.CASE_INSENSITIVE_ORDER);
                 break;
@@ -274,6 +318,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             }
             songs.sort(comparator);
             adapter.updateSongs(songs);
+
+            adapter.updateSortContext(sortOption);
         }
     }
 

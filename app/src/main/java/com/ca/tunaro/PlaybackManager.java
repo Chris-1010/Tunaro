@@ -45,6 +45,16 @@ public class PlaybackManager {
     };
     private boolean isTrackingPosition = false;
 
+    // Track Listening
+    private boolean isTrackingListen = false;
+    private long listenStartTime = 0;
+    private final long LISTEN_THRESHOLD_MS = 10000; // 10 seconds
+    private String currentListenTrackId = null;
+    private boolean hasRecordedListen = false;
+    private boolean isSnippetMode = false;
+    private final Handler listenHandler = new Handler(Looper.getMainLooper());
+    private Runnable listenRunnable;
+
     // Listeners
     private final List<PlaybackListener> listeners = new ArrayList<>();
 
@@ -141,16 +151,6 @@ public class PlaybackManager {
         });
     }
 
-    public void disconnect() {
-        stopPositionTracking();
-        if (spotifyAppRemote != null) {
-            SpotifyAppRemote.disconnect(spotifyAppRemote);
-            spotifyAppRemote = null;
-            isConnected = false;
-            notifyConnectionStateChanged();
-        }
-    }
-
     private void subscribeToPlayerState() {
         if (spotifyAppRemote != null) {
             spotifyAppRemote.getPlayerApi()
@@ -163,7 +163,9 @@ public class PlaybackManager {
         Track remoteTrack = playerState.track;
 
         if (remoteTrack != null) {
-            // Extract artist names as strings
+            String trackId = remoteTrack.uri.split(":")[2];
+            handleListenTracking(trackId, !playerState.isPaused);
+
             String[] artistNames = new String[remoteTrack.artists.size()];
             for (int i = 0; i < remoteTrack.artists.size(); i++) {
                 artistNames[i] = remoteTrack.artists.get(i).name;
@@ -172,10 +174,9 @@ public class PlaybackManager {
             boolean trackChanged = false;
             if (currentSong == null || !remoteTrack.uri.equals(currentSong.getUri())) {
                 // Extract ID from URI (format: spotify:track:id)
-                String id = remoteTrack.uri.split(":")[2];
 
                 // Create a simplified SongModel from track with string artist names
-                currentSong = createSongModelFromRemoteTrack(remoteTrack, id, artistNames);
+                currentSong = createSongModelFromRemoteTrack(remoteTrack, trackId, artistNames);
                 trackChanged = true;
             }
 
@@ -191,7 +192,7 @@ public class PlaybackManager {
             currentPositionMs = playerState.playbackPosition;
             durationMs = remoteTrack.duration;
 
-            // Always notify position change when we get player state
+            // Always notify position change when getting player state
             notifyPlaybackPositionChanged();
 
             // Update position tracking state when play state changes
@@ -202,6 +203,9 @@ public class PlaybackManager {
             }
         } else {
             // No track playing
+
+            stopListenTracking();
+
             if (isPlaying || currentSong != null) {
                 isPlaying = false;
                 currentSong = null;
@@ -273,6 +277,8 @@ public class PlaybackManager {
 
     // TODO Methods for next/previous track switching
 
+    //#region Listeners
+
     public void addListener(PlaybackListener listener) {
         if (!listeners.contains(listener)) {
             listeners.add(listener);
@@ -292,6 +298,82 @@ public class PlaybackManager {
     public void removeListener(PlaybackListener listener) {
         listeners.remove(listener);
     }
+
+    //#endregion
+
+    //#region Listen Tracking Methods
+
+    private void handleListenTracking(String trackId, boolean isPlaying) {
+        if (isSnippetMode) {
+            return; // Don't track during snippet playback
+        }
+
+        // Check if this is a different track
+        if (currentListenTrackId != null && !trackId.equals(currentListenTrackId)) {
+            // New track started - reset listen state for the previous track
+            resetListenState();
+        }
+
+        if (isPlaying) {
+            if (!isTrackingListen || !trackId.equals(currentListenTrackId)) {
+                // New track or resuming tracking
+                startListenTracking(trackId);
+            }
+        } else {
+            // Paused - stop tracking but don't reset the recorded state
+            stopListenTracking();
+        }
+    }
+
+    private void startListenTracking(String trackId) {
+        // If it's a different track, reset
+        if (!trackId.equals(currentListenTrackId)) {
+            resetListenState();
+            currentListenTrackId = trackId;
+        }
+
+        // Only start tracking if a listen for this track hasn't already been recorded
+        if (!hasRecordedListen && !isTrackingListen) {
+            isTrackingListen = true;
+            listenStartTime = System.currentTimeMillis();
+
+            listenRunnable = () -> {
+                if (isTrackingListen && !hasRecordedListen && !isSnippetMode) {
+                    recordListen(trackId);
+                    hasRecordedListen = true;
+                }
+            };
+
+            listenHandler.postDelayed(listenRunnable, LISTEN_THRESHOLD_MS);
+        }
+    }
+
+    private void stopListenTracking() {
+        isTrackingListen = false;
+        if (listenRunnable != null) {
+            listenHandler.removeCallbacks(listenRunnable);
+            listenRunnable = null;
+        }
+    }
+
+    private void resetListenState() {
+        stopListenTracking();
+        hasRecordedListen = false;
+        currentListenTrackId = null;
+        listenStartTime = 0;
+    }
+
+    private void recordListen(String songId) {
+        if (applicationContext != null) {
+            DatabaseHelper dbHelper = new DatabaseHelper(applicationContext);
+            dbHelper.addListenRecord(songId);
+
+            showToast("Recorded listen for song");
+            Log.d(TAG, "Recorded listen for song: " + songId);
+        }
+    }
+
+    //#endregion
 
     private void notifyPlaybackStateChanged() {
         for (PlaybackListener listener : listeners) {
@@ -344,9 +426,14 @@ public class PlaybackManager {
         }
     }
 
-    // Getters
+    //#region Getters
+
     public boolean isPlaying() {
         return isPlaying;
+    }
+
+    public boolean isSnippetMode() {
+        return isSnippetMode;
     }
 
     public boolean isConnected() {
@@ -369,9 +456,33 @@ public class PlaybackManager {
         return spotifyAppRemote;
     }
 
+    //#endregion
+
+    //#region Setters
+
+    public void setSnippetMode(boolean isSnippetMode) {
+        this.isSnippetMode = isSnippetMode;
+        if (isSnippetMode) {
+            stopListenTracking();
+        }
+    }
+
+    //#endregion
+
     private void showToast(String message) {
         if (applicationContext != null) {
             Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    public void disconnect() {
+        stopPositionTracking();
+        stopListenTracking();
+        if (spotifyAppRemote != null) {
+            SpotifyAppRemote.disconnect(spotifyAppRemote);
+            spotifyAppRemote = null;
+            isConnected = false;
+            notifyConnectionStateChanged();
         }
     }
 }

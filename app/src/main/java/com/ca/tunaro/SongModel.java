@@ -16,7 +16,8 @@ public class SongModel {
     String albumCoverUrl;    // images[1]["url"] (1 is the second index in the list which holds image sizes of 300x300)
     Date dateAddedToPlaylist;    // added_at (a string in date-time format. i.e. "2021-09-14T22:45:17Z")
     String releaseDate;    // album["release_date"]    (most often in a format like YYYY-MM)
-    Date lastListenDate;
+
+    //#region Constructors
 
     public SongModel(String id, String name, String[] artists, int duration, String uri, int popularity, String albumName, String albumCoverUrl, Date dateAddedToPlaylist, String releaseDate) {
         this.id = id;
@@ -31,23 +32,13 @@ public class SongModel {
         this.releaseDate = releaseDate;
     }
 
-    // Extract artists from ArtistSimplified[] to String[]
-    private static String[] extractArtistNames(ArtistSimplified[] artists) {
-        if (artists == null || artists.length == 0) {
-            return new String[]{"Unknown Artist"};
-        }
-
-        String[] artistNames = new String[artists.length];
-        for (int i = 0; i < artists.length; i++) {
-            artistNames[i] = artists[i].getName();
-        }
-
-        return artistNames;
-    }
-
     public SongModel(String id, String name, ArtistSimplified[] artists, int duration, String uri, int popularity, String albumName, String albumCoverUrl, Date dateAddedToPlaylist, String releaseDate) {
         this(id, name, extractArtistNames(artists), duration, uri, popularity, albumName, albumCoverUrl, dateAddedToPlaylist, releaseDate);
     }
+
+    //#endregion
+
+    //#region Getters
 
     public String getId() {
         return id;
@@ -108,4 +99,24 @@ public class SongModel {
     public String getReleaseDate() {
         return releaseDate;
     }
+
+    //#endregion
+
+    //#region Helper methods
+
+    // Extract artists from ArtistSimplified[] to String[]
+    private static String[] extractArtistNames(ArtistSimplified[] artists) {
+        if (artists == null || artists.length == 0) {
+            return new String[]{"Unknown Artist"};
+        }
+
+        String[] artistNames = new String[artists.length];
+        for (int i = 0; i < artists.length; i++) {
+            artistNames[i] = artists[i].getName();
+        }
+
+        return artistNames;
+    }
+
+    //#endregion
 }
