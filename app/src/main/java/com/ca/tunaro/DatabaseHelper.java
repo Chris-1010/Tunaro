@@ -8,6 +8,7 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.net.Uri;
+import android.util.Log;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -23,13 +24,17 @@ import java.util.List;
 import java.util.Objects;
 
 public class DatabaseHelper extends SQLiteOpenHelper {
+
+    //#region Initialisations
+
     private static final String DATABASE_NAME = "TunaroDB";
-    private static final int DATABASE_VERSION = 5;
+    private static final int DATABASE_VERSION = 6;
 
     // Table name
     private static final String TABLE_ARCHIVED_PLAYLISTS = "archived_playlists";
     private static final String TABLE_SONG_NOTES = "song_notes";
     private static final String TABLE_SONG_SNIPPETS = "song_snippets";
+    private static final String TABLE_LISTEN_HISTORY = "listen_history";
 
     // Column names
     private static final String COLUMN_UUID = "uuid";
@@ -50,12 +55,15 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String COLUMN_END_TIME = "end_time";
     private static final String COLUMN_INCLUDE_IN_RANKINGS = "include_in_rankings";
 
+    // Listen History Columns
+    private static final String COLUMN_LISTEN_TIMESTAMP = "listen_timestamp";
+
     // SQL to upgrade from old timestamp format
     private static final String UPGRADE_TIMESTAMP_FORMAT =
             "UPDATE " + TABLE_SONG_NOTES +
                     " SET " + COLUMN_TIMESTAMP + " = strftime('%d-%m-%Y %H:%M', " + COLUMN_TIMESTAMP + ", 'localtime')";
 
-    // Create table queries
+    //#region Create table queries
     private static final String CREATE_TABLE_SONG_NOTES =
             "CREATE TABLE " + TABLE_SONG_NOTES + "("
                     + COLUMN_UUID +         " TEXT UNIQUE NOT NULL,"
@@ -81,6 +89,14 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     + COLUMN_END_TIME +             " INTEGER NOT NULL,"
                     + COLUMN_INCLUDE_IN_RANKINGS +  " INTEGER DEFAULT 1"
                     + ")";
+    private static final String CREATE_TABLE_LISTEN_HISTORY =
+            "CREATE TABLE " + TABLE_LISTEN_HISTORY + "("
+                    + COLUMN_UUID +             " TEXT UNIQUE NOT NULL,"
+                    + COLUMN_ID +               " INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + COLUMN_SONG_ID +          " TEXT NOT NULL,"
+                    + COLUMN_LISTEN_TIMESTAMP + " TEXT NOT NULL"
+                    + ")";
+    //#endregion
 
     public DatabaseHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -91,41 +107,14 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.execSQL(CREATE_TABLE_SONG_NOTES);
         db.execSQL(CREATE_TABLE_ARCHIVED_PLAYLISTS);
         db.execSQL(CREATE_TABLE_SONG_SNIPPETS);
+        db.execSQL(CREATE_TABLE_LISTEN_HISTORY);
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        if (oldVersion < 2) {
-            // Handle previous upgrade from version 1 to 2
-            try {
-                db.execSQL(UPGRADE_TIMESTAMP_FORMAT);
-            } catch (Exception e) {
-//                db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONG_NOTES);
-//                onCreate(db);
-                exit(1);
-            }
-        }
-
-        if (oldVersion < 3) {
-            // Create the archived_playlists table
-            db.execSQL("CREATE TABLE IF NOT EXISTS " + TABLE_ARCHIVED_PLAYLISTS + "("
-                    + COLUMN_ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    + COLUMN_PLAYLIST_ID + " TEXT UNIQUE NOT NULL"
-                    + ")");
-        }
-
-        if (oldVersion < 4) {
-            // Create the song_snippets table for version 4
-            db.execSQL(CREATE_TABLE_SONG_SNIPPETS);
-        }
-
-        if (oldVersion < 5) {
-            // Add UUID columns to existing tables
-            db.execSQL("ALTER TABLE " + TABLE_SONG_NOTES + " ADD COLUMN uuid TEXT");
-            db.execSQL("ALTER TABLE " + TABLE_SONG_SNIPPETS + " ADD COLUMN uuid TEXT");
-
-            // Generate UUIDs for existing records
-            generateUUIDsForExistingRecords(db);
+        if (oldVersion < 6) {
+            // Create the listen_history table for version 6
+            db.execSQL(CREATE_TABLE_LISTEN_HISTORY);
         }
     }
 
@@ -153,7 +142,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         snippetsCursor.close();
     }
 
-    // ======== NOTES METHODS ========
+    //#endregion
+
+    //#region ======== NOTES METHODS ========
 
     // Get all notes
     private List<SongNote> getAllNotes() {
@@ -301,8 +292,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return songIds;
     }
 
+    //#endregion
 
-    // ======== ARCHIVED PLAYLISTS METHODS ========
+    //#region ======== ARCHIVED PLAYLISTS METHODS ========
 
     // Add
     public void archivePlaylist(String playlistId) {
@@ -352,8 +344,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return playlistIds;
     }
 
+    //#endregion
 
-    // ======== SNIPPETS METHODS ========
+    //#region ======== SNIPPETS METHODS ========
 
     // Get all snippets
     private List<SongSnippet> getAllSnippets() {
@@ -503,8 +496,80 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return songIds;
     }
 
+    //#endregion
 
-    // ======== EXPORT/IMPORT METHODS ========
+    //#region ======== LISTEN HISTORY METHODS ========
+
+    public void addListenRecord(String songId) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+
+        String uuid = java.util.UUID.randomUUID().toString();
+        String timestamp = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault())
+                .format(new java.util.Date());
+
+        values.put(COLUMN_UUID, uuid);
+        values.put(COLUMN_SONG_ID, songId);
+        values.put(COLUMN_LISTEN_TIMESTAMP, timestamp);
+
+        db.insert(TABLE_LISTEN_HISTORY, null, values);
+        db.close();
+
+        Log.d("ListenHistory", "Added listen record for song ID: " + songId);
+    }
+
+    public List<String> getListenHistory(String songId) {
+        List<String> timestamps = new ArrayList<>();
+        String selectQuery = "SELECT " + COLUMN_LISTEN_TIMESTAMP + " FROM " + TABLE_LISTEN_HISTORY +
+                " WHERE " + COLUMN_SONG_ID + " = ?" +
+                " ORDER BY " + COLUMN_LISTEN_TIMESTAMP + " DESC";
+
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(selectQuery, new String[]{songId});
+
+        if (cursor.moveToFirst()) {
+            do {
+                timestamps.add(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_LISTEN_TIMESTAMP)));
+            } while (cursor.moveToNext());
+        }
+
+        cursor.close();
+        db.close();
+        return timestamps;
+    }
+
+    public String getMostRecentListenTimestamp(String songId) {
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery("SELECT " + COLUMN_LISTEN_TIMESTAMP + " FROM " + TABLE_LISTEN_HISTORY +
+                " WHERE " + COLUMN_SONG_ID + " = ?" +
+                " ORDER BY " + COLUMN_LISTEN_TIMESTAMP + " DESC LIMIT 1", new String[]{songId});
+
+        String timestamp = null;
+        if (cursor.moveToFirst()) {
+            timestamp = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_LISTEN_TIMESTAMP));
+        }
+        cursor.close();
+        db.close();
+        return timestamp;
+    }
+
+    public int getListenCount(String songId) {
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery("SELECT COUNT(*) FROM " + TABLE_LISTEN_HISTORY +
+                " WHERE " + COLUMN_SONG_ID + " = ?", new String[]{songId});
+
+        int count = 0;
+        if (cursor.moveToFirst()) {
+            count = cursor.getInt(0);
+        }
+        cursor.close();
+        db.close();
+        return count;
+    }
+
+    //#endregion
+
+    //#region ======== EXPORT/IMPORT METHODS ========
     public static class ExportData {
         public List<SongNote> notes;
         public List<String> archivedPlaylists;
@@ -640,4 +705,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             return "Imported: " + String.join(", ", parts);
         }
     }
+
+    //#endregion
 }

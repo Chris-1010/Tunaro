@@ -107,7 +107,7 @@ public class MainActivity extends AppCompatActivity {
         // Create a new CompletableFuture for this authentication process
         CompletableFuture<Void> authFuture = new CompletableFuture<>();
 
-        // Store this future so we can complete it in onActivityResult
+        // Store this future so it can be completed in onActivityResult
         this.authenticationFuture = authFuture;
 
         // Return a new CompletableFuture that chains the authentication and user profile fetch
@@ -146,7 +146,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStop() {
         super.onStop();
-        // We don't disconnect on stop anymore, since we're just a background activity
     }
 
     @Override
