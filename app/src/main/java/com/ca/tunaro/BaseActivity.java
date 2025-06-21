@@ -244,7 +244,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
                             animateTrackChange(currentSong);
                         }
                     };
-                    animationHandler.postDelayed(pendingAnimation, 100); // 100ms delay
+                    animationHandler.postDelayed(pendingAnimation, 800); // 800ms delay
                 } else {
                     updateTrackInfo(currentSong);
                 }
