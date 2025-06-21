@@ -40,23 +40,4 @@ public class SongNote {
     public void setId(long id) { this.id = id; }
     public void setNoteType(String noteType) { this.noteType = noteType; }
     public void setContent(String content) { this.content = content; }
-
-    // Enum for note types
-    public enum NoteType {
-        GENERAL_NOTE("General Note"),
-        DATE_LISTENED("Date Listened"),
-        FIRST_HEARD("Where First Heard"),
-        FAVORITE_PART("Favorite Part"),
-        RATING("Rating");
-
-        private final String displayName;
-
-        NoteType(String displayName) {
-            this.displayName = displayName;
-        }
-
-        public String getDisplayName() {
-            return displayName;
-        }
-    }
 }

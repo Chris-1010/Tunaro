@@ -1,6 +1,9 @@
 package com.ca.tunaro;
 
 import android.os.Bundle;
+import android.os.Handler;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -8,6 +11,7 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -110,49 +114,116 @@ public class SongNotesFragment extends Fragment {
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(50, 30, 50, 30);
 
-        // Create spinner for note type
-        final Spinner typeSpinner = new Spinner(requireContext());
-        ArrayList<String> noteTypes = new ArrayList<>();
-        for (SongNote.NoteType type : SongNote.NoteType.values()) {
-            noteTypes.add(type.getDisplayName());
-        }
-        ArrayAdapter<String> spinnerAdapter = new ArrayAdapter<>(
-                requireContext(), android.R.layout.simple_spinner_item, noteTypes);
-        spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        typeSpinner.setAdapter(spinnerAdapter);
+        // Create edit text for note type
+        final EditText typeInput = new EditText(requireContext());
+        typeInput.setHint("Enter note type...");
+
+        // Create RecyclerView for recent note types
+        final RecyclerView recentTypesRecycler = new RecyclerView(requireContext());
+        recentTypesRecycler.setLayoutManager(new LinearLayoutManager(requireContext()));
+
+        // Create adapter for recent types
+        final List<String> recentTypes = new ArrayList<>();
+        final ArrayAdapter<String> recentTypesAdapter = new ArrayAdapter<String>(requireContext(),
+                android.R.layout.simple_list_item_1, recentTypes) {
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+                View view = super.getView(position, convertView, parent);
+                TextView textView = view.findViewById(android.R.id.text1);
+                textView.setTextSize(14f);
+                textView.setPadding(20, 15, 20, 15);
+                textView.setBackgroundResource(android.R.drawable.list_selector_background);
+                return view;
+            }
+        };
+
+        ListView recentTypesList = new ListView(requireContext());
+        recentTypesList.setAdapter(recentTypesAdapter);
+        recentTypesList.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 200));
+
+        // Set up click listener for recent types
+        recentTypesList.setOnItemClickListener((parent, view, position, id) -> {
+            String selectedType = recentTypes.get(position);
+            typeInput.setText(selectedType);
+            typeInput.setSelection(selectedType.length()); // Move cursor to end
+        });
 
         // Create edit text for content
         final EditText contentInput = new EditText(requireContext());
         contentInput.setHint("Enter your note...");
 
-        // Add a label for the spinner
+        // Add labels and views
         TextView typeLabel = new TextView(requireContext());
         typeLabel.setText("Note Type:");
         typeLabel.setPadding(0, 0, 0, 8);
 
-        // Add a label for the content
+        TextView recentLabel = new TextView(requireContext());
+        recentLabel.setText("Recent Types:");
+        recentLabel.setPadding(0, 16, 0, 8);
+        recentLabel.setTextSize(12f);
+        recentLabel.setTextColor(getResources().getColor(android.R.color.darker_gray));
+
         TextView contentLabel = new TextView(requireContext());
         contentLabel.setText("Content:");
         contentLabel.setPadding(0, 16, 0, 8);
 
         layout.addView(typeLabel);
-        layout.addView(typeSpinner);
+        layout.addView(typeInput);
+        layout.addView(recentLabel);
+        layout.addView(recentTypesList);
         layout.addView(contentLabel);
         layout.addView(contentInput);
+
+        // Handler for debounced search
+        final Handler searchHandler = new Handler();
+        final Runnable[] searchRunnable = new Runnable[1];
+
+        // Initial load of recent types
+        updateRecentTypes("", recentTypes, recentTypesAdapter);
+
+        // Set up text watcher for debounced search
+        typeInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                // Cancel previous search
+                if (searchRunnable[0] != null) {
+                    searchHandler.removeCallbacks(searchRunnable[0]);
+                }
+
+                // Create new search runnable
+                searchRunnable[0] = () -> updateRecentTypes(s.toString(), recentTypes, recentTypesAdapter);
+
+                // Post delayed search (300ms debounce)
+                searchHandler.postDelayed(searchRunnable[0], 300);
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {}
+        });
 
         // Show dialog
         new androidx.appcompat.app.AlertDialog.Builder(requireContext())
                 .setTitle("Add Note")
                 .setView(layout)
                 .setPositiveButton("Save", (dialog, which) -> {
+                    String noteType = typeInput.getText().toString().trim();
                     String content = contentInput.getText().toString().trim();
+
+                    if (noteType.isEmpty()) {
+                        Toast.makeText(requireContext(), "Please enter a note type", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+
                     if (content.isEmpty()) {
                         Toast.makeText(requireContext(), "Please enter a note", Toast.LENGTH_SHORT).show();
                         return;
                     }
 
-                    String selectedNoteType = typeSpinner.getSelectedItem().toString();
-                    SongNote note = new SongNote(null, song.getId(), selectedNoteType, content);
+                    SongNote note = new SongNote(null, song.getId(), noteType, content);
 
                     long id = dbHelper.addNote(note);
                     if (id != -1) {
@@ -166,38 +237,127 @@ public class SongNotesFragment extends Fragment {
                 .show();
     }
 
+    private void updateRecentTypes(String searchTerm, List<String> recentTypes, ArrayAdapter<String> adapter) {
+        List<String> newTypes = dbHelper.getRecentNoteTypes(searchTerm);
+        recentTypes.clear();
+        recentTypes.addAll(newTypes);
+        adapter.notifyDataSetChanged();
+    }
+
     private void showEditDialog(final SongNote note) {
         // Create dialog layout
         LinearLayout layout = new LinearLayout(requireContext());
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(50, 30, 50, 30);
 
-        // Create spinner for note type
-        final Spinner typeSpinner = new Spinner(requireContext());
-        ArrayList<String> noteTypes = new ArrayList<>();
-        for (SongNote.NoteType type : SongNote.NoteType.values()) {
-            noteTypes.add(type.getDisplayName());
-        }
-        ArrayAdapter<String> spinnerAdapter = new ArrayAdapter<>(
-                requireContext(), android.R.layout.simple_spinner_item, noteTypes);
-        spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        typeSpinner.setAdapter(spinnerAdapter);
-        typeSpinner.setSelection(noteTypes.indexOf(note.getNoteType()));
+        // Create edit text for note type
+        final EditText typeInput = new EditText(requireContext());
+        typeInput.setText(note.getNoteType());
+        typeInput.setHint("Enter note type...");
+
+        // Create RecyclerView for recent note types
+        final List<String> recentTypes = new ArrayList<>();
+        final ArrayAdapter<String> recentTypesAdapter = new ArrayAdapter<String>(requireContext(),
+                android.R.layout.simple_list_item_1, recentTypes) {
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+                View view = super.getView(position, convertView, parent);
+                TextView textView = view.findViewById(android.R.id.text1);
+                textView.setTextSize(14f);
+                textView.setPadding(20, 15, 20, 15);
+                textView.setBackgroundResource(android.R.drawable.list_selector_background);
+                return view;
+            }
+        };
+
+        ListView recentTypesList = new ListView(requireContext());
+        recentTypesList.setAdapter(recentTypesAdapter);
+        recentTypesList.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 200));
+
+        // Set up click listener for recent types
+        recentTypesList.setOnItemClickListener((parent, view, position, id) -> {
+            String selectedType = recentTypes.get(position);
+            typeInput.setText(selectedType);
+            typeInput.setSelection(selectedType.length()); // Move cursor to end
+        });
 
         // Create edit text for content
         final EditText contentInput = new EditText(requireContext());
         contentInput.setText(note.getContent());
 
-        layout.addView(typeSpinner);
+        // Add labels and views
+        TextView typeLabel = new TextView(requireContext());
+        typeLabel.setText("Note Type:");
+        typeLabel.setPadding(0, 0, 0, 8);
+
+        TextView recentLabel = new TextView(requireContext());
+        recentLabel.setText("Recent Types:");
+        recentLabel.setPadding(0, 16, 0, 8);
+        recentLabel.setTextSize(12f);
+        recentLabel.setTextColor(getResources().getColor(android.R.color.darker_gray));
+
+        TextView contentLabel = new TextView(requireContext());
+        contentLabel.setText("Content:");
+        contentLabel.setPadding(0, 16, 0, 8);
+
+        layout.addView(typeLabel);
+        layout.addView(typeInput);
+        layout.addView(recentLabel);
+        layout.addView(recentTypesList);
+        layout.addView(contentLabel);
         layout.addView(contentInput);
+
+        // Handler for debounced search
+        final Handler searchHandler = new Handler();
+        final Runnable[] searchRunnable = new Runnable[1];
+
+        // Initial load of recent types
+        updateRecentTypes("", recentTypes, recentTypesAdapter);
+
+        // Set up text watcher for debounced search
+        typeInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                // Cancel previous search
+                if (searchRunnable[0] != null) {
+                    searchHandler.removeCallbacks(searchRunnable[0]);
+                }
+
+                // Create new search runnable
+                searchRunnable[0] = () -> updateRecentTypes(s.toString(), recentTypes, recentTypesAdapter);
+
+                // Post delayed search (300ms debounce)
+                searchHandler.postDelayed(searchRunnable[0], 300);
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {}
+        });
 
         // Show dialog
         new androidx.appcompat.app.AlertDialog.Builder(requireContext())
                 .setTitle("Edit Note")
                 .setView(layout)
                 .setPositiveButton("Save", (dialog, which) -> {
-                    note.setNoteType(typeSpinner.getSelectedItem().toString());
-                    note.setContent(contentInput.getText().toString());
+                    String noteType = typeInput.getText().toString().trim();
+                    String content = contentInput.getText().toString().trim();
+
+                    if (noteType.isEmpty()) {
+                        Toast.makeText(requireContext(), "Please enter a note type", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+
+                    if (content.isEmpty()) {
+                        Toast.makeText(requireContext(), "Please enter a note", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+
+                    note.setNoteType(noteType);
+                    note.setContent(content);
                     dbHelper.editNote(note);
                     loadNotes();
                     Toast.makeText(requireContext(), "Note updated", Toast.LENGTH_SHORT).show();
