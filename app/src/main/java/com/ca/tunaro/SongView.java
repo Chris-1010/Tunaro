@@ -24,7 +24,10 @@ import com.bumptech.glide.Glide;
 import com.google.android.material.appbar.AppBarLayout;
 import com.google.android.material.tabs.TabLayout;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class SongView extends BaseActivity {
     // Fields
@@ -197,10 +200,10 @@ public class SongView extends BaseActivity {
         // Select Notes tab by default. TODO Allow preference in settings
         viewPager.setCurrentItem(0);
     }
-
     private void setupListeningHistory() {
         LinearLayout historySection = findViewById(R.id.listening_history_section);
         RecyclerView historyRecycler = findViewById(R.id.listening_history_recycler);
+        TextView listenCountView = findViewById(R.id.listen_count);
 
         if (selectedSong == null) return;
 
@@ -215,53 +218,35 @@ public class SongView extends BaseActivity {
         // Show the history section
         historySection.setVisibility(View.VISIBLE);
 
-        // Create simple adapter for timestamps
-        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, listenHistory) {
-            @Override
-            public View getView(int position, View convertView, ViewGroup parent) {
-                if (convertView == null) {
-                    convertView = LayoutInflater.from(getContext()).inflate(android.R.layout.simple_list_item_1, parent, false);
-                }
+        // Update the listen count display
+        int totalListens = listenHistory.size();
+        listenCountView.setText(totalListens + " TOTAL LISTENS");
+        listenCountView.setVisibility(View.VISIBLE);
 
-                TextView textView = convertView.findViewById(android.R.id.text1);
-                String timestamp = getItem(position);
+        // Group listens by relative time periods and reverse order (oldest first)
+        List<String> reversedHistory = new ArrayList<>(listenHistory);
+        java.util.Collections.reverse(reversedHistory);
 
-                // Format the timestamp nicely
-                try {
-                    java.text.SimpleDateFormat inputFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
-                    java.text.SimpleDateFormat outputFormat = new java.text.SimpleDateFormat("MMM dd, yyyy 'at' HH:mm", java.util.Locale.getDefault());
-                    java.util.Date date = inputFormat.parse(timestamp);
-                    textView.setText(outputFormat.format(date));
-                } catch (Exception e) {
-                    textView.setText(timestamp); // Fallback to raw timestamp
-                }
+        Map<String, Integer> groupedListens = groupListensByTimePeriod(reversedHistory);
 
-                textView.setTextColor(getResources().getColor(android.R.color.white));
-                textView.setTextSize(14f);
-                textView.setPadding(0, 8, 0, 8);
-
-                return convertView;
-            }
-        };
-
-        // Create a LinearLayout to hold the history items instead of ListView
+        // Create a LinearLayout to hold the history items
         LinearLayout historyContainer = new LinearLayout(this);
         historyContainer.setOrientation(LinearLayout.VERTICAL);
 
-// Manually add each item as a TextView to the LinearLayout
-        for (String timestamp : listenHistory) {
+        // Add each grouped period as a TextView
+        for (Map.Entry<String, Integer> entry : groupedListens.entrySet()) {
             TextView textView = new TextView(this);
 
-            // Format the timestamp nicely
-            try {
-                java.text.SimpleDateFormat inputFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
-                java.text.SimpleDateFormat outputFormat = new java.text.SimpleDateFormat("MMM dd, yyyy 'at' HH:mm", java.util.Locale.getDefault());
-                java.util.Date date = inputFormat.parse(timestamp);
-                textView.setText(outputFormat.format(date));
-            } catch (Exception e) {
-                textView.setText(timestamp); // Fallback to raw timestamp
+            String timeDescription = entry.getKey();
+            int count = entry.getValue();
+
+            // Format the display text
+            String displayText = timeDescription;
+            if (count > 1) {
+                displayText += " - " + count + " listens";
             }
 
+            textView.setText(displayText);
             textView.setTextColor(getResources().getColor(android.R.color.white));
             textView.setTextSize(14f);
             textView.setPadding(0, 8, 0, 8);
@@ -274,6 +259,60 @@ public class SongView extends BaseActivity {
         int index = parent.indexOfChild(historyRecycler);
         parent.removeView(historyRecycler);
         parent.addView(historyContainer, index);
+    }
+
+    private Map<String, Integer> groupListensByTimePeriod(List<String> timestamps) {
+        Map<String, Integer> grouped = new LinkedHashMap<>();
+        java.text.SimpleDateFormat inputFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
+
+        for (String timestamp : timestamps) {
+            try {
+                java.util.Date listenDate = inputFormat.parse(timestamp);
+                String timeDescription = getRelativeTimeDescription(listenDate);
+
+                grouped.put(timeDescription, grouped.getOrDefault(timeDescription, 0) + 1);
+            } catch (Exception e) {
+                // Fallback for malformed timestamps
+                grouped.put("Unknown time", grouped.getOrDefault("Unknown time", 0) + 1);
+            }
+        }
+
+        return grouped;
+    }
+
+    private String getRelativeTimeDescription(java.util.Date listenDate) {
+        long currentTime = System.currentTimeMillis();
+        long listenTime = listenDate.getTime();
+        long timeDiff = currentTime - listenTime;
+
+        // Convert to different time units
+        long minutes = timeDiff / (1000 * 60);
+        long hours = timeDiff / (1000 * 60 * 60);
+        long days = timeDiff / (1000 * 60 * 60 * 24);
+        long weeks = days / 7;
+        long months = days / 30; // Approximate
+        long years = days / 365; // Approximate
+
+        // Return appropriate description based on time difference
+        if (minutes < 60) {
+            if (minutes <= 1) return "1 minute ago";
+            return minutes + " minutes ago";
+        } else if (hours < 24) {
+            if (hours == 1) return "1 hour ago";
+            return hours + " hours ago";
+        } else if (days < 7) {
+            if (days == 1) return "1 day ago";
+            return days + " days ago";
+        } else if (weeks < 4) {
+            if (weeks == 1) return "1 week ago";
+            return weeks + " weeks ago";
+        } else if (months < 12) {
+            if (months == 1) return "1 month ago";
+            return months + " months ago";
+        } else {
+            if (years == 1) return "1 year ago";
+            return years + " years ago";
+        }
     }
 
     private void playSong() {
