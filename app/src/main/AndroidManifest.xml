@@ -28,6 +28,9 @@
             android:name=".activites.HomeActivity"
             android:exported="false" />
         <activity
+            android:name=".activites.SettingsActivity"
+            android:exported="false" />
+        <activity
             android:name=".activites.PlaylistsActivity"
             android:exported="false" />
         <activity
