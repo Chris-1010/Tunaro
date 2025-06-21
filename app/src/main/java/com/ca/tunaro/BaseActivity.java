@@ -15,6 +15,12 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.bumptech.glide.Glide;
+import com.ca.tunaro.activites.MainActivity;
+import com.ca.tunaro.activites.PlaylistView;
+import com.ca.tunaro.activites.SongView;
+import com.ca.tunaro.managers.PlaybackManager;
+import com.ca.tunaro.models.SongModel;
+import com.ca.tunaro.utils.SelectedSongHolder;
 
 import java.util.Locale;
 import java.util.Objects;

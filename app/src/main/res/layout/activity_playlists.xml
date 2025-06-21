@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/home_background_gradient"
-    tools:context=".PlaylistsActivity">
+    tools:context=".activites.PlaylistsActivity">
 
     <TextView
         android:id="@+id/playlists_title"
