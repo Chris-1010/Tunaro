@@ -16,7 +16,7 @@
         android:theme="@style/Theme.Tunaro"
         tools:targetApi="31">
         <activity
-            android:name=".MainActivity"
+            android:name=".activites.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -25,22 +25,22 @@
             </intent-filter>
         </activity>
         <activity
-            android:name=".HomeActivity"
+            android:name=".activites.HomeActivity"
             android:exported="false" />
         <activity
-            android:name=".PlaylistsActivity"
+            android:name=".activites.PlaylistsActivity"
             android:exported="false" />
         <activity
-            android:name=".LibraryActivity"
+            android:name=".activites.LibraryActivity"
             android:exported="false" />
         <activity
-            android:name=".RankingsActivity"
+            android:name=".activites.RankingsActivity"
             android:exported="false" />
         <activity
-            android:name=".SongView"
+            android:name=".activites.SongView"
             android:exported="false" />
         <activity
-            android:name=".PlaylistView"
+            android:name=".activites.PlaylistView"
             android:exported="false" />
     </application>
 
