@@ -292,6 +292,36 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return songIds;
     }
 
+    // Get recent note types for autocomplete (max 5 unique types)
+    public List<String> getRecentNoteTypes(String searchTerm) {
+        List<String> noteTypes = new ArrayList<>();
+        String query = "SELECT DISTINCT " + COLUMN_NOTE_TYPE + " FROM " + TABLE_SONG_NOTES;
+        String[] selectionArgs = null;
+
+        if (searchTerm != null && !searchTerm.trim().isEmpty()) {
+            query += " WHERE " + COLUMN_NOTE_TYPE + " LIKE ?";
+            selectionArgs = new String[]{"%" + searchTerm + "%"};
+        }
+
+        query += " ORDER BY " + COLUMN_TIMESTAMP + " DESC LIMIT 5";
+
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(query, selectionArgs);
+
+        if (cursor.moveToFirst()) {
+            do {
+                String noteType = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_NOTE_TYPE));
+                if (!noteTypes.contains(noteType)) {
+                    noteTypes.add(noteType);
+                }
+            } while (cursor.moveToNext() && noteTypes.size() < 5);
+        }
+
+        cursor.close();
+        db.close();
+        return noteTypes;
+    }
+
     //#endregion
 
     //#region ======== ARCHIVED PLAYLISTS METHODS ========
