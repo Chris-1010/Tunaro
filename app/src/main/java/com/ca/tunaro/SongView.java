@@ -244,15 +244,36 @@ public class SongView extends BaseActivity {
             }
         };
 
-        ListView listView = new ListView(this);
-        listView.setAdapter(adapter);
-        listView.setDivider(null);
+        // Create a LinearLayout to hold the history items instead of ListView
+        LinearLayout historyContainer = new LinearLayout(this);
+        historyContainer.setOrientation(LinearLayout.VERTICAL);
 
-        // Replace RecyclerView with ListView in the layout
+// Manually add each item as a TextView to the LinearLayout
+        for (String timestamp : listenHistory) {
+            TextView textView = new TextView(this);
+
+            // Format the timestamp nicely
+            try {
+                java.text.SimpleDateFormat inputFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
+                java.text.SimpleDateFormat outputFormat = new java.text.SimpleDateFormat("MMM dd, yyyy 'at' HH:mm", java.util.Locale.getDefault());
+                java.util.Date date = inputFormat.parse(timestamp);
+                textView.setText(outputFormat.format(date));
+            } catch (Exception e) {
+                textView.setText(timestamp); // Fallback to raw timestamp
+            }
+
+            textView.setTextColor(getResources().getColor(android.R.color.white));
+            textView.setTextSize(14f);
+            textView.setPadding(0, 8, 0, 8);
+
+            historyContainer.addView(textView);
+        }
+
+        // Replace RecyclerView with the LinearLayout container
         ViewGroup parent = (ViewGroup) historyRecycler.getParent();
         int index = parent.indexOfChild(historyRecycler);
         parent.removeView(historyRecycler);
-        parent.addView(listView, index);
+        parent.addView(historyContainer, index);
     }
 
     private void playSong() {
