@@ -552,7 +552,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         List<String> timestamps = new ArrayList<>();
         String selectQuery = "SELECT " + COLUMN_LISTEN_TIMESTAMP + " FROM " + TABLE_LISTEN_HISTORY +
                 " WHERE " + COLUMN_SONG_ID + " = ?" +
-                " ORDER BY " + COLUMN_LISTEN_TIMESTAMP + " DESC";
+                " ORDER BY " + COLUMN_LISTEN_TIMESTAMP + " ASC";
 
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(selectQuery, new String[]{songId});
