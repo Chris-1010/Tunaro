@@ -6,8 +6,11 @@ import android.os.Looper;
 import android.util.Log;
 import android.widget.Toast;
 
+import com.ca.tunaro.BaseActivity;
+import com.ca.tunaro.activites.MainActivity;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.database.DatabaseHelper;
+import com.ca.tunaro.utils.DeviceChecker;
 import com.spotify.android.appremote.api.ConnectionParams;
 import com.spotify.android.appremote.api.Connector;
 import com.spotify.android.appremote.api.SpotifyAppRemote;
@@ -180,6 +183,9 @@ public class PlaybackManager {
                 // Create a simplified SongModel from track with string artist names
                 currentSong = createSongModelFromRemoteTrack(remoteTrack, trackId, artistNames);
                 trackChanged = true;
+
+                // Check device when track changes
+                checkPlaybackDevice();
             }
 
             // Update playing state
@@ -252,6 +258,7 @@ public class PlaybackManager {
                         currentSong = song;
                         isPlaying = true;
                         notifyPlaybackStateChanged();
+                        checkPlaybackDevice();
                     })
                     .setErrorCallback(throwable -> {
                         Log.e(TAG, "Error playing song: " + throwable.getMessage());
@@ -272,6 +279,24 @@ public class PlaybackManager {
                         .setResultCallback(empty -> {
                             isPlaying = true;
                             notifyPlaybackStateChanged();
+                        });
+            }
+        }
+    }
+
+    private void checkPlaybackDevice() {
+        if (applicationContext != null) {
+            MainActivity mainActivity = MainActivity.getInstance();
+            if (mainActivity != null && mainActivity.getSpotifyApi() != null) {
+                DeviceChecker.checkPlaybackDevice(applicationContext, mainActivity.getSpotifyApi(),
+                        new DeviceChecker.DeviceCheckCallback() {
+                            @Override
+                            public void onDeviceCheckResult(boolean isCorrectDevice, String message) {
+                                if (!isCorrectDevice && DeviceChecker.isDeviceCheckEnabled(applicationContext)) {
+                                    showToast("Device warning: " + message);
+                                }
+                            }
+
                         });
             }
         }
