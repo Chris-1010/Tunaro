@@ -1,25 +1,41 @@
 package com.ca.tunaro.activites;
 
+import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.SwitchCompat;
 
 import com.ca.tunaro.R;
 import com.ca.tunaro.database.DatabaseHelper;
 
 public class SettingsActivity extends AppCompatActivity {
+    private SwitchCompat deviceCheckSwitch;
+    private EditText deviceNameInput;
+    private TextView deviceNameLabel;
+    private Button discoverDevicesButton;
+    private TextView availableDevicesText;
+    private SharedPreferences prefs;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_settings);
 
+        prefs = getSharedPreferences("TunaroPrefs", MODE_PRIVATE);
+
         setupBackButton();
         setupImportExportButtons();
+        setupDeviceCheckSettings();
     }
 
     private void setupBackButton() {
@@ -28,6 +44,8 @@ public class SettingsActivity extends AppCompatActivity {
             getSupportActionBar().setTitle("Settings");
         }
     }
+
+    //#region Import/Export Option
 
     private void setupImportExportButtons() {
         Button importButton = findViewById(R.id.import_button);
@@ -78,6 +96,89 @@ public class SettingsActivity extends AppCompatActivity {
                 }
             }
     );
+
+    //#endregion
+
+    //#region Device Check Option
+
+    private void setupDeviceCheckSettings() {
+        deviceCheckSwitch = findViewById(R.id.device_check_switch);
+        deviceNameInput = findViewById(R.id.device_name_input);
+        deviceNameLabel = findViewById(R.id.device_name_label);
+        discoverDevicesButton = findViewById(R.id.discover_devices_button);
+        availableDevicesText = findViewById(R.id.available_devices_text);
+
+        // Load saved preferences
+        boolean isDeviceCheckEnabled = prefs.getBoolean("device_check_enabled", false);
+        String savedDeviceName = prefs.getString("device_name", "");
+
+        deviceCheckSwitch.setChecked(isDeviceCheckEnabled);
+        deviceNameInput.setText(savedDeviceName);
+        updateDeviceCheckVisibility(isDeviceCheckEnabled);
+
+        // Set up listeners
+        deviceCheckSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            prefs.edit().putBoolean("device_check_enabled", isChecked).apply();
+            updateDeviceCheckVisibility(isChecked);
+        });
+
+        deviceNameInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                prefs.edit().putString("device_name", s.toString()).apply();
+            }
+        });
+
+        discoverDevicesButton.setOnClickListener(v -> discoverAvailableDevices());
+    }
+
+    private void updateDeviceCheckVisibility(boolean isEnabled) {
+        int visibility = isEnabled ? View.VISIBLE : View.GONE;
+        deviceNameLabel.setVisibility(visibility);
+        deviceNameInput.setVisibility(visibility);
+        discoverDevicesButton.setVisibility(visibility);
+        availableDevicesText.setVisibility(visibility);
+    }
+
+    private void discoverAvailableDevices() {
+        MainActivity mainActivity = MainActivity.getInstance();
+        if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
+            Toast.makeText(this, "Spotify API not available", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        mainActivity.getSpotifyApi().getUsersAvailableDevices()
+                .build()
+                .executeAsync()
+                .thenAccept(devices -> {
+                    runOnUiThread(() -> {
+                        StringBuilder deviceList = new StringBuilder("Available devices:\n");
+                        for (se.michaelthelin.spotify.model_objects.miscellaneous.Device device : devices) {
+                            deviceList.append("• ").append(device.getName());
+                            if (device.getIs_active()) {
+                                deviceList.append(" (Active)");
+                            }
+                            deviceList.append("\n");
+                        }
+                        availableDevicesText.setText(deviceList.toString());
+                    });
+                })
+                .exceptionally(throwable -> {
+                    runOnUiThread(() -> {
+                        Toast.makeText(this, "Error getting devices: " + throwable.getMessage(),
+                                Toast.LENGTH_SHORT).show();
+                    });
+                    return null;
+                });
+    }
+
+    //#endregion
 
     @Override
     public boolean onSupportNavigateUp() {
