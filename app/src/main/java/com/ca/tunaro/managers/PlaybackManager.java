@@ -57,6 +57,7 @@ public class PlaybackManager {
     private String currentListenTrackId = null;
     private boolean hasRecordedListen = false;
     private boolean isSnippetMode = false;
+    private boolean isDeviceWarningActive = false;
     private final Handler listenHandler = new Handler(Looper.getMainLooper());
     private Runnable listenRunnable;
 
@@ -299,12 +300,7 @@ public class PlaybackManager {
 
                             @Override
                             public void onDeviceWarningStateChanged(boolean showWarning) {
-                                // Notify all BaseActivity instances about the warning state
-                                for (PlaybackListener listener : listeners) {
-                                    if (listener instanceof BaseActivity) {
-                                        ((BaseActivity) listener).setDeviceWarningVisible(showWarning);
-                                    }
-                                }
+                                setDeviceWarningState(showWarning);
                             }
                         });
             }
@@ -326,6 +322,11 @@ public class PlaybackManager {
 
                 if (currentSong != null && durationMs > 0) {
                     listener.onPlaybackPositionChanged(currentPositionMs, durationMs);
+                }
+
+                // Sync device warning state for new activities
+                if (listener instanceof BaseActivity) {
+                    ((BaseActivity) listener).setDeviceWarningVisible(isDeviceWarningActive);
                 }
             }
         }
@@ -492,6 +493,10 @@ public class PlaybackManager {
         return spotifyAppRemote;
     }
 
+    public boolean isDeviceWarningActive() {
+        return isDeviceWarningActive;
+    }
+
     //#endregion
 
     //#region Setters
@@ -500,6 +505,16 @@ public class PlaybackManager {
         this.isSnippetMode = isSnippetMode;
         if (isSnippetMode) {
             stopListenTracking();
+        }
+    }
+
+    public void setDeviceWarningState(boolean showWarning) {
+        this.isDeviceWarningActive = showWarning;
+        // Notify all listeners immediately
+        for (PlaybackListener listener : listeners) {
+            if (listener instanceof BaseActivity) {
+                ((BaseActivity) listener).setDeviceWarningVisible(showWarning);
+            }
         }
     }
 
