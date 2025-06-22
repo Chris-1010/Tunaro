@@ -535,8 +535,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         ContentValues values = new ContentValues();
 
         String uuid = java.util.UUID.randomUUID().toString();
-        String timestamp = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault())
-                .format(new java.util.Date());
+
+        // Use UTC timezone to ensure consistent timestamps
+        java.text.SimpleDateFormat utcFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
+        utcFormat.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+        String timestamp = utcFormat.format(new java.util.Date());
 
         values.put(COLUMN_UUID, uuid);
         values.put(COLUMN_SONG_ID, songId);

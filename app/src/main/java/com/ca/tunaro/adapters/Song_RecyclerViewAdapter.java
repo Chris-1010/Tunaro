@@ -156,6 +156,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
     private String formatListenTimeForDisplay(String timestamp) {
         try {
             java.text.SimpleDateFormat inputFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
+            inputFormat.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
             java.util.Date date = inputFormat.parse(timestamp);
 
             assert date != null;
