@@ -66,12 +66,6 @@ public class LibraryActivity extends AppCompatActivity implements Library_Recycl
         searchBar = findViewById(R.id.search_bar);
         setupSearchBar();
 
-        Button importButton = findViewById(R.id.import_button);
-        importButton.setOnClickListener(v -> importData());
-
-        Button exportButton = findViewById(R.id.export_button);
-        exportButton.setOnClickListener(v -> exportData());
-
         // Load songs with notes
         loadSongsWithNotes();
     }
@@ -232,49 +226,4 @@ public class LibraryActivity extends AppCompatActivity implements Library_Recycl
             loadingView.setVisibility(isLoading ? View.VISIBLE : View.GONE);
         }
     }
-
-    // Handle the import button click
-    public void importData() {
-        importLauncher.launch(new String[]{"application/json"});
-    }
-
-    private final ActivityResultLauncher<String[]> importLauncher = registerForActivityResult(
-            new ActivityResultContracts.OpenDocument(),
-            uri -> {
-                if (uri != null) {
-                    try {
-                        DatabaseHelper.ImportStats stats = DatabaseHelper.importFromUri(this, uri);
-                        Toast.makeText(this, stats.getSummary(), Toast.LENGTH_LONG).show();
-
-                        // Reload the songs list to reflect any imported data
-                        loadSongsWithNotes();
-                    } catch (Exception e) {
-                        Toast.makeText(this, "Import failed: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                    }
-                }
-            }
-    );
-
-    // Handle the export button click
-    public void exportData() {
-        String fileName = "tunaro_backup_" +
-                new java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault()).format(new java.util.Date()) +
-                ".json";
-        exportLauncher.launch(fileName);
-    }
-
-    private final ActivityResultLauncher<String> exportLauncher = registerForActivityResult(
-            new ActivityResultContracts.CreateDocument("application/json"),
-            uri -> {
-                if (uri != null) {
-                    try {
-                        String jsonData = DatabaseHelper.generateExportJson(this);
-                        DatabaseHelper.writeExportToUri(this, uri, jsonData);
-                        Toast.makeText(this, "Data exported successfully!", Toast.LENGTH_LONG).show();
-                    } catch (Exception e) {
-                        Toast.makeText(this, "Export failed: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                    }
-                }
-            }
-    );
 }
