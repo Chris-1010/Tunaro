@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/dark_blue"
+    android:background="@drawable/radial_gradient"
     tools:context=".activites.SettingsActivity">
 
     <TextView
@@ -33,16 +33,17 @@
             android:orientation="vertical"
             android:padding="16dp">
 
-            <!-- Data Management Section -->
+            <!--#region Data Management Section -->
+
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="16dp"
                 android:text="Data Management"
                 android:textColor="@color/white"
                 android:textSize="20sp"
-                android:textStyle="bold"
-                android:layout_marginTop="16dp"
-                android:layout_marginBottom="16dp" />
+                android:textStyle="bold" />
 
             <Button
                 android:id="@+id/import_button"
@@ -60,15 +61,83 @@
                 android:text="Export Data"
                 android:textSize="16sp" />
 
+            <!--#endregion -->
+
+            <!--#region Device Check Section -->
+
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="More settings coming soon..."
+                android:layout_marginTop="32dp"
+                android:layout_marginBottom="16dp"
+                android:text="Playback Device Check"
                 android:textColor="@color/white"
-                android:textSize="16sp"
-                android:textAlignment="center"
-                android:layout_marginTop="32dp" />
+                android:textSize="20sp"
+                android:textStyle="bold" />
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Check playback device"
+                    android:textColor="@color/white"
+                    android:textSize="16sp" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/device_check_switch"
+                    android:layout_width="50dp"
+                    android:layout_height="50dp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/device_name_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="Your device name:"
+                android:textColor="@color/white"
+                android:textSize="14sp"
+                android:visibility="gone" />
+
+            <EditText
+                android:id="@+id/device_name_input"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:background="@android:drawable/editbox_background"
+                android:hint="Enter your device name (e.g., iPhone, PC)"
+                android:padding="12dp"
+                android:textColor="@color/black"
+                android:textColorHint="@color/black"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/discover_devices_button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:text="Discover Available Devices"
+                android:textSize="14sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/available_devices_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="24dp"
+                android:fontFamily="monospace"
+                android:textColor="@color/white"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <!--#endregion-->
         </LinearLayout>
     </ScrollView>
 

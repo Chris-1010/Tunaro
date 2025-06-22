@@ -6,8 +6,11 @@ import android.os.Looper;
 import android.util.Log;
 import android.widget.Toast;
 
+import com.ca.tunaro.BaseActivity;
+import com.ca.tunaro.activites.MainActivity;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.database.DatabaseHelper;
+import com.ca.tunaro.utils.DeviceChecker;
 import com.spotify.android.appremote.api.ConnectionParams;
 import com.spotify.android.appremote.api.Connector;
 import com.spotify.android.appremote.api.SpotifyAppRemote;
@@ -54,6 +57,7 @@ public class PlaybackManager {
     private String currentListenTrackId = null;
     private boolean hasRecordedListen = false;
     private boolean isSnippetMode = false;
+    private boolean isDeviceWarningActive = false;
     private final Handler listenHandler = new Handler(Looper.getMainLooper());
     private Runnable listenRunnable;
 
@@ -180,6 +184,9 @@ public class PlaybackManager {
                 // Create a simplified SongModel from track with string artist names
                 currentSong = createSongModelFromRemoteTrack(remoteTrack, trackId, artistNames);
                 trackChanged = true;
+
+                // Check device when track changes
+                checkPlaybackDevice();
             }
 
             // Update playing state
@@ -252,6 +259,7 @@ public class PlaybackManager {
                         currentSong = song;
                         isPlaying = true;
                         notifyPlaybackStateChanged();
+                        checkPlaybackDevice();
                     })
                     .setErrorCallback(throwable -> {
                         Log.e(TAG, "Error playing song: " + throwable.getMessage());
@@ -277,6 +285,28 @@ public class PlaybackManager {
         }
     }
 
+    private void checkPlaybackDevice() {
+        if (applicationContext != null) {
+            MainActivity mainActivity = MainActivity.getInstance();
+            if (mainActivity != null && mainActivity.getSpotifyApi() != null) {
+                DeviceChecker.checkPlaybackDevice(applicationContext, mainActivity.getSpotifyApi(),
+                        new DeviceChecker.DeviceCheckCallback() {
+                            @Override
+                            public void onDeviceCheckResult(boolean isCorrectDevice, String message) {
+                                if (!isCorrectDevice && DeviceChecker.isDeviceCheckEnabled(applicationContext)) {
+                                    showToast("Device warning: " + message);
+                                }
+                            }
+
+                            @Override
+                            public void onDeviceWarningStateChanged(boolean showWarning) {
+                                setDeviceWarningState(showWarning);
+                            }
+                        });
+            }
+        }
+    }
+
     // TODO Methods for next/previous track switching
 
     //#region Listeners
@@ -292,6 +322,11 @@ public class PlaybackManager {
 
                 if (currentSong != null && durationMs > 0) {
                     listener.onPlaybackPositionChanged(currentPositionMs, durationMs);
+                }
+
+                // Sync device warning state for new activities
+                if (listener instanceof BaseActivity) {
+                    ((BaseActivity) listener).setDeviceWarningVisible(isDeviceWarningActive);
                 }
             }
         }
@@ -366,7 +401,7 @@ public class PlaybackManager {
     }
 
     private void recordListen(String songId) {
-        if (applicationContext != null) {
+        if (applicationContext != null && !isDeviceWarningActive) {
             DatabaseHelper dbHelper = new DatabaseHelper(applicationContext);
             dbHelper.addListenRecord(songId);
 
@@ -458,6 +493,10 @@ public class PlaybackManager {
         return spotifyAppRemote;
     }
 
+    public boolean isDeviceWarningActive() {
+        return isDeviceWarningActive;
+    }
+
     //#endregion
 
     //#region Setters
@@ -466,6 +505,16 @@ public class PlaybackManager {
         this.isSnippetMode = isSnippetMode;
         if (isSnippetMode) {
             stopListenTracking();
+        }
+    }
+
+    public void setDeviceWarningState(boolean showWarning) {
+        this.isDeviceWarningActive = showWarning;
+        // Notify all listeners immediately
+        for (PlaybackListener listener : listeners) {
+            if (listener instanceof BaseActivity) {
+                ((BaseActivity) listener).setDeviceWarningVisible(showWarning);
+            }
         }
     }
 

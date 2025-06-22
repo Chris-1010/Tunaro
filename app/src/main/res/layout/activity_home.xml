@@ -280,6 +280,7 @@
         android:text="Play from Earliest Listened To"
         android:textColor="@color/black"
         android:textSize="16sp"
+        android:visibility="gone"
         app:cornerRadius="24dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
