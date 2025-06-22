@@ -401,7 +401,7 @@ public class PlaybackManager {
     }
 
     private void recordListen(String songId) {
-        if (applicationContext != null) {
+        if (applicationContext != null && !isDeviceWarningActive) {
             DatabaseHelper dbHelper = new DatabaseHelper(applicationContext);
             dbHelper.addListenRecord(songId);
 
