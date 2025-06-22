@@ -40,6 +40,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     protected TextView songName;
     protected TextView artistName;
     protected ImageButton playPauseButton;
+    protected ImageView deviceWarningIcon;
 //    private TextView positionText;
 //    private TextView durationText;
 
@@ -103,6 +104,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         songName = findViewById(R.id.playback_song_name);
         artistName = findViewById(R.id.playback_artist_name);
         playPauseButton = findViewById(R.id.playback_play_pause);
+        deviceWarningIcon = findViewById(R.id.playback_device_warning);
 //        positionText = findViewById(R.id.playback_position);
 //        durationText = findViewById(R.id.playback_duration);
 
@@ -377,6 +379,12 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     @Override
     public void onConnectionStateChanged(boolean isConnected) {
         // might want to show some UI feedback when connection state changes
+    }
+
+    public void setDeviceWarningVisible(boolean visible) {
+        if (deviceWarningIcon != null) {
+            runOnUiThread(() -> deviceWarningIcon.setVisibility(visible ? View.VISIBLE : View.GONE));
+        }
     }
 
     private String formatDuration(long durationMs) {

@@ -8,6 +8,7 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.ca.tunaro.managers.PlaybackManager;
+import com.ca.tunaro.utils.DeviceChecker;
 import com.ca.tunaro.utils.PlaylistSetup;
 import com.ca.tunaro.R;
 import com.spotify.android.appremote.api.SpotifyAppRemote;
@@ -94,7 +95,8 @@ public class MainActivity extends AppCompatActivity {
         // Start the authentication process
         AuthorizationRequest.Builder builder =
                 new AuthorizationRequest.Builder(CLIENT_ID, AuthorizationResponse.Type.TOKEN, REDIRECT_URI.toString());
-        builder.setScopes(new String[]{"app-remote-control", "streaming", "playlist-read-private", "playlist-modify-private"});
+        // Set permissions and scope
+        builder.setScopes(new String[]{"app-remote-control", "streaming", "playlist-read-private", "playlist-modify-private", "user-read-playback-state"});
         AuthorizationRequest request = builder.build();
 
         AuthorizationClient.openLoginActivity(this, REQUEST_CODE, request);
@@ -118,7 +120,10 @@ public class MainActivity extends AppCompatActivity {
             spotifyApi.setAccessToken(getAccessToken());
             return getCurrentUsersProfile_Async();
         }).thenRunAsync(() -> {
-            runOnUiThread(this::connectSpotifyAppRemote);
+            runOnUiThread(() -> {
+                connectSpotifyAppRemote();
+                performInitialDeviceCheck();
+            });
         }, executor);
     }
 
@@ -186,7 +191,7 @@ public class MainActivity extends AppCompatActivity {
                             .setClientId(CLIENT_ID)
                             .setClientSecret(CLIENT_SECRET)
                             .setRedirectUri(REDIRECT_URI)
-                            .setAccessToken(token) // Use the token directly
+                            .setAccessToken(token)
                             .build();
 
                     // Complete the future to signal that authentication is done
@@ -212,6 +217,16 @@ public class MainActivity extends AppCompatActivity {
                     break;
             }
         }
+    }
+
+    private void performInitialDeviceCheck() {
+        DeviceChecker.checkPlaybackDevice(this, spotifyApi, (isCorrectDevice, message) -> {
+            runOnUiThread(() -> {
+                if (!isCorrectDevice && DeviceChecker.isDeviceCheckEnabled(this)) {
+                    Toast.makeText(this, "Warning: " + message, Toast.LENGTH_LONG).show();
+                }
+            });
+        });
     }
 
     private void saveAccessToken(String token) {

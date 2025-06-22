@@ -38,6 +38,7 @@
         tools:src="@tools:sample/avatars" />
 
     <LinearLayout
+        android:id="@+id/linearLayout"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="12dp"
@@ -82,6 +83,20 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:tint="@android:color/white" />
+
+    <ImageView
+        android:id="@+id/playback_device_warning"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginEnd="-5dp"
+        android:layout_marginBottom="-5dp"
+        android:background="@android:color/transparent"
+        android:src="@android:drawable/ic_dialog_alert"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/playback_play_pause"
+        app:layout_constraintEnd_toEndOf="@+id/playback_play_pause"
+        app:tint="#FFA500"
+        tools:visibility="visible" />
 
     <SeekBar
         android:id="@+id/playback_seekbar"
