@@ -297,6 +297,15 @@ public class PlaybackManager {
                                 }
                             }
 
+                            @Override
+                            public void onDeviceWarningStateChanged(boolean showWarning) {
+                                // Notify all BaseActivity instances about the warning state
+                                for (PlaybackListener listener : listeners) {
+                                    if (listener instanceof BaseActivity) {
+                                        ((BaseActivity) listener).setDeviceWarningVisible(showWarning);
+                                    }
+                                }
+                            }
                         });
             }
         }
