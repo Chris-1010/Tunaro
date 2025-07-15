@@ -28,9 +28,10 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     //#region Initialisations
 
     private static final String DATABASE_NAME = "TunaroDB";
-    private static final int DATABASE_VERSION = 6;
+    private static final int DATABASE_VERSION = 7;
 
-    // Table name
+    // Tables
+    private static final String TABLE_FAVOURITE_PLAYLISTS = "favourite_playlists";
     private static final String TABLE_ARCHIVED_PLAYLISTS = "archived_playlists";
     private static final String TABLE_SONG_NOTES = "song_notes";
     private static final String TABLE_SONG_SNIPPETS = "song_snippets";
@@ -64,6 +65,16 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     " SET " + COLUMN_TIMESTAMP + " = strftime('%d-%m-%Y %H:%M', " + COLUMN_TIMESTAMP + ", 'localtime')";
 
     //#region Create table queries
+    private static final String CREATE_TABLE_FAVOURITE_PLAYLISTS =
+            "CREATE TABLE " + TABLE_FAVOURITE_PLAYLISTS + "("
+                    + COLUMN_ID +           " INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + COLUMN_PLAYLIST_ID +  " TEXT UNIQUE NOT NULL"
+                    + ")";
+    private static final String CREATE_TABLE_ARCHIVED_PLAYLISTS =
+            "CREATE TABLE " + TABLE_ARCHIVED_PLAYLISTS + "("
+                    + COLUMN_ID +           " INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + COLUMN_PLAYLIST_ID +  " TEXT UNIQUE NOT NULL"
+                    + ")";
     private static final String CREATE_TABLE_SONG_NOTES =
             "CREATE TABLE " + TABLE_SONG_NOTES + "("
                     + COLUMN_UUID +         " TEXT UNIQUE NOT NULL,"
@@ -73,11 +84,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     + COLUMN_CONTENT +      " TEXT NOT NULL,"
                     + COLUMN_TIMESTAMP +    " TEXT DEFAULT (strftime('%d-%m-%Y %H:%M', 'now', 'localtime'))"
                     + ")";
-    private static final String CREATE_TABLE_ARCHIVED_PLAYLISTS =
-            "CREATE TABLE " + TABLE_ARCHIVED_PLAYLISTS + "("
-                    + COLUMN_ID +           " INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    + COLUMN_PLAYLIST_ID +  " TEXT UNIQUE NOT NULL"
-                    + ")";
+
     private static final String CREATE_TABLE_SONG_SNIPPETS =
             "CREATE TABLE " + TABLE_SONG_SNIPPETS + "("
                     + COLUMN_UUID +                 " TEXT UNIQUE NOT NULL,"
@@ -104,17 +111,18 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     @Override
     public void onCreate(SQLiteDatabase db) {
-        db.execSQL(CREATE_TABLE_SONG_NOTES);
+        db.execSQL(CREATE_TABLE_FAVOURITE_PLAYLISTS);
         db.execSQL(CREATE_TABLE_ARCHIVED_PLAYLISTS);
+        db.execSQL(CREATE_TABLE_SONG_NOTES);
         db.execSQL(CREATE_TABLE_SONG_SNIPPETS);
         db.execSQL(CREATE_TABLE_LISTEN_HISTORY);
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        if (oldVersion < 6) {
-            // Create the listen_history table for version 6
-            db.execSQL(CREATE_TABLE_LISTEN_HISTORY);
+        if (oldVersion < 7) {
+            // Create the favourite playlists table for version 7
+            db.execSQL(CREATE_TABLE_FAVOURITE_PLAYLISTS);
         }
     }
 
