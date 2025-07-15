@@ -117,6 +117,14 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
         PopupMenu popupMenu = new PopupMenu(this, itemView.findViewById(R.id.options_anchor));
         popupMenu.getMenuInflater().inflate(R.menu.playlist_options_menu, popupMenu.getMenu());
 
+        // Update menu item text based on favourite state
+        MenuItem favouriteItem = popupMenu.getMenu().findItem(R.id.action_favourite);
+        if (dbHelper.isPlaylistFavourited(playlist.getId())) {
+            favouriteItem.setTitle("Unfavourite");
+        } else {
+            favouriteItem.setTitle("Favourite");
+        }
+
         // Update menu item text based on archive state
         MenuItem archiveItem = popupMenu.getMenu().findItem(R.id.action_archive);
         if (showingArchived) {
@@ -128,9 +136,15 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
         // Set click listeners
         popupMenu.setOnMenuItemClickListener(item -> {
             int itemId = item.getItemId();
-            if (itemId == R.id.action_favorite) {
-                // Favorite functionality to be implemented later
-                Toast.makeText(this, "Favorite feature coming soon!", Toast.LENGTH_SHORT).show();
+            if (itemId == R.id.action_favourite) {
+                if (dbHelper.isPlaylistFavourited(playlist.getId())) {
+                    dbHelper.unfavouritePlaylist(playlist.getId());
+                    Toast.makeText(this, "Playlist unfavourited", Toast.LENGTH_SHORT).show();
+                } else {
+                    dbHelper.favouritePlaylist(playlist.getId());
+                    Toast.makeText(this, "Playlist favourited", Toast.LENGTH_SHORT).show();
+                }
+                refreshPlaylists();
                 return true;
             } else if (itemId == R.id.action_archive) {
                 if (showingArchived) {
@@ -201,14 +215,26 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
 
     private void updateUIWithFilteredPlaylists(ArrayList<PlaylistModel> playlists) {
         List<String> archivedIds = dbHelper.getArchivedPlaylistIds();
+        List<String> favouritedIds = dbHelper.getFavouritedPlaylistIds();
         ArrayList<PlaylistModel> filteredPlaylists = new ArrayList<>();
 
         for (PlaylistModel playlist : playlists) {
             boolean isArchived = archivedIds.contains(playlist.getId());
+            boolean isFavourited = favouritedIds.contains(playlist.getId());
+
+            playlist.setFavourite(isFavourited);
+
             if (isArchived == showingArchived) {
                 filteredPlaylists.add(playlist);
             }
         }
+
+        // Favourite Playlists come first
+        filteredPlaylists.sort((p1, p2) -> {
+            if (p1.isFavourite() && !p2.isFavourite()) return -1;
+            if (!p1.isFavourite() && p2.isFavourite()) return 1;
+            return 0;
+        });
 
         runOnUiThread(() -> {
             // Update title to show if in archived mode
