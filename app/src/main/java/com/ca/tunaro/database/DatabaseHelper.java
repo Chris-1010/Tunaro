@@ -332,6 +332,56 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     //#endregion
 
+    //#region ======== FAVOURITE PLAYLISTS METHODS ========
+
+    // Add
+    public void favouritePlaylist(String playlistId) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_PLAYLIST_ID, playlistId);
+        db.insert(TABLE_FAVOURITE_PLAYLISTS, null, values);
+        db.close();
+    }
+
+    // Delete
+    public void unfavouritePlaylist(String playlistId) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        db.delete(TABLE_FAVOURITE_PLAYLISTS, COLUMN_PLAYLIST_ID + " = ?",
+                new String[]{playlistId});
+        db.close();
+    }
+
+    public boolean isPlaylistFavourited(String playlistId) {
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.query(TABLE_FAVOURITE_PLAYLISTS,
+                new String[]{COLUMN_PLAYLIST_ID},
+                COLUMN_PLAYLIST_ID + " = ?",
+                new String[]{playlistId},
+                null, null, null);
+        boolean isFavourited = cursor.moveToFirst();
+        cursor.close();
+        db.close();
+        return isFavourited;
+    }
+
+    public List<String> getFavouritedPlaylistIds() {
+        List<String> playlistIds = new ArrayList<>();
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.query(TABLE_FAVOURITE_PLAYLISTS,
+                new String[]{COLUMN_PLAYLIST_ID},
+                null, null, null, null, null);
+        if (cursor.moveToFirst()) {
+            do {
+                playlistIds.add(cursor.getString(0));
+            } while (cursor.moveToNext());
+        }
+        cursor.close();
+        db.close();
+        return playlistIds;
+    }
+
+    //#endregion
+
     //#region ======== ARCHIVED PLAYLISTS METHODS ========
 
     // Add
