@@ -9,7 +9,7 @@ Tunaro is a music tracking and note-taking app that integrates with Spotify. It 
 - **Spotify Integration**: Connects to user's Spotify account to access playlists and control playback
 - **Playlist Management**: Browse and sort playlists, with ability to archive playlists
 - **Song Playback**: Play songs directly within the app using Spotify's playback SDK
-- **Notes System**: Add custom notes to songs (e.g., "First Listened", "Favorite Part", "Rating")
+- **Notes System**: Add custom notes to songs (e.g., "First Listened", "Favourite Part", "Rating")
 - **Song Snippets**: Create and save specific sections of songs with custom start/end times
 - **Library View**: Access all songs that have notes in a searchable library
 - **Persistent Storage**: Local database storage for notes, snippets, and archived playlists

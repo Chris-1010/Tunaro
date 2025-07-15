@@ -50,6 +50,12 @@ public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_
         holder.songCount.setText(context.getString(R.string.song_count, model.getSongCount()));
         holder.imageView.setTag(position);    // Store the model index in the tag of the ImageView, to be obtained later
 
+        if (model.isFavourite()) {
+            holder.favouriteIcon.setVisibility(View.VISIBLE);
+        } else {
+            holder.favouriteIcon.setVisibility(View.GONE);
+        }
+
         // Load image using Glide
         Glide.with(context)
                 .load(model.getImage())
@@ -69,6 +75,7 @@ public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_
     // Important to have static here:
     public static class ViewHolder extends RecyclerView.ViewHolder {
         ImageView imageView;
+        ImageView favouriteIcon;
         TextView playlistName, songCount;
 
         public ViewHolder(@NonNull View itemView, Playlist_RecyclerViewInterface recyclerViewInterface, OnItemLongClickListener longClickListener) {
@@ -76,6 +83,7 @@ public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_
             playlistName = itemView.findViewById(R.id.songNameView);
             songCount = itemView.findViewById(R.id.artistView);
             imageView = itemView.findViewById(R.id.albumCoverView);
+            favouriteIcon = itemView.findViewById(R.id.favouriteIcon);
 
             // Anchor view for popup menu if it doesn't exist
             if (itemView.findViewById(R.id.options_anchor) == null) {
