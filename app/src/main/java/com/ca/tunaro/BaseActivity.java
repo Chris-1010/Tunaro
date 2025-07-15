@@ -311,6 +311,10 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
                 .setDuration(animationDuration)
                 .setInterpolator(new android.view.animation.AccelerateInterpolator())
                 .withEndAction(() -> {
+                    if (isDestroyed() || isFinishing()) {
+                        return;
+                    }
+
                     updateTrackInfo(newSong);
 
                     // Reset positions for slide-in
@@ -327,6 +331,11 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
                     albumCover.setScaleY(0.7f);
                     albumCover.setRotation(-15f);
                     albumCover.setAlpha(0f);
+
+                    // Check again before starting second animation
+                    if (isDestroyed() || isFinishing()) {
+                        return;
+                    }
 
                     // Animate in with spring-like effect
                     songName.animate()
