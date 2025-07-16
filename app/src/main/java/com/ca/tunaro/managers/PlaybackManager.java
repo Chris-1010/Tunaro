@@ -10,6 +10,7 @@ import com.ca.tunaro.BaseActivity;
 import com.ca.tunaro.activites.MainActivity;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.database.DatabaseHelper;
+import com.ca.tunaro.models.SongSnippet;
 import com.ca.tunaro.utils.DeviceChecker;
 import com.spotify.android.appremote.api.ConnectionParams;
 import com.spotify.android.appremote.api.Connector;
@@ -56,10 +57,18 @@ public class PlaybackManager {
     private final long LISTEN_THRESHOLD_MS = 10000; // 10 seconds
     private String currentListenTrackId = null;
     private boolean hasRecordedListen = false;
-    private boolean isSnippetMode = false;
     private boolean isDeviceWarningActive = false;
     private final Handler listenHandler = new Handler(Looper.getMainLooper());
     private Runnable listenRunnable;
+
+    //#region Snippet Playback Fields
+    private boolean isSnippetMode = false;
+    private boolean isSnippetPlaying = false;
+    private SongSnippet currentSnippet;
+    private final Handler snippetHandler = new Handler(Looper.getMainLooper());
+    private Runnable snippetEndRunnable;
+    private int activeSnippetTimers = 0;
+    //#endregion
 
     // Listeners
     private final List<PlaybackListener> listeners = new ArrayList<>();
@@ -412,6 +421,107 @@ public class PlaybackManager {
 
     //#endregion
 
+    //#region Snippet Playback Methods
+    public void playSnippet(SongSnippet snippet) {
+        if (!isConnected || spotifyAppRemote == null) {
+            showToast("Connecting to Spotify...");
+            connectSpotify(applicationContext, () -> playSnippet(snippet));
+            return;
+        }
+
+        // Cancel any existing snippet timer
+        cancelCurrentSnippetTimer();
+
+        isSnippetPlaying = true;
+        currentSnippet = snippet;
+        setSnippetMode(true);
+
+        // Check if correct song is playing
+        if (currentSong == null || !snippet.getSongId().equals(currentSong.getId())) {
+            // Need to play the correct song first
+            playSongForSnippet(snippet);
+        } else {
+            // Correct song is already playing, just seek and set timer
+            seekToSnippetStart(snippet);
+        }
+    }
+
+    private void playSongForSnippet(SongSnippet snippet) {
+        // Create a temporary SongModel for the snippet's song
+        spotifyAppRemote.getPlayerApi().play("spotify:track:" + snippet.getSongId())
+                .setResultCallback(empty -> {
+                    // Add delay to ensure song loads
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                        spotifyAppRemote.getPlayerApi().pause()
+                                .setResultCallback(pauseResult -> {
+                                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                                        seekToSnippetStart(snippet);
+                                    }, 100);
+                                });
+                    }, 100);
+                })
+                .setErrorCallback(throwable -> {
+                    showToast("Error playing song: " + throwable.getMessage());
+                    stopSnippetPlayback();
+                });
+    }
+
+    private void seekToSnippetStart(SongSnippet snippet) {
+        spotifyAppRemote.getPlayerApi().seekTo(snippet.getStartTime())
+                .setResultCallback(seekResult -> {
+                    spotifyAppRemote.getPlayerApi().resume();
+                    startSnippetEndTimer(snippet.getEndTime() - snippet.getStartTime());
+                });
+    }
+
+    private void startSnippetEndTimer(long duration) {
+        activeSnippetTimers++;
+
+        snippetEndRunnable = () -> {
+            activeSnippetTimers--;
+
+            if (activeSnippetTimers <= 0) {
+                activeSnippetTimers = 0;
+                if (spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
+                    spotifyAppRemote.getPlayerApi().pause();
+                }
+                stopSnippetPlayback();
+            }
+        };
+
+        snippetHandler.postDelayed(snippetEndRunnable, duration);
+    }
+
+    private void cancelCurrentSnippetTimer() {
+        if (snippetEndRunnable != null) {
+            snippetHandler.removeCallbacks(snippetEndRunnable);
+            snippetEndRunnable = null;
+        }
+        activeSnippetTimers = 0;
+    }
+
+    public void stopSnippetPlayback() {
+        isSnippetPlaying = false;
+        currentSnippet = null;
+        setSnippetMode(false);
+        cancelCurrentSnippetTimer();
+    }
+
+    public void detachSnippet() {
+        setSnippetMode(false);
+        cancelCurrentSnippetTimer();
+        showToast("Playback will continue after snippet end");
+    }
+
+    public boolean isSnippetPlaying() {
+        return isSnippetPlaying;
+    }
+
+    public SongSnippet getCurrentSnippet() {
+        return currentSnippet;
+    }
+    //#endregion
+
     private void notifyPlaybackStateChanged() {
         for (PlaybackListener listener : listeners) {
             listener.onPlaybackStateChanged(isPlaying, currentSong);
@@ -529,6 +639,7 @@ public class PlaybackManager {
     public void disconnect() {
         stopPositionTracking();
         stopListenTracking();
+        cancelCurrentSnippetTimer();
         if (spotifyAppRemote != null) {
             SpotifyAppRemote.disconnect(spotifyAppRemote);
             spotifyAppRemote = null;

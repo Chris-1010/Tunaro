@@ -52,10 +52,6 @@ public class SongSnippetsFragment extends Fragment {
     private SongSnippet editingSnippet;
     private ImageButton deleteSnippetButton;
 
-    private int activeTimers = 0;
-    private final android.os.Handler snippetHandler = new android.os.Handler();
-    private Runnable pauseRunnable;
-
     private Handler playbackUpdateHandler;
     private Runnable playbackUpdateRunnable;
     private boolean isUpdatingPlayback = false;
@@ -121,101 +117,11 @@ public class SongSnippetsFragment extends Fragment {
     }
 
     private void playSnippet(SongSnippet snippet) {
-        PlaybackManager playbackManager = PlaybackManager.getInstance();
-        playbackManager.setSnippetMode(true); // Enable snippet mode
-
-        if (spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
-            // Cancel any existing timer
-            if (pauseRunnable != null) {
-                snippetHandler.removeCallbacks(pauseRunnable);
-                activeTimers = 0; // Reset count when starting a new playback
-            }
-            if (!snippet.getSongId().equals(playbackManager.getCurrentSong().getId())) {
-                spotifyAppRemote.getPlayerApi().play(song.getUri())
-                        .setResultCallback(empty -> {
-                            // Add a delay to ensure the song has loaded
-                            new android.os.Handler().postDelayed(() -> {
-                                // Pause first to make seeking more reliable
-                                spotifyAppRemote.getPlayerApi().pause()
-                                        .setResultCallback(pauseResult -> {
-                                            // Another small delay to ensure pause completes
-                                            new android.os.Handler().postDelayed(() -> {
-                                                // Seek to the position
-                                                spotifyAppRemote.getPlayerApi().seekTo(snippet.getStartTime())
-                                                        .setResultCallback(seekResult -> {
-                                                            // Resume playback after seeking
-                                                            spotifyAppRemote.getPlayerApi().resume();
-                                                            // Start a timer to pause after the duration
-                                                            startSnippetEndTimer(snippet.getEndTime() - snippet.getStartTime());
-                                                        });
-                                            }, 100); // Delay after pause
-                                        });
-                            }, 100); // Delay after play
-                        })
-                        .setErrorCallback(throwable -> {
-                            Toast.makeText(requireContext(),
-                                    "Error playing song: " + throwable.getMessage(),
-                                    Toast.LENGTH_SHORT).show();
-                        });
-            } else {
-                // The currently requested snippet is from the same song currently being played
-                if (playbackManager.isPlaying()) {
-                    spotifyAppRemote.getPlayerApi().seekTo(snippet.getStartTime())
-                            .setResultCallback(seekResult -> {
-                                startSnippetEndTimer(snippet.getEndTime() - snippet.getStartTime());
-                            });
-                } else {
-                    spotifyAppRemote.getPlayerApi().seekTo(snippet.getStartTime())
-                            .setResultCallback(seekResult -> {
-                                spotifyAppRemote.getPlayerApi().resume()
-                                        .setResultCallback(playResult -> {
-                                            startSnippetEndTimer(snippet.getEndTime() - snippet.getStartTime());
-                                        });
-                            });
-                }
-            }
-        } else {
-            Toast.makeText(requireContext(), "Connecting to Spotify...", Toast.LENGTH_SHORT).show();
-            playbackManager.connectSpotify(requireContext(), () -> {
-                // Get the updated remote after connection
-                spotifyAppRemote = playbackManager.getSpotifyAppRemote();
-
-                // Once connected, try to play the snippet again
-                playSnippet(snippet);
-            });
-        }
-    }
-
-    private void startSnippetEndTimer(long duration) {
-        activeTimers++;
-
-        // Create a handler and runnable to pause playback after duration
-        pauseRunnable = () -> {
-            // Decrement the counter
-            activeTimers--;
-
-            // Only pause if this is the last timer
-            if (activeTimers <= 0) {
-                activeTimers = 0; // Ensure non-negative
-                if (spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
-                    spotifyAppRemote.getPlayerApi().pause();
-                }
-            }
-        };
-
-        // Schedule the runnable
-        snippetHandler.postDelayed(pauseRunnable, duration);
+        PlaybackManager.getInstance().playSnippet(snippet);
     }
 
     private void detachSnippet() {
-        PlaybackManager.getInstance().setSnippetMode(false); // Disable snippet mode
-
-        if (pauseRunnable != null) {
-            snippetHandler.removeCallbacks(pauseRunnable);
-            activeTimers = 0; // Reset count when starting a new playback
-        }
-
-        Toast.makeText(requireContext(), "Playback will continue after snippet end", Toast.LENGTH_SHORT).show();
+        PlaybackManager.getInstance().detachSnippet();
     }
 
     private void showSnippetCreationOverlay() {
@@ -280,7 +186,8 @@ public class SongSnippetsFragment extends Fragment {
             }
 
             @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {}
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
 
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
@@ -702,31 +609,6 @@ public class SongSnippetsFragment extends Fragment {
         }
     }
 
-    // Helper method to preview a position with a specified duration
-    private void previewPosition(long positionMs, long durationMs) {
-        if (spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
-            // Cancel any existing timer
-            if (pauseRunnable != null) {
-                snippetHandler.removeCallbacks(pauseRunnable);
-                activeTimers = 0; // Reset count when starting a new playback
-            }
-            spotifyAppRemote.getPlayerApi().play(song.getUri())
-                    .setResultCallback(empty -> {
-                        // Add a delay to ensure the song has loaded
-                        new android.os.Handler().postDelayed(() -> {
-                            // Seek to the position
-                            spotifyAppRemote.getPlayerApi().seekTo(positionMs)
-                                    .setResultCallback(seekResult -> {
-                                        // Start a timer to pause after the duration
-                                        startSnippetEndTimer(durationMs);
-                                    });
-                        }, 100); // Delay after play
-                    });
-        } else {
-            Toast.makeText(requireContext(), "Spotify not connected", Toast.LENGTH_SHORT).show();
-        }
-    }
-
     private long parseTimeString(String timeStr) {
         if (timeStr == null || timeStr.trim().isEmpty()) {
             return -1;
@@ -799,10 +681,6 @@ public class SongSnippetsFragment extends Fragment {
         if (snippetCreationOverlay != null && snippetCreationOverlay.getParent() != null) {
             ((ViewGroup) snippetCreationOverlay.getParent()).removeView(snippetCreationOverlay);
             snippetCreationOverlay = null;
-        }
-
-        if (snippetHandler != null && pauseRunnable != null) {
-            snippetHandler.removeCallbacks(pauseRunnable);
         }
 
         stopPlaybackUpdates();
