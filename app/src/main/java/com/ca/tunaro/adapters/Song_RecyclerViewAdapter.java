@@ -116,6 +116,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
             hasSnippetsIcon = itemView.findViewById(R.id.hasSnippetsIcon);
             contextualInfoView = itemView.findViewById(R.id.contextualInfoView);
 
+            // Open SongView on click
             itemView.setOnClickListener(view -> {
                 if (recyclerViewInterface != null) {
                     int position = getAdapterPosition();
@@ -124,6 +125,20 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
                         recyclerViewInterface.onItemClick(position, itemView);
                     }
                 }
+            });
+
+            // Long press on album cover for quick play
+            imageCoverView.setOnLongClickListener(view -> {
+                if (recyclerViewInterface != null) {
+                    int position = getAdapterPosition();
+                    if (position != RecyclerView.NO_POSITION) {
+                        if (recyclerViewInterface instanceof PlaylistView) {
+                            recyclerViewInterface.onAlbumCoverLongClick(position);
+                        }
+                        return true;
+                    }
+                }
+                return false;
             });
         }
     }

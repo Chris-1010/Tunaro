@@ -372,4 +372,21 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         Intent intent = new Intent(this, SongView.class);
         startActivity(intent);
     }
+
+    // Quick play functionality
+    public void onAlbumCoverLongClick(int position) {
+        SongModel clickedSong = adapter.getSongs().get(position);
+
+        // Play the song immediately using PlaybackManager
+        if (!playbackManager.isConnected()) {
+            Toast.makeText(this, "Connecting to Spotify...", Toast.LENGTH_SHORT).show();
+            playbackManager.connectSpotify(this, () -> {
+                playbackManager.playSong(clickedSong);
+                Toast.makeText(this, "Playing " + clickedSong.getName(), Toast.LENGTH_SHORT).show();
+            });
+        } else {
+            playbackManager.playSong(clickedSong);
+            Toast.makeText(this, "Playing " + clickedSong.getName(), Toast.LENGTH_SHORT).show();
+        }
+    }
 }
