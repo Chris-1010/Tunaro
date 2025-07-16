@@ -368,6 +368,10 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     }
 
     private void updateTrackInfo(SongModel song) {
+        if (isDestroyed() || isFinishing()) {
+            return;
+        }
+
         // Update song info without animation
         if (songName != null) {
             songName.setText(song.getName());
@@ -378,7 +382,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         }
 
         // Load album artwork
-        if (albumCover != null) {
+        if (albumCover != null && !isDestroyed() && !isFinishing()) {
             Glide.with(this)
                     .load(song.getAlbumCoverUrl())
                     .into(albumCover);
