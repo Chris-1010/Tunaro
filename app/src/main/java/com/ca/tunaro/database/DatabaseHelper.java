@@ -864,4 +864,72 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     //#endregion
+
+    //#region ======== TIME FORMATTING UTILITY METHODS ========
+
+    /**
+     * Get a relative time description from a Date object
+     * @param date The date to get relative time for
+     * @return A human-readable relative time string (e.g., "2 hours ago", "1 day ago")
+     */
+    public static String getRelativeTimeDescription(java.util.Date date) {
+        if (date == null) return "Unknown time";
+
+        long currentTime = System.currentTimeMillis();
+        long targetTime = date.getTime();
+        long timeDiff = currentTime - targetTime;
+
+        // Convert to different time units
+        long minutes = timeDiff / (1000 * 60);
+        long hours = timeDiff / (1000 * 60 * 60);
+        long days = timeDiff / (1000 * 60 * 60 * 24);
+        long weeks = days / 7;
+        long months = days / 30; // Approximate
+        long years = days / 365; // Approximate
+
+        // Return appropriate description based on time difference
+        if (minutes < 60) {
+            if (minutes <= 1) return "1 minute ago";
+            return minutes + " minutes ago";
+        } else if (hours < 24) {
+            if (hours == 1) return "1 hour ago";
+            return hours + " hours ago";
+        } else if (days < 7) {
+            if (days == 1) return "1 day ago";
+            return days + " days ago";
+        } else if (weeks < 4) {
+            if (weeks == 1) return "1 week ago";
+            return weeks + " weeks ago";
+        } else if (months < 12) {
+            if (weeks == 4 || months == 1) return "1 month ago";
+            return months + " months ago";
+        } else {
+            if (months == 12 || years == 1) return "1 year ago";
+            return years + " years ago";
+        }
+    }
+
+    /**
+     * Get a relative time description from a timestamp string
+     * @param timestamp The UTC timestamp string in format "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
+     * @return A human-readable relative time string, or "Unknown" if parsing fails
+     */
+    public static String getRelativeTimeDescription(String timestamp) {
+        if (timestamp == null || timestamp.trim().isEmpty()) {
+            return "Unknown time";
+        }
+
+        try {
+            java.text.SimpleDateFormat inputFormat = new java.text.SimpleDateFormat(
+                    "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
+            inputFormat.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+            java.util.Date date = inputFormat.parse(timestamp);
+
+            return getRelativeTimeDescription(date);
+        } catch (java.text.ParseException e) {
+            return "Unknown";
+        }
+    }
+
+//#endregion
 }
