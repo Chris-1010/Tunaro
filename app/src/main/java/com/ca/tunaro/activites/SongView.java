@@ -310,10 +310,10 @@ public class SongView extends BaseActivity {
             if (weeks == 1) return "1 week ago";
             return weeks + " weeks ago";
         } else if (months < 12) {
-            if (months == 1) return "1 month ago";
+            if (weeks == 4 || months == 1) return "1 month ago";
             return months + " months ago";
         } else {
-            if (years == 1) return "1 year ago";
+            if (months == 12 || years == 1) return "1 year ago";
             return years + " years ago";
         }
     }
