@@ -266,6 +266,7 @@ public class SongView extends BaseActivity {
     private Map<String, Integer> groupListensByTimePeriod(List<String> timestamps) {
         Map<String, Integer> grouped = new LinkedHashMap<>();
         java.text.SimpleDateFormat inputFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
+        inputFormat.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
 
         for (String timestamp : timestamps) {
             try {
