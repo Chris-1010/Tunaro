@@ -22,7 +22,6 @@ public class SpotifyHistoryFetcher {
     private static final String TAG = "SpotifyHistoryFetcher";
     private static final int ITEMS_PER_REQUEST = 50;
 
-    private final Context context;
     private final SpotifyApi spotifyApi;
     private final DatabaseHelper dbHelper;
     private final SimpleDateFormat utcFormat;
@@ -42,7 +41,6 @@ public class SpotifyHistoryFetcher {
     }
 
     public SpotifyHistoryFetcher(Context context, SpotifyApi spotifyApi) {
-        this.context = context;
         this.spotifyApi = spotifyApi;
         this.dbHelper = new DatabaseHelper(context);
         this.utcFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault());
@@ -153,6 +151,10 @@ public class SpotifyHistoryFetcher {
         totalProcessed.set(0);
         totalAdded.set(0);
         isCancelled = false;
+    }
+
+    public boolean isCancelled() {
+        return isCancelled;
     }
 
     public void cancel() {

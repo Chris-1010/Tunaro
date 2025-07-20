@@ -206,13 +206,29 @@ public class SettingsActivity extends AppCompatActivity {
         historySyncProgress = findViewById(R.id.history_sync_progress);
         historySyncStatus = findViewById(R.id.history_sync_status);
 
-        startHistorySyncButton.setOnClickListener(v -> startHistorySync());
+        startHistorySyncButton.setOnClickListener(v -> {
+            if (historyFetcher != null && !historyFetcher.isCancelled()) {
+                // Currently syncing - cancel it
+                historyFetcher.cancel();
+                updateSyncUI(false);
+                historySyncStatus.setText("Sync cancelled");
+                historySyncStatus.setTextColor(getResources().getColor(android.R.color.secondary_text_light));
+            } else {
+                // Start new sync
+                startHistorySync();
+            }
+        });
 
         // Initial UI state
         updateSyncUI(false);
     }
 
     private void startHistorySync() {
+        // Cancel any existing sync first
+        if (historyFetcher != null) {
+            historyFetcher.cancel();
+        }
+
         MainActivity mainActivity = MainActivity.getInstance();
         if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
             Toast.makeText(this, "Spotify API not available", Toast.LENGTH_SHORT).show();
@@ -276,11 +292,10 @@ public class SettingsActivity extends AppCompatActivity {
 
 
     private void updateSyncUI(boolean isSyncing) {
-        startHistorySyncButton.setEnabled(!isSyncing);
         historySyncProgress.setVisibility(isSyncing ? View.VISIBLE : View.GONE);
 
         if (isSyncing) {
-            startHistorySyncButton.setText("Syncing...");
+            startHistorySyncButton.setText("Cancel Sync");
             historySyncStatus.setTextColor(getResources().getColor(android.R.color.primary_text_light));
         } else {
             startHistorySyncButton.setText("Start Manual Sync");
