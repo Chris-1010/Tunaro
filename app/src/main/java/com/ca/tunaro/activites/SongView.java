@@ -112,6 +112,18 @@ public class SongView extends BaseActivity {
         albumView.setText(albumName);
         durationView.setText(duration);
         if (!popularity.equals("0")) popularityView.setText("Popularity: " + popularity + "%");
+        else selectedSong.fetchPopularityAsync(new SongModel.PopularityCallback() {
+        // Fetch it from Spotify, asynchronously
+            @Override
+            public void onPopularityFetched(int popularity) {
+                popularityView.setText("Popularity: " + popularity + "%");
+            }
+
+            @Override
+            public void onError(String error) {
+
+            }
+        });
     }
 
     private void setupTabs() {
