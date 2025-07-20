@@ -33,6 +33,93 @@
             android:orientation="vertical"
             android:padding="16dp">
 
+            <!--#region History Sync Section -->
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="32dp"
+                android:layout_marginBottom="16dp"
+                android:text="Listening History Sync"
+                android:textColor="@color/white"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:text="Sync your Spotify listening history to fill gaps when the app wasn't running"
+                android:textColor="@color/white"
+                android:textSize="14sp" />
+
+            <!--#region Background Sync Settings -->
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Enable background sync"
+                    android:textColor="@color/white"
+                    android:textSize="16sp" />
+
+                <CheckBox
+                    android:id="@+id/enable_background_sync"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/background_sync_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/background_sync_details"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <!--#endregion-->
+
+            <Button
+                android:id="@+id/start_history_sync_button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:text="Start Manual Sync"
+                android:textSize="16sp" />
+
+            <ProgressBar
+                android:id="@+id/history_sync_progress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginBottom="8dp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/history_sync_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="24dp"
+                android:textAlignment="center"
+                android:textColor="@color/white"
+                android:textSize="14sp" />
+
+            <!--#endregion-->
+
             <!--#region Data Management Section -->
 
             <TextView
