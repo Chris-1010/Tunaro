@@ -106,7 +106,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                         throw new CompletionException(new Exception("No songs retrieved"));
                     }
                     selectedPlaylist.setSongs(songs);
-                    allSongs = new ArrayList<>(songs);  // Store a copy of all songs in our ArrayList
+                    allSongs = new ArrayList<>(songs);  // Store a copy of all songs in ArrayList
 
                     runOnUiThread(() -> {
                         showLoading(false, songs.size(), selectedPlaylist.getSongCount());
