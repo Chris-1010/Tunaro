@@ -92,7 +92,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         // Get SpotifyApi instance from MainActivity
         SpotifyApi spotifyApi = null;
         try {
-            spotifyApi = SelectedPlaylistHolder.getInstance().getMainActivity().getSpotifyApi();
+            spotifyApi = MainActivity.getInstance().getSpotifyApi();
             if (spotifyApi == null) throw new Exception("SpotifyApi not available");
         } catch (Exception e) {
             finish();
@@ -112,7 +112,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                         showLoading(false, songs.size(), selectedPlaylist.getSongCount());
                         adapter = new Song_RecyclerViewAdapter(this, this, this, selectedPlaylist.getSongs());
                         recyclerView.setAdapter(adapter);
-                        setupSearch();  // Call this after adapter is initialized
+                        setupSearch();
                         setupSorting();
                     });
                 })
