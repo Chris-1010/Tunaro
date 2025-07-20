@@ -106,7 +106,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                         throw new CompletionException(new Exception("No songs retrieved"));
                     }
                     selectedPlaylist.setSongs(songs);
-                    allSongs = new ArrayList<>(songs);  // Store a copy of all songs in our ArrayList
+                    allSongs = new ArrayList<>(songs);  // Store a copy of all songs in ArrayList
 
                     runOnUiThread(() -> {
                         showLoading(false, songs.size(), selectedPlaylist.getSongCount());
@@ -275,6 +275,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             case 1: // Last Listened
                 DatabaseHelper dbHelper = new DatabaseHelper(this);
                 java.text.SimpleDateFormat inputFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
+                inputFormat.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
 
                 comparator = (song1, song2) -> {
                     // Get timestamps for both songs

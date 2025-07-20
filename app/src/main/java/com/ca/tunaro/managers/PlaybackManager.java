@@ -155,13 +155,20 @@ public class PlaybackManager {
                 isConnecting = false;
                 spotifyAppRemote = null;
 
-                Log.e(TAG, "Failed to connect to Spotify: " + throwable.getMessage(), throwable);
-                Toast.makeText(context.getApplicationContext(),
-                        "Failed to connect to Spotify. Please ensure the Spotify app is installed.",
-                        Toast.LENGTH_LONG).show();
+                Log.d(TAG, "Lost connection to Spotify. Attempting to reconnect...");
 
-                // Notify listeners
-                notifyConnectionStateChanged();
+                try {
+                    connectSpotify(applicationContext, onSuccess);
+                } catch (Exception e) {
+
+                    Log.e(TAG, "Failed to connect to Spotify: " + throwable.getMessage(), throwable);
+                    Toast.makeText(context.getApplicationContext(),
+                            "Failed to connect to Spotify. Please ensure the Spotify app is installed.",
+                            Toast.LENGTH_LONG).show();
+
+                    // Notify listeners
+                    notifyConnectionStateChanged();
+                }
             }
         });
     }

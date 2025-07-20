@@ -79,7 +79,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
                 case 1: // Last Listened
                     String lastListened = dbHelper.getMostRecentListenTimestamp(model.getId());
                     if (lastListened != null) {
-                        String formattedTime = formatListenTimeForDisplay(lastListened);
+                        String formattedTime = DatabaseHelper.getRelativeTimeDescription(lastListened);
                         holder.contextualInfoView.setText("Last listened: " + formattedTime);
                     } else {
                         holder.contextualInfoView.setText("Never listened");
@@ -166,31 +166,5 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
     private String formatDateForDisplay(Date date) {
         java.text.SimpleDateFormat formatter = new java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault());
         return formatter.format(date);
-    }
-
-    private String formatListenTimeForDisplay(String timestamp) {
-        try {
-            java.text.SimpleDateFormat inputFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
-            inputFormat.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
-            java.util.Date date = inputFormat.parse(timestamp);
-
-            assert date != null;
-            long timeDiff = System.currentTimeMillis() - date.getTime();
-            long days = timeDiff / (1000 * 60 * 60 * 24);
-            long hours = timeDiff / (1000 * 60 * 60);
-            long minutes = timeDiff / (1000 * 60);
-
-            if (days > 0) {
-                return days + " day" + (days == 1 ? "" : "s") + " ago";
-            } else if (hours > 0) {
-                return hours + " hour" + (hours == 1 ? "" : "s") + " ago";
-            } else if (minutes > 0) {
-                return minutes + " minute" + (minutes == 1 ? "" : "s") + " ago";
-            } else {
-                return "Just now";
-            }
-        } catch (java.text.ParseException e) {
-            return "Unknown";
-        }
     }
 }
