@@ -612,6 +612,20 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         Log.d("ListenHistory", "Added listen record for song ID: " + songId);
     }
 
+    public void addListenRecordWithTimestamp(String songId, String utcTimestamp) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+
+        String uuid = java.util.UUID.randomUUID().toString();
+
+        values.put(COLUMN_UUID, uuid);
+        values.put(COLUMN_SONG_ID, songId);
+        values.put(COLUMN_LISTEN_TIMESTAMP, utcTimestamp);
+
+        db.insert(TABLE_LISTEN_HISTORY, null, values);
+        db.close();
+    }
+
     public List<String> getListenHistory(String songId) {
         List<String> timestamps = new ArrayList<>();
         String selectQuery = "SELECT " + COLUMN_LISTEN_TIMESTAMP + " FROM " + TABLE_LISTEN_HISTORY +
