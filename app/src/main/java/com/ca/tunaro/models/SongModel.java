@@ -1,7 +1,10 @@
 package com.ca.tunaro.models;
 
+import com.ca.tunaro.activites.MainActivity;
+
 import java.util.Date;
 
+import se.michaelthelin.spotify.SpotifyApi;
 import se.michaelthelin.spotify.model_objects.specification.ArtistSimplified;
 
 public class SongModel {
@@ -78,6 +81,45 @@ public class SongModel {
 
     public int getPopularity() {
         return popularity;
+    }
+
+    public void fetchPopularityAsync(PopularityCallback callback) {
+        // Check if popularity is already available
+        if (popularity != 0) {
+            if (callback != null) {
+                callback.onPopularityFetched(popularity);
+            }
+            return;
+        }
+
+        MainActivity mainActivity = MainActivity.getInstance();
+        if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
+            if (callback != null) {
+                callback.onError("Spotify API not available");
+            }
+            return;
+        }
+
+        mainActivity.getSpotifyApi().getTrack(this.id)
+                .build()
+                .executeAsync()
+                .thenAccept(track -> {
+                    this.popularity = track.getPopularity();
+                    if (callback != null) {
+                        callback.onPopularityFetched(this.popularity);
+                    }
+                })
+                .exceptionally(throwable -> {
+                    if (callback != null) {
+                        callback.onError("Failed to fetch popularity: " + throwable.getMessage());
+                    }
+                    return null;
+                });
+    }
+
+    public interface PopularityCallback {
+        void onPopularityFetched(int popularity);
+        void onError(String error);
     }
 
     public String getAlbumName() {
