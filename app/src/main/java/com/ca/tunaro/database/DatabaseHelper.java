@@ -2,12 +2,14 @@ package com.ca.tunaro.database;
 
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.net.Uri;
 import android.util.Log;
 
+import com.ca.tunaro.activites.MainActivity;
 import com.ca.tunaro.models.SongNote;
 import com.ca.tunaro.models.SongSnippet;
 import com.google.gson.Gson;
@@ -58,6 +60,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     // Listen History Columns
     private static final String COLUMN_LISTEN_TIMESTAMP = "listen_timestamp";
+    private static final String CURSOR_PREF_KEY = "last_sync_cursor";
 
     // SQL to upgrade from old timestamp format
     private static final String UPGRADE_TIMESTAMP_FORMAT =
@@ -609,6 +612,20 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         Log.d("ListenHistory", "Added listen record for song ID: " + songId);
     }
 
+    public void addListenRecordWithTimestamp(String songId, String utcTimestamp) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+
+        String uuid = java.util.UUID.randomUUID().toString();
+
+        values.put(COLUMN_UUID, uuid);
+        values.put(COLUMN_SONG_ID, songId);
+        values.put(COLUMN_LISTEN_TIMESTAMP, utcTimestamp);
+
+        db.insert(TABLE_LISTEN_HISTORY, null, values);
+        db.close();
+    }
+
     public List<String> getListenHistory(String songId) {
         List<String> timestamps = new ArrayList<>();
         String selectQuery = "SELECT " + COLUMN_LISTEN_TIMESTAMP + " FROM " + TABLE_LISTEN_HISTORY +
@@ -658,13 +675,68 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return count;
     }
 
+    //#region ======== SYNC CURSOR METHODS ========
+
+    public void saveLastSyncCursor(String cursor) {
+        // Save to SharedPreferences
+        SharedPreferences prefs = MainActivity.getInstance().getSharedPreferences("TunaroPrefs", Context.MODE_PRIVATE);
+        prefs.edit().putString(CURSOR_PREF_KEY, cursor).apply();
+    }
+
+    public String getLastSyncCursor() {
+        SharedPreferences prefs = MainActivity.getInstance().getSharedPreferences("TunaroPrefs", Context.MODE_PRIVATE);
+        return prefs.getString(CURSOR_PREF_KEY, null);
+    }
+
+    public boolean hasLastSyncCursor() {
+        return getLastSyncCursor() != null;
+    }
+
+    // Batch method to check for existing listens within song duration
+    // Check if any listen exists within [timestamp - duration, timestamp + duration]
+    public boolean hasListenWithinDuration(String songId, long spotifyTimestamp, int songDurationMs) {
+        SQLiteDatabase db = this.getReadableDatabase();
+
+        // Calculate time window: spotify timestamp +/- song duration
+        long windowStart = spotifyTimestamp - songDurationMs;
+        long windowEnd = spotifyTimestamp + songDurationMs;
+
+        // Convert to UTC timestamp strings for comparison
+        java.text.SimpleDateFormat utcFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
+        utcFormat.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+
+        String windowStartStr = utcFormat.format(new java.util.Date(windowStart));
+        String windowEndStr = utcFormat.format(new java.util.Date(windowEnd));
+
+        Cursor cursor = db.rawQuery(
+                "SELECT COUNT(*) FROM " + TABLE_LISTEN_HISTORY +
+                        " WHERE " + COLUMN_SONG_ID + " = ? AND " +
+                        COLUMN_LISTEN_TIMESTAMP + " >= ? AND " +
+                        COLUMN_LISTEN_TIMESTAMP + " <= ?",
+                new String[]{songId, windowStartStr, windowEndStr}
+        );
+
+        boolean hasListen = false;
+        if (cursor.moveToFirst()) {
+            hasListen = cursor.getInt(0) > 0;
+        }
+
+        cursor.close();
+        db.close();
+        return hasListen;
+    }
+
+    //#endregion
+
     //#endregion
 
     //#region ======== EXPORT/IMPORT METHODS ========
+
     public static class ExportData {
         public List<SongNote> notes;
         public List<String> archivedPlaylists;
         public List<SongSnippet> snippets;
+        public String lastSyncCursor;
         public String exportDate;
         public int databaseVersion;
 
@@ -686,6 +758,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
         // Export all snippets
         exportData.snippets = dbHelper.getAllSnippets();
+
+        // Export last sync cursor
+        exportData.lastSyncCursor = dbHelper.getLastSyncCursor();
 
         // Return JSON string
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -754,6 +829,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             }
         }
 
+        // Import sync cursor
+        if (importData.lastSyncCursor != null) {
+            dbHelper.saveLastSyncCursor(importData.lastSyncCursor);
+        }
+
         return stats;
     }
 
@@ -798,4 +878,72 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     //#endregion
+
+    //#region ======== TIME FORMATTING UTILITY METHODS ========
+
+    /**
+     * Get a relative time description from a Date object
+     * @param date The date to get relative time for
+     * @return A human-readable relative time string (e.g., "2 hours ago", "1 day ago")
+     */
+    public static String getRelativeTimeDescription(java.util.Date date) {
+        if (date == null) return "Unknown time";
+
+        long currentTime = System.currentTimeMillis();
+        long targetTime = date.getTime();
+        long timeDiff = currentTime - targetTime;
+
+        // Convert to different time units
+        long minutes = timeDiff / (1000 * 60);
+        long hours = timeDiff / (1000 * 60 * 60);
+        long days = timeDiff / (1000 * 60 * 60 * 24);
+        long weeks = days / 7;
+        long months = days / 30; // Approximate
+        long years = days / 365; // Approximate
+
+        // Return appropriate description based on time difference
+        if (minutes < 60) {
+            if (minutes <= 1) return "1 minute ago";
+            return minutes + " minutes ago";
+        } else if (hours < 24) {
+            if (hours == 1) return "1 hour ago";
+            return hours + " hours ago";
+        } else if (days < 7) {
+            if (days == 1) return "1 day ago";
+            return days + " days ago";
+        } else if (weeks < 4) {
+            if (weeks == 1) return "1 week ago";
+            return weeks + " weeks ago";
+        } else if (months < 12) {
+            if (weeks == 4 || months == 1) return "1 month ago";
+            return months + " months ago";
+        } else {
+            if (months == 12 || years == 1) return "1 year ago";
+            return years + " years ago";
+        }
+    }
+
+    /**
+     * Get a relative time description from a timestamp string
+     * @param timestamp The UTC timestamp string in format "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
+     * @return A human-readable relative time string, or "Unknown" if parsing fails
+     */
+    public static String getRelativeTimeDescription(String timestamp) {
+        if (timestamp == null || timestamp.trim().isEmpty()) {
+            return "Unknown time";
+        }
+
+        try {
+            java.text.SimpleDateFormat inputFormat = new java.text.SimpleDateFormat(
+                    "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
+            inputFormat.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+            java.util.Date date = inputFormat.parse(timestamp);
+
+            return getRelativeTimeDescription(date);
+        } catch (java.text.ParseException e) {
+            return "Unknown";
+        }
+    }
+
+//#endregion
 }

@@ -56,6 +56,7 @@ dependencies {
     implementation("androidx.activity:activity:1.9.1") // Maven dependency
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
+    implementation("androidx.work:work-runtime:2.9.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

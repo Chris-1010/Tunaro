@@ -130,7 +130,7 @@ public class LibraryActivity extends AppCompatActivity implements Library_Recycl
                                 track.getAlbum().getReleaseDate()
                         );
 
-                        allSongs.add(songModel);  // Add to our stored list
+                        allSongs.add(songModel);  // Add to stored list
                         adapter.addSong(songModel);
 
                         new Handler(Looper.getMainLooper()).postDelayed(() -> {
