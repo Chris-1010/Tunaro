@@ -358,7 +358,7 @@ public class SettingsActivity extends AppCompatActivity {
     private void updateBackgroundSyncStatus(TextView statusView, TextView detailsView, boolean enabled) {
         if (enabled) {
             statusView.setText("✓ Automatic sync enabled");
-            statusView.setTextColor(getResources().getColor(android.R.color.holo_green_dark));
+            statusView.setTextColor(androidx.core.content.ContextCompat.getColor(this, android.R.color.holo_green_light));
 
             // Get last sync stats and next sync time
             String lastSyncStats = getLastSyncStats();
@@ -374,14 +374,14 @@ public class SettingsActivity extends AppCompatActivity {
 
             if (details.length() > 0) {
                 detailsView.setText(details.toString());
-                detailsView.setTextColor(getResources().getColor(android.R.color.secondary_text_light));
+                detailsView.setTextColor(androidx.core.content.ContextCompat.getColor(this, android.R.color.white));
                 detailsView.setVisibility(View.VISIBLE);
             } else {
                 detailsView.setVisibility(View.GONE);
             }
         } else {
             statusView.setText("Manual sync only");
-            statusView.setTextColor(getResources().getColor(android.R.color.secondary_text_light));
+            statusView.setTextColor(androidx.core.content.ContextCompat.getColor(this, android.R.color.holo_orange_light));
             detailsView.setVisibility(View.GONE);
         }
     }
@@ -410,12 +410,25 @@ public class SettingsActivity extends AppCompatActivity {
                     .orElse(null);
 
             if (workInfo != null && workInfo.getState() == androidx.work.WorkInfo.State.ENQUEUED) {
-                // Calculate next run time (current time + 2 days as rough estimate)
-                long nextRun = System.currentTimeMillis() + (2 * 24 * 60 * 60 * 1000L);
-                java.text.SimpleDateFormat formatter = new java.text.SimpleDateFormat(
-                        "MMM dd 'at' HH:mm", java.util.Locale.getDefault());
-                String dateStr = formatter.format(new java.util.Date(nextRun));
-                return "Next sync: " + dateStr;
+                long lastSyncTime = prefs.getLong("last_sync_time", -1);
+
+                if (lastSyncTime > 0) {
+                    // Next sync is 2 days after the last sync
+                    long nextRun = lastSyncTime + (2 * 24 * 60 * 60 * 1000L);
+
+                    // If that time has already passed, it means sync is overdue
+                    if (nextRun <= System.currentTimeMillis()) {
+                        return "Next sync: Overdue (will run soon)";
+                    }
+
+                    java.text.SimpleDateFormat formatter = new java.text.SimpleDateFormat(
+                            "MMM dd 'at' HH:mm", java.util.Locale.getDefault());
+                    String dateStr = formatter.format(new java.util.Date(nextRun));
+                    return "Next sync: " + dateStr;
+                } else {
+                    // No previous sync recorded
+                    return "Next sync: (no previous sync found)";
+                }
             }
         } catch (Exception e) {
             Log.e("SettingsActivity", "Error getting next sync time", e);
