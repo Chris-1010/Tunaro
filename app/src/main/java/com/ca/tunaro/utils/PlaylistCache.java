@@ -57,6 +57,12 @@ public class PlaylistCache {
                 return null;
             }
 
+            // Check if cached playlists are valid. Use last cached playlist as a check.
+            if (playlists.get(playlists.size() - 1).getPlaylistName() == null || playlists.get(playlists.size() - 1).getImage() == null) {
+                Log.d(TAG, "Cached playlists are invalid");
+                return null;
+            }
+
             Log.d(TAG, "Successfully retrieved " + playlists.size() + " playlists from cache");
             return playlists;
         } catch (Exception e) {
