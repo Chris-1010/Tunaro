@@ -60,7 +60,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     // Listen History Columns
     private static final String COLUMN_LISTEN_TIMESTAMP = "listen_timestamp";
-    private static final String CURSOR_PREF_KEY = "last_sync_cursor";
 
     // SQL to upgrade from old timestamp format
     private static final String UPGRADE_TIMESTAMP_FORMAT =
@@ -675,22 +674,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return count;
     }
 
-    //#region ======== SYNC CURSOR METHODS ========
-
-    public void saveLastSyncCursor(String cursor) {
-        // Save to SharedPreferences
-        SharedPreferences prefs = MainActivity.getInstance().getSharedPreferences("TunaroPrefs", Context.MODE_PRIVATE);
-        prefs.edit().putString(CURSOR_PREF_KEY, cursor).apply();
-    }
-
-    public String getLastSyncCursor() {
-        SharedPreferences prefs = MainActivity.getInstance().getSharedPreferences("TunaroPrefs", Context.MODE_PRIVATE);
-        return prefs.getString(CURSOR_PREF_KEY, null);
-    }
-
-    public boolean hasLastSyncCursor() {
-        return getLastSyncCursor() != null;
-    }
 
     // Batch method to check for existing listens within song duration
     // Check if any listen exists within [timestamp - duration, timestamp + duration]
@@ -736,7 +719,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         public List<SongNote> notes;
         public List<String> archivedPlaylists;
         public List<SongSnippet> snippets;
-        public String lastSyncCursor;
         public String exportDate;
         public int databaseVersion;
 
@@ -758,9 +740,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
         // Export all snippets
         exportData.snippets = dbHelper.getAllSnippets();
-
-        // Export last sync cursor
-        exportData.lastSyncCursor = dbHelper.getLastSyncCursor();
 
         // Return JSON string
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -827,11 +806,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     stats.snippetsAdded++;
                 }
             }
-        }
-
-        // Import sync cursor
-        if (importData.lastSyncCursor != null) {
-            dbHelper.saveLastSyncCursor(importData.lastSyncCursor);
         }
 
         return stats;
