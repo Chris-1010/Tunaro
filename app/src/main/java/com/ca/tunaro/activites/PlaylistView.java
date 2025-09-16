@@ -90,7 +90,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         showLoading(true, 0, selectedPlaylist.getSongCount());
 
         // Get SpotifyApi instance from MainActivity
-        SpotifyApi spotifyApi = null;
+        SpotifyApi spotifyApi;
         try {
             spotifyApi = MainActivity.getInstance().getSpotifyApi();
             if (spotifyApi == null) throw new Exception("SpotifyApi not available");
@@ -148,6 +148,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         searchIcon = findViewById(R.id.search_icon);
         searchBar = findViewById(R.id.search_bar);
 
+        searchIcon.setVisibility(View.VISIBLE);
+
         searchIcon.setOnClickListener(v -> {
             if (searchBar.getVisibility() == View.GONE) {
                 // Show search bar
@@ -201,6 +203,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         sortIcon = findViewById(R.id.sort_icon);
         sortDirectionIcon = findViewById(R.id.sort_direction_icon);
         sortSpinner = findViewById(R.id.sort_spinner);
+
+        sortIcon.setVisibility(View.VISIBLE);
 
         // Initialize SharedPreferences
         prefs = getSharedPreferences("PlaylistPrefs", MODE_PRIVATE);
