@@ -285,6 +285,7 @@ public class PlaybackManager {
 
     public void togglePlayPause() {
         if (spotifyAppRemote != null && isConnected) {
+            checkPlaybackDevice();
             if (isPlaying) {
                 spotifyAppRemote.getPlayerApi().pause()
                         .setResultCallback(empty -> {
