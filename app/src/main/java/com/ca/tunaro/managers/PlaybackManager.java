@@ -310,8 +310,8 @@ public class PlaybackManager {
                         new DeviceChecker.DeviceCheckCallback() {
                             @Override
                             public void onDeviceCheckResult(boolean isCorrectDevice, String message) {
-                                if (!isCorrectDevice && DeviceChecker.isDeviceCheckEnabled(applicationContext)) {
-                                    showToast("Device warning: " + message);
+                                if (!isCorrectDevice && PlaybackManager.instance.isPlaying() && DeviceChecker.isDeviceCheckEnabled(applicationContext)) {
+                                    showToast(message);
                                 }
                             }
 
