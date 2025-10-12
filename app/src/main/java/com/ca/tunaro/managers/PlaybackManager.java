@@ -393,7 +393,7 @@ public class PlaybackManager {
 
             listenRunnable = () -> {
                 if (isTrackingListen && !hasRecordedListen && !isSnippetMode) {
-                    recordListen(trackId);
+                    recordListen();
                     hasRecordedListen = true;
                 }
             };
@@ -417,13 +417,16 @@ public class PlaybackManager {
         listenStartTime = 0;
     }
 
-    private void recordListen(String songId) {
+    private void recordListen() {
         if (applicationContext != null && !isDeviceWarningActive) {
             DatabaseHelper dbHelper = new DatabaseHelper(applicationContext);
-            dbHelper.addListenRecord(songId);
+            String songId = currentSong.getId();
+
+            if (!dbHelper.hasListenWithinDuration(currentSong.getId(), System.currentTimeMillis(), currentSong.getDuration()))
+                dbHelper.addListenRecord(songId);
 
             showToast("Recorded listen for song");
-            Log.d(TAG, "Recorded listen for song: " + songId);
+            Log.d("TAG", "Recorded listen for song: " + currentSong.getName() + "(" + currentSong.getArtist() + ")");
         }
     }
 
