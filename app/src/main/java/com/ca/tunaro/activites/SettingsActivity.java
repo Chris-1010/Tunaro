@@ -168,6 +168,10 @@ public class SettingsActivity extends BaseActivity {
 
     private void discoverAvailableDevices() {
         MainActivity mainActivity = MainActivity.getInstance();
+        if (mainActivity == null) {
+            showToast("MainActivity not available");
+            return;
+        }
         if (mainActivity.getSpotifyApi() == null) {
             showToast("Spotify API not available");
             return;
@@ -235,7 +239,7 @@ public class SettingsActivity extends BaseActivity {
         }
 
         MainActivity mainActivity = MainActivity.getInstance();
-        if (mainActivity.getSpotifyApi() == null) {
+        if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
             showToast("Spotify API not available");
             return;
         }

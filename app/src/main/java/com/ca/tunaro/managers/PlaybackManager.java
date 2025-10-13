@@ -418,9 +418,9 @@ public class PlaybackManager {
             DatabaseHelper dbHelper = new DatabaseHelper(applicationContext);
             String songId = currentSong.getId();
 
-            if (dbHelper.hasListenWithinDuration(currentSong.getId(), System.currentTimeMillis(), currentSong.getDuration()))
+            if (dbHelper.hasListenWithinDuration(currentSong.getId(), System.currentTimeMillis(), currentSong.getDuration())) {
                 Log.d(TAG, "Recent listen found for song '" + currentSong.getName() + "'. Skipping recording.");
-            else {
+            } else {
                 dbHelper.addListenRecord(songId);
                 showToast("Recorded listen for song");
                 Log.d(TAG, "Recorded listen for song: " + currentSong.getName() + " (" + currentSong.getArtist() + ")");

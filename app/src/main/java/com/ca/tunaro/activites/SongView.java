@@ -247,8 +247,14 @@ public class SongView extends BaseActivity {
 
         // Group listens by relative time periods
         Map<String, Integer> groupedListens = groupListensByTimePeriod(listenHistory);
-        if (playbackManager.isConnected() && playbackManager.isPlaying() && playbackManager.getCurrentSong() == selectedSong && !groupedListens.containsKey("1 minute ago"))
+        if (
+            playbackManager.isConnected() &&
+            playbackManager.isPlaying() &&
+            playbackManager.getCurrentSong() == selectedSong &&
+            !groupedListens.containsKey("1 minute ago")
+        ) {
             groupedListens.put("Just Now", 1);
+        }
 
         // Create a LinearLayout to hold the history items
         LinearLayout historyContainer = new LinearLayout(this);
