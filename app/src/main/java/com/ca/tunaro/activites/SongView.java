@@ -48,6 +48,9 @@ public class SongView extends BaseActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        if (checkForRecovery()) return;
+
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_song_view);
 
@@ -79,7 +82,6 @@ public class SongView extends BaseActivity {
 
         // Set up basic song info
         setupBasicSongInfo();
-
         setupTabs();
         setupListeningHistory();
 
@@ -116,7 +118,7 @@ public class SongView extends BaseActivity {
         durationView.setText(duration);
         if (!popularity.equals("0")) popularityView.setText("Popularity: " + popularity + "%");
         else selectedSong.fetchPopularityAsync(new SongModel.PopularityCallback() {
-        // Fetch it from Spotify, asynchronously
+            // Fetch it from Spotify, asynchronously
             @Override
             public void onPopularityFetched(int popularity) {
                 popularityView.setText("Popularity: " + popularity + "%");
@@ -245,7 +247,8 @@ public class SongView extends BaseActivity {
 
         // Group listens by relative time periods
         Map<String, Integer> groupedListens = groupListensByTimePeriod(listenHistory);
-        if (playbackManager.isConnected() && playbackManager.isPlaying() && playbackManager.getCurrentSong() == selectedSong && !groupedListens.containsKey("1 minute ago")) groupedListens.put("Just Now", 1);
+        if (playbackManager.isConnected() && playbackManager.isPlaying() && playbackManager.getCurrentSong() == selectedSong && !groupedListens.containsKey("1 minute ago"))
+            groupedListens.put("Just Now", 1);
 
         // Create a LinearLayout to hold the history items
         LinearLayout historyContainer = new LinearLayout(this);

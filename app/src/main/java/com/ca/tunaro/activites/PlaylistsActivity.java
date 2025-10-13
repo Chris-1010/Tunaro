@@ -42,6 +42,9 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        if (checkForRecovery()) return;
+
         setContentView(R.layout.activity_playlists);
 
         mainActivity = MainActivity.getInstance();

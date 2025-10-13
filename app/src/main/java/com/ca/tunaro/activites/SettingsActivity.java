@@ -24,13 +24,14 @@ import androidx.work.NetworkType;
 import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
 
+import com.ca.tunaro.BaseActivity;
 import com.ca.tunaro.R;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.utils.SpotifyHistoryFetcher;
 
 import java.util.concurrent.TimeUnit;
 
-public class SettingsActivity extends AppCompatActivity {
+public class SettingsActivity extends BaseActivity {
     private static final String TAG = "SettingsActivity";
 
     private SwitchCompat deviceCheckSwitch;
@@ -43,6 +44,9 @@ public class SettingsActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        if (checkForRecovery()) return;
+
         setContentView(R.layout.activity_settings);
 
         prefs = getSharedPreferences("TunaroPrefs", MODE_PRIVATE);

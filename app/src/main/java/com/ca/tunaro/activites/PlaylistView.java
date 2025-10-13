@@ -64,6 +64,9 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        if (checkForRecovery()) return;
+
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_playlist_view);
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
@@ -77,7 +80,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
         if (selectedPlaylist == null) {
             // Handle error - playlist not found
-            Toast.makeText(this, "Error: No playlist selected", Toast.LENGTH_SHORT).show();
+            showToast("Error: No playlist selected");
             finish();
             return;
         }
@@ -368,7 +371,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         SongModel clickedSong = adapter.getSongs().get(position);
 
         // Set the selected song in the singleton
-        MainActivity mainActivity = SelectedSongHolder.getInstance().getMainActivity();
+        MainActivity mainActivity = MainActivity.getInstance();
         SelectedSongHolder.getInstance().setSelectedSong(clickedSong, mainActivity);
 
         // Start the SongView activity

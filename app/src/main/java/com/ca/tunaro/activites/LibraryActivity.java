@@ -17,6 +17,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.ca.tunaro.BaseActivity;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.adapters.LibrarySongAdapter;
 import com.ca.tunaro.interfaces.Library_RecyclerViewInterface;
@@ -30,7 +31,7 @@ import java.util.List;
 import se.michaelthelin.spotify.SpotifyApi;
 import se.michaelthelin.spotify.requests.data.tracks.GetTrackRequest;
 
-public class LibraryActivity extends AppCompatActivity implements Library_RecyclerViewInterface {
+public class LibraryActivity extends BaseActivity implements Library_RecyclerViewInterface {
     private static final String TAG = "LibraryActivity";
 
     private MainActivity mainActivity;
@@ -43,8 +44,12 @@ public class LibraryActivity extends AppCompatActivity implements Library_Recycl
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        if (checkForRecovery()) return;
+
         setContentView(R.layout.activity_library);
 
+        Log.d(TAG, "LibraryActivity onCreate MainActivity.getInstance()");
         mainActivity = MainActivity.getInstance();
 
         if (mainActivity != null) {
@@ -75,7 +80,8 @@ public class LibraryActivity extends AppCompatActivity implements Library_Recycl
     private void setupSearchBar() {
         searchBar.addTextChangedListener(new TextWatcher() {
             @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
 
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
@@ -83,7 +89,8 @@ public class LibraryActivity extends AppCompatActivity implements Library_Recycl
             }
 
             @Override
-            public void afterTextChanged(Editable s) {}
+            public void afterTextChanged(Editable s) {
+            }
         });
     }
 
@@ -108,8 +115,15 @@ public class LibraryActivity extends AppCompatActivity implements Library_Recycl
     }
 
     private void loadSongsSequentially(List<String> songIds, int index) {
+        loadSongsSequentially(songIds, index, null);
+    }
+
+    private void loadSongsSequentially(List<String> songIds, int index, Runnable onComplete) {
         if (index >= songIds.size()) {
             setLoadingState(false);
+            if (onComplete != null) {
+                onComplete.run();
+            }
             return;
         }
 
@@ -132,11 +146,11 @@ public class LibraryActivity extends AppCompatActivity implements Library_Recycl
                                 track.getAlbum().getReleaseDate()
                         );
 
-                        allSongs.add(songModel);  // Add to stored list
+                        allSongs.add(songModel);
                         adapter.addSong(songModel);
 
                         new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                            loadSongsSequentially(songIds, index + 1);
+                            loadSongsSequentially(songIds, index + 1, onComplete);
                         }, 100);
                     });
                 })
