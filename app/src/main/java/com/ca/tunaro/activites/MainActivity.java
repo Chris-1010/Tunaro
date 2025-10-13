@@ -56,14 +56,13 @@ public class MainActivity extends AppCompatActivity {
 
         // Set the singleton instance
         instance = this;
+        Log.d(TAG, "onCreate: MainActivity instance is now " + instance);
 
         // Initialize these here
         CLIENT_ID = getString(R.string.spotify_client_id);
         CLIENT_SECRET = getString(R.string.spotify_client_secret);
         REDIRECT_URI = SpotifyHttpManager.makeUri(getString(R.string.redirect_uri));
 
-        // Initialize the CompletableFuture
-        authenticationFuture = new CompletableFuture<>();
 
         // Initialize the PlaylistSetup Class
         PlaylistSetup.initialize(this);
@@ -74,24 +73,46 @@ public class MainActivity extends AppCompatActivity {
                 REDIRECT_URI.toString()
         );
 
+        // Initialize the CompletableFuture
+        authenticationFuture = new CompletableFuture<>();
+
         // Start authentication
-        if (spotifyApi == null) {
-            authenticateSpotify()
-                    .thenRunAsync(() -> {
-                        // Launch HomeActivity after authentication
-                        runOnUiThread(() -> {
-                            Intent intent = new Intent(MainActivity.this, HomeActivity.class);
-                            startActivity(intent);
-                        });
-                    }, executor)
-                    .exceptionally(throwable -> {
-                        runOnUiThread(() -> {
-                            showToast("Error: " + throwable.getMessage());
-                            finish(); // Close app if authentication fails
-                        });
-                        return null;
+        authenticateSpotify()
+                .thenRunAsync(() -> {
+                    // Launch HomeActivity after authentication
+                    runOnUiThread(() -> {
+                        Intent intent = new Intent(MainActivity.this, HomeActivity.class);
+                        startActivity(intent);
                     });
+                }, executor)
+                .exceptionally(throwable -> {
+                    runOnUiThread(() -> {
+                        showToast("Error: " + throwable.getMessage());
+                        finish(); // Close app if authentication fails
+                    });
+                    return null;
+                });
+
+    }
+
+    @Override
+    protected void onDestroy() {
+        // Clear singleton reference first
+        Log.d(TAG, "MainActivity onDestroy");
+        instance = null;
+
+        // Disconnect Spotify
+        if (mSpotifyAppRemote != null) {
+            SpotifyAppRemote.disconnect(mSpotifyAppRemote);
+            mSpotifyAppRemote = null;
         }
+
+        // Shutdown executor
+        if (executor != null && !executor.isShutdown()) {
+            executor.shutdown();
+        }
+
+        super.onDestroy();
     }
 
     private CompletableFuture<Void> authenticateSpotify() {
@@ -152,30 +173,6 @@ public class MainActivity extends AppCompatActivity {
                     });
                     return null;
                 });
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-    }
-
-    @Override
-    protected void onDestroy() {
-        // Clear singleton reference first
-        instance = null;
-
-        // Disconnect Spotify
-        if (mSpotifyAppRemote != null) {
-            SpotifyAppRemote.disconnect(mSpotifyAppRemote);
-            mSpotifyAppRemote = null;
-        }
-
-        // Shutdown executor
-        if (executor != null && !executor.isShutdown()) {
-            executor.shutdown();
-        }
-
-        super.onDestroy();
     }
 
     @Override
@@ -240,7 +237,7 @@ public class MainActivity extends AppCompatActivity {
 
     private String getAccessToken() {
         SharedPreferences prefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
-        return prefs.getString("spotify_access_token", null); // Returns null if the token is not found
+        return prefs.getString("spotify_access_token", null);
     }
 
     // Getters for important objects
