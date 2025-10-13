@@ -12,6 +12,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -141,8 +142,8 @@ public class LibraryActivity extends AppCompatActivity implements Library_Recycl
                 })
                 .exceptionally(throwable -> {
                     runOnUiThread(() -> {
-                        loadSongsSequentially(songIds, index + 1);
                         showToast("Error loading song: " + throwable.getMessage());
+                        loadSongsSequentially(songIds, index + 1, onComplete);
                     });
                     return null;
                 });
