@@ -27,10 +27,6 @@ public class SelectedPlaylistHolder {
         return selectedPlaylist;
     }
 
-    public MainActivity getMainActivity() {
-        return MainActivity.getInstance();
-    }
-
     public void clearSelectedPlaylist() {
         selectedPlaylist = null;
     }
