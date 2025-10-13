@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -41,6 +42,8 @@ import java.util.concurrent.CompletionException;
 import se.michaelthelin.spotify.SpotifyApi;
 
 public class PlaylistView extends BaseActivity implements Song_RecyclerViewInterface {
+    private static final String TAG = "PlaylistView";
+
     private PlaylistModel selectedPlaylist;
     private Song_RecyclerViewAdapter adapter;
 
@@ -61,6 +64,9 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        if (checkForRecovery()) return;
+
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_playlist_view);
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
@@ -74,7 +80,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
         if (selectedPlaylist == null) {
             // Handle error - playlist not found
-            Toast.makeText(this, "Error: No playlist selected", Toast.LENGTH_SHORT).show();
+            showToast("Error: No playlist selected");
             finish();
             return;
         }
@@ -90,7 +96,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         showLoading(true, 0, selectedPlaylist.getSongCount());
 
         // Get SpotifyApi instance from MainActivity
-        SpotifyApi spotifyApi = null;
+        SpotifyApi spotifyApi;
         try {
             spotifyApi = MainActivity.getInstance().getSpotifyApi();
             if (spotifyApi == null) throw new Exception("SpotifyApi not available");
@@ -119,8 +125,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 .exceptionally(throwable -> {
                     runOnUiThread(() -> {
                         showLoading(false, 0, selectedPlaylist.getSongCount());
-                        Toast.makeText(this, "Error loading songs: " + throwable.getMessage(),
-                                Toast.LENGTH_SHORT).show();
+                        showToast("Error loading songs: " + throwable.getMessage());
                     });
                     return null;
                 });
@@ -147,6 +152,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     private void setupSearch() {
         searchIcon = findViewById(R.id.search_icon);
         searchBar = findViewById(R.id.search_bar);
+
+        searchIcon.setVisibility(View.VISIBLE);
 
         searchIcon.setOnClickListener(v -> {
             if (searchBar.getVisibility() == View.GONE) {
@@ -201,6 +208,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         sortIcon = findViewById(R.id.sort_icon);
         sortDirectionIcon = findViewById(R.id.sort_direction_icon);
         sortSpinner = findViewById(R.id.sort_spinner);
+
+        sortIcon.setVisibility(View.VISIBLE);
 
         // Initialize SharedPreferences
         prefs = getSharedPreferences("PlaylistPrefs", MODE_PRIVATE);
@@ -366,7 +375,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         SongModel clickedSong = adapter.getSongs().get(position);
 
         // Set the selected song in the singleton
-        MainActivity mainActivity = SelectedSongHolder.getInstance().getMainActivity();
+        MainActivity mainActivity = MainActivity.getInstance();
         SelectedSongHolder.getInstance().setSelectedSong(clickedSong, mainActivity);
 
         // Start the SongView activity
@@ -380,14 +389,19 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
         // Play the song immediately using PlaybackManager
         if (!playbackManager.isConnected()) {
-            Toast.makeText(this, "Connecting to Spotify...", Toast.LENGTH_SHORT).show();
+            showToast("Connecting to Spotify...");
             playbackManager.connectSpotify(this, () -> {
                 playbackManager.playSong(clickedSong);
-                Toast.makeText(this, "Playing " + clickedSong.getName(), Toast.LENGTH_SHORT).show();
+                showToast("Playing " + clickedSong.getName());
             });
         } else {
             playbackManager.playSong(clickedSong);
-            Toast.makeText(this, "Playing " + clickedSong.getName(), Toast.LENGTH_SHORT).show();
+            showToast("Playing " + clickedSong.getName());
         }
+    }
+
+    private void showToast(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        Log.v(TAG, "showed Toast: " + message);
     }
 }
