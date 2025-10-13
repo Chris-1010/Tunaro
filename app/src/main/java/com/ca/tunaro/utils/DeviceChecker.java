@@ -54,18 +54,14 @@ public class DeviceChecker {
                     }
 
                     if (activeDevice == null) {
-                        // Use Handler to post to main thread
-                        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
-                            callback.onDeviceCheckResult(false, "No active device found");
-                            callback.onDeviceWarningStateChanged(false);
-                        });
+                        // Most likely currentDevice is playing
                         return;
                     }
 
                     boolean isCorrectDevice = activeDevice.getName().equalsIgnoreCase(expectedDeviceName);
                     String message = isCorrectDevice
                             ? "Playing on correct device: " + activeDevice.getName()
-                            : "Playing on different device: " + activeDevice.getName() + " (expected: " + expectedDeviceName + ")";
+                            : "Playing on " + activeDevice.getName();
 
                     Log.d(TAG, message);
 

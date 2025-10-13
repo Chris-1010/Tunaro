@@ -2,6 +2,7 @@ package com.ca.tunaro.fragments;
 
 import android.os.Bundle;
 import android.os.Handler;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -32,6 +33,8 @@ import java.util.List;
 import java.util.Locale;
 
 public class SongSnippetsFragment extends Fragment {
+    private static final String TAG = "SongSnippetsFragment";
+
     private View snippetCreationOverlay;
     private long snippetStartTime = -1;
     private long snippetEndTime = -1;
@@ -214,7 +217,7 @@ public class SongSnippetsFragment extends Fragment {
                 updateSnippetMarkers();
                 updateButtonStates();
             } else {
-                Toast.makeText(requireContext(), "End time must be after start time", Toast.LENGTH_SHORT).show();
+                showToast("End time must be after start time");
             }
         });
 
@@ -243,7 +246,7 @@ public class SongSnippetsFragment extends Fragment {
             boolean includeRankings = includeInRankings.isChecked();
 
             if (snippetStartTime == -1 || snippetEndTime == -1) {
-                Toast.makeText(requireContext(), "Please set both start and end times", Toast.LENGTH_SHORT).show();
+                showToast("Please set both start and end times");
                 return;
             }
 
@@ -265,7 +268,7 @@ public class SongSnippetsFragment extends Fragment {
                 }
 
                 snippetAdapter.updateSnippets(snippets);
-                Toast.makeText(requireContext(), "Snippet updated", Toast.LENGTH_SHORT).show();
+                showToast("Snippet updated");
                 editingSnippet = null; // Clear the editing state
             } else {
                 // Create new snippet (existing code)
@@ -284,9 +287,9 @@ public class SongSnippetsFragment extends Fragment {
                     newSnippet.setId(id);
                     snippets.add(newSnippet);
                     snippetAdapter.updateSnippets(snippets);
-                    Toast.makeText(requireContext(), "Snippet saved", Toast.LENGTH_SHORT).show();
+                    showToast("Snippet saved");
                 } else {
-                    Toast.makeText(requireContext(), "Error saving snippet", Toast.LENGTH_SHORT).show();
+                    showToast("Error saving snippet");
                 }
             }
 
@@ -306,7 +309,7 @@ public class SongSnippetsFragment extends Fragment {
                             dbHelper.deleteSnippet(editingSnippet.getId());
                             snippets.removeIf(snippet -> snippet.getId() == editingSnippet.getId());
                             snippetAdapter.updateSnippets(snippets);
-                            Toast.makeText(requireContext(), "Snippet deleted", Toast.LENGTH_SHORT).show();
+                            showToast("Snippet deleted");
                             hideSnippetCreationOverlay();
                         })
                         .setNegativeButton("Cancel", null)
@@ -321,11 +324,11 @@ public class SongSnippetsFragment extends Fragment {
                 // Wrong song is playing, play the correct song
                 if (playbackManager.isConnected()) {
                     playbackManager.playSong(song);
-                    Toast.makeText(requireContext(), "Playing " + song.getName() + " for snippet creation", Toast.LENGTH_SHORT).show();
+                    showToast("Playing " + song.getName() + " for snippet creation");
                 } else {
                     playbackManager.connectSpotify(requireContext(), () -> {
                         playbackManager.playSong(song);
-                        Toast.makeText(requireContext(), "Playing " + song.getName() + " for snippet creation", Toast.LENGTH_SHORT).show();
+                        showToast("Playing " + song.getName() + " for snippet creation");
                     });
                 }
             } else {
@@ -339,11 +342,11 @@ public class SongSnippetsFragment extends Fragment {
         warningPlayButton.setOnClickListener(v -> {
             if (playbackManager.isConnected()) {
                 playbackManager.playSong(song);
-                Toast.makeText(requireContext(), "Playing " + song.getName() + " for snippet creation", Toast.LENGTH_SHORT).show();
+                showToast("Playing " + song.getName() + " for snippet creation");
             } else {
                 playbackManager.connectSpotify(requireContext(), () -> {
                     playbackManager.playSong(song);
-                    Toast.makeText(requireContext(), "Playing " + song.getName() + " for snippet creation", Toast.LENGTH_SHORT).show();
+                    showToast("Playing " + song.getName() + " for snippet creation");
                 });
             }
         });
@@ -359,7 +362,7 @@ public class SongSnippetsFragment extends Fragment {
                 updateButtonStates();
                 return true;
             } else {
-                Toast.makeText(requireContext(), "Invalid start time format. Use M:SS.mmm", Toast.LENGTH_SHORT).show();
+                showToast("Invalid start time format. Use M:SS.mmm");
                 updateTimeDisplays();
                 return false;
             }
@@ -374,7 +377,7 @@ public class SongSnippetsFragment extends Fragment {
                 updateButtonStates();
                 return true;
             } else {
-                Toast.makeText(requireContext(), "Invalid end time format or must be after start time", Toast.LENGTH_SHORT).show();
+                showToast("Invalid end time format or must be after start time");
                 updateTimeDisplays();
                 return false;
             }
@@ -672,6 +675,11 @@ public class SongSnippetsFragment extends Fragment {
     private boolean isCorrectSongPlaying() {
         SongModel currentlyPlaying = playbackManager.getCurrentSong();
         return currentlyPlaying != null && currentlyPlaying.getId().equals(song.getId());
+    }
+
+    private void showToast(String message) {
+            Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show();
+            Log.v(TAG, "showed Toast: " + message);
     }
 
     @Override

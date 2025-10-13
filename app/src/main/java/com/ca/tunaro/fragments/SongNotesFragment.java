@@ -4,6 +4,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -32,6 +33,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class SongNotesFragment extends Fragment {
+    private static final String TAG = "SongNotesFragment";
+
     private SongModel song;
     private DatabaseHelper dbHelper;
     private Spinner noteTypeSpinner;
@@ -79,7 +82,7 @@ public class SongNotesFragment extends Fragment {
                         SongNote noteToDelete = notesAdapter.getNote(position);
                         dbHelper.deleteNote(noteToDelete.getId());
                         notesAdapter.removeNote(position);
-                        Toast.makeText(requireContext(), "Note deleted", Toast.LENGTH_SHORT).show();
+                        showToast("Note deleted");
                     }
 
                     @Override
@@ -93,7 +96,7 @@ public class SongNotesFragment extends Fragment {
     private void saveNote() {
         String content = noteInput.getText().toString().trim();
         if (content.isEmpty()) {
-            Toast.makeText(requireContext(), "Please enter a note", Toast.LENGTH_SHORT).show();
+            showToast("Please enter a note");
             return;
         }
 
@@ -102,11 +105,11 @@ public class SongNotesFragment extends Fragment {
 
         long id = dbHelper.addNote(note);
         if (id != -1) {
-            Toast.makeText(requireContext(), "Note added successfully", Toast.LENGTH_SHORT).show();
+            showToast("Note added successfully");
             noteInput.setText("");
             loadNotes(); // Refresh the notes list
         } else {
-            Toast.makeText(requireContext(), "Error saving note", Toast.LENGTH_SHORT).show();
+            showToast("Error saving note");
         }
     }
 
@@ -221,12 +224,12 @@ public class SongNotesFragment extends Fragment {
                     String content = contentInput.getText().toString().trim();
 
                     if (noteType.isEmpty()) {
-                        Toast.makeText(requireContext(), "Please enter a note type", Toast.LENGTH_SHORT).show();
+                        showToast("Please enter a note type");
                         return;
                     }
 
                     if (content.isEmpty()) {
-                        Toast.makeText(requireContext(), "Please enter a note", Toast.LENGTH_SHORT).show();
+                        showToast("Please enter a note");
                         return;
                     }
 
@@ -234,10 +237,10 @@ public class SongNotesFragment extends Fragment {
 
                     long id = dbHelper.addNote(note);
                     if (id != -1) {
-                        Toast.makeText(requireContext(), "Note added successfully", Toast.LENGTH_SHORT).show();
+                        showToast("Note added successfully");
                         loadNotes(); // Refresh the notes list
                     } else {
-                        Toast.makeText(requireContext(), "Error saving note", Toast.LENGTH_SHORT).show();
+                        showToast("Error saving note");
                     }
                 })
                 .setNegativeButton("Cancel", null)
@@ -354,12 +357,12 @@ public class SongNotesFragment extends Fragment {
                     String content = contentInput.getText().toString().trim();
 
                     if (noteType.isEmpty()) {
-                        Toast.makeText(requireContext(), "Please enter a note type", Toast.LENGTH_SHORT).show();
+                        showToast("Please enter a note type");
                         return;
                     }
 
                     if (content.isEmpty()) {
-                        Toast.makeText(requireContext(), "Please enter a note", Toast.LENGTH_SHORT).show();
+                        showToast("Please enter a note");
                         return;
                     }
 
@@ -367,7 +370,7 @@ public class SongNotesFragment extends Fragment {
                     note.setContent(content);
                     dbHelper.editNote(note);
                     loadNotes();
-                    Toast.makeText(requireContext(), "Note updated", Toast.LENGTH_SHORT).show();
+                    showToast("Note updated");
                 })
                 .setNegativeButton("Cancel", (dialog, which) -> {
                     // Reset the view state by notifying adapter of change
@@ -377,5 +380,10 @@ public class SongNotesFragment extends Fragment {
                     }
                 })
                 .show();
+    }
+
+    private void showToast(String message) {
+        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show();
+        Log.v(TAG, "showed Toast: " + message);
     }
 }
