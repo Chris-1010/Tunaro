@@ -162,9 +162,7 @@ public class PlaybackManager {
                 } catch (Exception e) {
 
                     Log.e(TAG, "Failed to connect to Spotify: " + throwable.getMessage(), throwable);
-                    Toast.makeText(context.getApplicationContext(),
-                            "Failed to connect to Spotify. Please ensure the Spotify app is installed.",
-                            Toast.LENGTH_LONG).show();
+                    showToast("Failed to connect to Spotify. Please ensure the Spotify app is installed.");
 
                     // Notify listeners
                     notifyConnectionStateChanged();
@@ -422,11 +420,11 @@ public class PlaybackManager {
             DatabaseHelper dbHelper = new DatabaseHelper(applicationContext);
             String songId = currentSong.getId();
 
-            if (!dbHelper.hasListenWithinDuration(currentSong.getId(), System.currentTimeMillis(), currentSong.getDuration()))
+            if (!dbHelper.hasListenWithinDuration(currentSong.getId(), System.currentTimeMillis(), currentSong.getDuration())) {
                 dbHelper.addListenRecord(songId);
-
-            showToast("Recorded listen for song");
-            Log.d("TAG", "Recorded listen for song: " + currentSong.getName() + "(" + currentSong.getArtist() + ")");
+                showToast("Recorded listen for song");
+                Log.d("TAG", "Recorded listen for song: " + currentSong.getName() + " (" + currentSong.getArtist() + ")");
+            }
         }
     }
 
@@ -644,6 +642,7 @@ public class PlaybackManager {
     private void showToast(String message) {
         if (applicationContext != null) {
             Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show();
+            Log.v(TAG, "showed Toast: " + message);
         }
     }
 

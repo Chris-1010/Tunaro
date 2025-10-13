@@ -3,6 +3,7 @@ package com.ca.tunaro.activites;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -26,6 +27,8 @@ import se.michaelthelin.spotify.SpotifyHttpManager;
 import se.michaelthelin.spotify.requests.data.users_profile.GetCurrentUsersProfileRequest;
 
 public class MainActivity extends AppCompatActivity {
+    private static final String TAG = "MainActivity";
+
     // Singleton instance
     private static MainActivity instance;
 
@@ -83,7 +86,7 @@ public class MainActivity extends AppCompatActivity {
                     }, executor)
                     .exceptionally(throwable -> {
                         runOnUiThread(() -> {
-                            Toast.makeText(this, "Error: " + throwable.getMessage(), Toast.LENGTH_LONG).show();
+                            showToast("Error: " + throwable.getMessage());
                             finish(); // Close app if authentication fails
                         });
                         return null;
@@ -140,12 +143,12 @@ public class MainActivity extends AppCompatActivity {
                     userDisplayName = user.getDisplayName();
 
                     runOnUiThread(() -> {
-                        Toast.makeText(this, "Logged in as " + userDisplayName, Toast.LENGTH_SHORT).show();
+                        showToast("Logged in as " + userDisplayName);
                     });
                 })
                 .exceptionally(throwable -> {
                     runOnUiThread(() -> {
-                        Toast.makeText(this, "Error: " + throwable.getMessage(), Toast.LENGTH_SHORT).show();
+                        showToast("Error: " + throwable.getMessage());
                     });
                     return null;
                 });
@@ -202,14 +205,14 @@ public class MainActivity extends AppCompatActivity {
                 case ERROR:
                     // Authentication failed
                     String errorMessage = response.getError();
-                    Toast.makeText(this, "Authorization failed: " + errorMessage, Toast.LENGTH_LONG).show();
+                    showToast("Authorization failed: " + errorMessage);
                     // Complete the future exceptionally to signal authentication failure
                     if (authenticationFuture != null) {
                         authenticationFuture.completeExceptionally(new Exception(errorMessage));
                     }
                     break;
                 default:
-                    Toast.makeText(this, "Spotify login was cancelled", Toast.LENGTH_SHORT).show();
+                    showToast("Spotify login was cancelled");
                     // Complete the future exceptionally to signal authentication cancellation
                     if (authenticationFuture != null) {
                         authenticationFuture.completeExceptionally(new Exception("Authentication cancelled"));
@@ -222,8 +225,8 @@ public class MainActivity extends AppCompatActivity {
     private void performInitialDeviceCheck() {
         DeviceChecker.checkPlaybackDevice(this, spotifyApi, (isCorrectDevice, message) -> {
             runOnUiThread(() -> {
-                if (!isCorrectDevice && DeviceChecker.isDeviceCheckEnabled(this)) {
-                    Toast.makeText(this, "Warning: " + message, Toast.LENGTH_LONG).show();
+                if (!isCorrectDevice && PlaybackManager.getInstance().isPlaying() && DeviceChecker.isDeviceCheckEnabled(this)) {
+                    showToast(message);
                 }
             });
         });
@@ -255,5 +258,10 @@ public class MainActivity extends AppCompatActivity {
 
     public String getUserDisplayName() {
         return userDisplayName;
+    }
+
+    private void showToast(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        Log.v(TAG, "showed Toast: " + message);
     }
 }

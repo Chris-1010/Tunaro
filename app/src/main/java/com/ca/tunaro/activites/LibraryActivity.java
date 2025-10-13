@@ -6,13 +6,12 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -31,6 +30,8 @@ import se.michaelthelin.spotify.SpotifyApi;
 import se.michaelthelin.spotify.requests.data.tracks.GetTrackRequest;
 
 public class LibraryActivity extends AppCompatActivity implements Library_RecyclerViewInterface {
+    private static final String TAG = "LibraryActivity";
+
     private MainActivity mainActivity;
     private SpotifyApi spotifyApi;
     private LibrarySongAdapter adapter;
@@ -48,7 +49,7 @@ public class LibraryActivity extends AppCompatActivity implements Library_Recycl
         if (mainActivity != null) {
             spotifyApi = mainActivity.getSpotifyApi();
         } else {
-            Toast.makeText(this, "Could not connect to Spotify", Toast.LENGTH_SHORT).show();
+            showToast("Could not connect to Spotify");
             finish();
             return;
         }
@@ -87,7 +88,7 @@ public class LibraryActivity extends AppCompatActivity implements Library_Recycl
 
     private void loadSongsWithNotes() {
         if (spotifyApi == null) {
-            Toast.makeText(this, "Spotify API not available yet. Please try again later.", Toast.LENGTH_SHORT).show();
+            showToast("Spotify API not available yet. Please try again later.");
             return;
         }
 
@@ -140,10 +141,8 @@ public class LibraryActivity extends AppCompatActivity implements Library_Recycl
                 })
                 .exceptionally(throwable -> {
                     runOnUiThread(() -> {
-                        Toast.makeText(this,
-                                "Error loading song: " + throwable.getMessage(),
-                                Toast.LENGTH_SHORT).show();
                         loadSongsSequentially(songIds, index + 1);
+                        showToast("Error loading song: " + throwable.getMessage());
                     });
                     return null;
                 });
@@ -211,9 +210,7 @@ public class LibraryActivity extends AppCompatActivity implements Library_Recycl
                 .exceptionally(throwable -> {
                     runOnUiThread(() -> {
                         setLoadingState(false);
-                        Toast.makeText(this,
-                                "Error loading song details: " + throwable.getMessage(),
-                                Toast.LENGTH_SHORT).show();
+                        showToast("Error loading song details: " + throwable.getMessage());
                     });
                     return null;
                 });
@@ -225,5 +222,10 @@ public class LibraryActivity extends AppCompatActivity implements Library_Recycl
         if (loadingView != null) {
             loadingView.setVisibility(isLoading ? View.VISIBLE : View.GONE);
         }
+    }
+
+    private void showToast(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        Log.v(TAG, "showed Toast: " + message);
     }
 }

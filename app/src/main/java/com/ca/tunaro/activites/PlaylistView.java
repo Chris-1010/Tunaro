@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -41,6 +42,8 @@ import java.util.concurrent.CompletionException;
 import se.michaelthelin.spotify.SpotifyApi;
 
 public class PlaylistView extends BaseActivity implements Song_RecyclerViewInterface {
+    private static final String TAG = "PlaylistView";
+
     private PlaylistModel selectedPlaylist;
     private Song_RecyclerViewAdapter adapter;
 
@@ -119,8 +122,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 .exceptionally(throwable -> {
                     runOnUiThread(() -> {
                         showLoading(false, 0, selectedPlaylist.getSongCount());
-                        Toast.makeText(this, "Error loading songs: " + throwable.getMessage(),
-                                Toast.LENGTH_SHORT).show();
+                        showToast("Error loading songs: " + throwable.getMessage());
                     });
                     return null;
                 });
@@ -380,14 +382,19 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
         // Play the song immediately using PlaybackManager
         if (!playbackManager.isConnected()) {
-            Toast.makeText(this, "Connecting to Spotify...", Toast.LENGTH_SHORT).show();
+            showToast("Connecting to Spotify...");
             playbackManager.connectSpotify(this, () -> {
                 playbackManager.playSong(clickedSong);
-                Toast.makeText(this, "Playing " + clickedSong.getName(), Toast.LENGTH_SHORT).show();
+                showToast("Playing " + clickedSong.getName());
             });
         } else {
             playbackManager.playSong(clickedSong);
-            Toast.makeText(this, "Playing " + clickedSong.getName(), Toast.LENGTH_SHORT).show();
+            showToast("Playing " + clickedSong.getName());
         }
+    }
+
+    private void showToast(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        Log.v(TAG, "showed Toast: " + message);
     }
 }

@@ -3,6 +3,7 @@ package com.ca.tunaro;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
@@ -27,6 +28,7 @@ import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 public class BaseActivity extends AppCompatActivity implements PlaybackManager.PlaybackListener {
+    private static final String TAG = "Base Activity";
 
     protected PlaybackManager playbackManager;
     private SongModel currentDisplayedSong;
@@ -138,7 +140,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
                         startActivity(new android.content.Intent(this, SongView.class));
                     } else {
                         // Handle the case where no MainActivity reference is found
-                        Toast.makeText(this, "Unable to open song view", Toast.LENGTH_SHORT).show();
+                        showToast("Unable to open song view");
                     }
                 }
             });
@@ -405,5 +407,10 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         long seconds = TimeUnit.MILLISECONDS.toSeconds(durationMs) -
                 TimeUnit.MINUTES.toSeconds(minutes);
         return String.format(Locale.getDefault(), "%d:%02d", minutes, seconds);
+    }
+
+    private void showToast(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        Log.v(TAG, "showed Toast: " + message);
     }
 }

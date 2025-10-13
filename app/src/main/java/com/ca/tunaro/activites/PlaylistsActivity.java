@@ -2,6 +2,7 @@ package com.ca.tunaro.activites;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.ImageView;
@@ -26,6 +27,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class PlaylistsActivity extends BaseActivity implements Playlist_RecyclerViewInterface {
+    private static final String TAG = "PlaylistsActivity";
+
     private MainActivity mainActivity;
     private DatabaseHelper dbHelper;
     private Playlist_RecyclerViewAdapter adapter;
@@ -60,14 +63,14 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
         if (mainActivity != null) {
             loadPlaylists();
         } else {
-            Toast.makeText(this, "Error: Could not connect to Spotify", Toast.LENGTH_SHORT).show();
+            showToast("Error: Could not connect to Spotify");
             finish();
         }
     }
 
     private void loadPlaylists() {
         if (mainActivity == null || mainActivity.getSpotifyApi() == null || mainActivity.getUserID() == null) {
-            Toast.makeText(this, "Spotify API not ready", Toast.LENGTH_SHORT).show();
+            showToast("Spotify API not ready");
             return;
         }
 
@@ -77,9 +80,7 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
                 .thenAccept(this::updateUIWithFilteredPlaylists)
                 .exceptionally(e -> {
                     runOnUiThread(() -> {
-                        Toast.makeText(this,
-                                "Error loading playlists: " + e.getMessage(),
-                                Toast.LENGTH_SHORT).show();
+                        showToast("Error loading playlists: " + e.getMessage());
                         swipeRefreshLayout.setRefreshing(false);
                     });
                     return null;
@@ -96,9 +97,7 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
                 .thenAccept(this::updateUIWithFilteredPlaylists)
                 .exceptionally(e -> {
                     runOnUiThread(() -> {
-                        Toast.makeText(this,
-                                "Error refreshing playlists: " + e.getMessage(),
-                                Toast.LENGTH_SHORT).show();
+                        showToast("Error refreshing playlists: " + e.getMessage());
                         swipeRefreshLayout.setRefreshing(false);
                     });
                     return null;
@@ -139,20 +138,20 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
             if (itemId == R.id.action_favourite) {
                 if (dbHelper.isPlaylistFavourited(playlist.getId())) {
                     dbHelper.unfavouritePlaylist(playlist.getId());
-                    Toast.makeText(this, "Playlist unfavourited", Toast.LENGTH_SHORT).show();
+                    showToast("Playlist unfavourited");
                 } else {
                     dbHelper.favouritePlaylist(playlist.getId());
-                    Toast.makeText(this, "Playlist favourited", Toast.LENGTH_SHORT).show();
+                    showToast("Playlist favourited");
                 }
                 refreshPlaylists();
                 return true;
             } else if (itemId == R.id.action_archive) {
                 if (showingArchived) {
                     dbHelper.unarchivePlaylist(playlist.getId());
-                    Toast.makeText(this, "Playlist unarchived", Toast.LENGTH_SHORT).show();
+                    showToast("Playlist unarchived");
                 } else {
                     dbHelper.archivePlaylist(playlist.getId());
-                    Toast.makeText(this, "Playlist archived", Toast.LENGTH_SHORT).show();
+                    showToast("Playlist archived");
                 }
                 refreshPlaylists();
                 return true;
@@ -190,9 +189,7 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
                     .thenAccept(this::updateUIWithFilteredPlaylists)
                     .exceptionally(e -> {
                         runOnUiThread(() -> {
-                            Toast.makeText(this,
-                                    "Error loading playlists: " + e.getMessage(),
-                                    Toast.LENGTH_SHORT).show();
+                            showToast("Error loading playlists: " + e.getMessage());
                             swipeRefreshLayout.setRefreshing(false);
                         });
                         return null;
@@ -203,9 +200,7 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
                     .thenAccept(this::updateUIWithFilteredPlaylists)
                     .exceptionally(e -> {
                         runOnUiThread(() -> {
-                            Toast.makeText(this,
-                                    "Error refreshing playlists: " + e.getMessage(),
-                                    Toast.LENGTH_SHORT).show();
+                            showToast("Error refreshing playlists: " + e.getMessage());
                             swipeRefreshLayout.setRefreshing(false);
                         });
                         return null;
@@ -265,5 +260,10 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
         // Start the PlaylistView activity
         Intent intent = new Intent(this, PlaylistView.class);
         startActivity(intent);
+    }
+
+    private void showToast(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        Log.v(TAG, "showed Toast: " + message);
     }
 }

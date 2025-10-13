@@ -31,6 +31,8 @@ import com.ca.tunaro.utils.SpotifyHistoryFetcher;
 import java.util.concurrent.TimeUnit;
 
 public class SettingsActivity extends AppCompatActivity {
+    private static final String TAG = "SettingsActivity";
+
     private SwitchCompat deviceCheckSwitch;
     private EditText deviceNameInput;
     private TextView deviceNameLabel;
@@ -80,9 +82,9 @@ public class SettingsActivity extends AppCompatActivity {
                 if (uri != null) {
                     try {
                         DatabaseHelper.ImportStats stats = DatabaseHelper.importFromUri(this, uri);
-                        Toast.makeText(this, stats.getSummary(), Toast.LENGTH_LONG).show();
+                        showToast(stats.getSummary());
                     } catch (Exception e) {
-                        Toast.makeText(this, "Import failed: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                        showToast("Import failed: " + e.getMessage());
                     }
                 }
             }
@@ -103,9 +105,9 @@ public class SettingsActivity extends AppCompatActivity {
                     try {
                         String jsonData = DatabaseHelper.generateExportJson(this);
                         DatabaseHelper.writeExportToUri(this, uri, jsonData);
-                        Toast.makeText(this, "Data exported successfully!", Toast.LENGTH_LONG).show();
+                        showToast("Data exported successfully!");
                     } catch (Exception e) {
-                        Toast.makeText(this, "Export failed: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                        showToast("Export failed: " + e.getMessage());
                     }
                 }
             }
@@ -162,8 +164,8 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void discoverAvailableDevices() {
         MainActivity mainActivity = MainActivity.getInstance();
-        if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
-            Toast.makeText(this, "Spotify API not available", Toast.LENGTH_SHORT).show();
+        if (mainActivity.getSpotifyApi() == null) {
+            showToast("Spotify API not available");
             return;
         }
 
@@ -185,8 +187,7 @@ public class SettingsActivity extends AppCompatActivity {
                 })
                 .exceptionally(throwable -> {
                     runOnUiThread(() -> {
-                        Toast.makeText(this, "Error getting devices: " + throwable.getMessage(),
-                                Toast.LENGTH_SHORT).show();
+                        showToast("Error getting devices: " + throwable.getMessage());
                     });
                     return null;
                 });
@@ -230,8 +231,8 @@ public class SettingsActivity extends AppCompatActivity {
         }
 
         MainActivity mainActivity = MainActivity.getInstance();
-        if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
-            Toast.makeText(this, "Spotify API not available", Toast.LENGTH_SHORT).show();
+        if (mainActivity.getSpotifyApi() == null) {
+            showToast("Spotify API not available");
             return;
         }
 
@@ -272,9 +273,7 @@ public class SettingsActivity extends AppCompatActivity {
                         updateBackgroundSyncStatus(backgroundSyncStatus, backgroundSyncDetails, true);
                     }
 
-                    Toast.makeText(SettingsActivity.this,
-                            String.format("Added %d new listen records", totalAdded),
-                            Toast.LENGTH_LONG).show();
+                    showToast("Added " + totalAdded + " new listen records");
                 });
             }
 
@@ -284,7 +283,7 @@ public class SettingsActivity extends AppCompatActivity {
                     updateSyncUI(false);
                     historySyncStatus.setText("✗ Error: " + error);
                     historySyncStatus.setTextColor(getResources().getColor(android.R.color.holo_red_dark));
-                    Toast.makeText(SettingsActivity.this, "Sync failed: " + error, Toast.LENGTH_LONG).show();
+                    showToast("Sync failed: " + error);
                 });
             }
         });
@@ -321,10 +320,10 @@ public class SettingsActivity extends AppCompatActivity {
 
             if (isChecked) {
                 scheduleBackgroundSync();
-                Toast.makeText(this, "Background sync enabled - will run every 2 days", Toast.LENGTH_LONG).show();
+                showToast("Background sync enabled - will run every 2 days");
             } else {
                 cancelBackgroundSync();
-                Toast.makeText(this, "Background sync disabled", Toast.LENGTH_SHORT).show();
+                showToast("Background sync disabled");
             }
 
             updateBackgroundSyncStatus(backgroundSyncStatus, backgroundSyncDetails, isChecked);
@@ -460,5 +459,10 @@ public class SettingsActivity extends AppCompatActivity {
         if (historyFetcher != null) {
             historyFetcher.cancel();
         }
+    }
+
+    private void showToast(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        Log.v(TAG, "showed Toast: " + message);
     }
 }

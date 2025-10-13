@@ -3,6 +3,7 @@ package com.ca.tunaro.activites;
 import android.annotation.SuppressLint;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -34,6 +35,8 @@ import java.util.List;
 import java.util.Map;
 
 public class SongView extends BaseActivity {
+    private static final String TAG = "SongView";
+
     // Fields
     private SongModel selectedSong;
     private TabLayout tabLayout;
@@ -216,6 +219,7 @@ public class SongView extends BaseActivity {
         // Select Notes tab by default. TODO Allow preference in settings
         viewPager.setCurrentItem(0);
     }
+
     private void setupListeningHistory() {
         LinearLayout historySection = findViewById(R.id.listening_history_section);
         RecyclerView historyRecycler = findViewById(R.id.listening_history_recycler);
@@ -297,21 +301,19 @@ public class SongView extends BaseActivity {
 
     private void playSong() {
         if (!playbackManager.isConnected()) {
-            Toast.makeText(this, "Connecting to Spotify...", Toast.LENGTH_SHORT).show();
+            showToast("Connecting to Spotify...");
             // Use PlaybackManager to reconnect
             playbackManager.connectSpotify(this, () -> {
                 // After connection, play the song
                 if (selectedSong != null) {
                     playbackManager.playSong(selectedSong);
-                    Toast.makeText(this, "Playing " + selectedSong.getName(),
-                            Toast.LENGTH_SHORT).show();
+                    showToast("Playing " + selectedSong.getName());
                 }
             });
         } else if (selectedSong != null) {
             // Already connected, just play
             playbackManager.playSong(selectedSong);
-            Toast.makeText(this, "Playing " + selectedSong.getName(),
-                    Toast.LENGTH_SHORT).show();
+            showToast("Playing " + selectedSong.getName());
         }
     }
 
@@ -320,5 +322,10 @@ public class SongView extends BaseActivity {
     protected void onDestroy() {
         super.onDestroy();
         SelectedSongHolder.getInstance().clearSelectedSong();
+    }
+
+    private void showToast(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        Log.v(TAG, "showed Toast: " + message);
     }
 }
