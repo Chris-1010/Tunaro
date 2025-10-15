@@ -45,8 +45,10 @@
         android:focusable="true"
         android:padding="12dp"
         android:src="@android:drawable/ic_menu_search"
+        android:visibility="gone"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent"
+        tools:visibility="visible" />
 
     <EditText
         android:id="@+id/search_bar"
@@ -78,8 +80,10 @@
         android:focusable="true"
         android:padding="12dp"
         android:src="@drawable/ic_sort"
+        android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent"
+        tools:visibility="visible" />
 
     <Spinner
         android:id="@+id/sort_spinner"

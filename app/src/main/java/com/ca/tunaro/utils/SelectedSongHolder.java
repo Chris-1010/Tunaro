@@ -28,10 +28,6 @@ public class SelectedSongHolder {
         return selectedSong;
     }
 
-    public MainActivity getMainActivity() {
-        return MainActivity.getInstance();
-    }
-
     public void clearSelectedSong() {
         selectedSong = null;
     }

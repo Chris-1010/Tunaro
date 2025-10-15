@@ -3,6 +3,7 @@ package com.ca.tunaro.activites;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -26,6 +27,8 @@ import se.michaelthelin.spotify.SpotifyHttpManager;
 import se.michaelthelin.spotify.requests.data.users_profile.GetCurrentUsersProfileRequest;
 
 public class MainActivity extends AppCompatActivity {
+    private static final String TAG = "MainActivity";
+
     // Singleton instance
     private static MainActivity instance;
 
@@ -53,14 +56,13 @@ public class MainActivity extends AppCompatActivity {
 
         // Set the singleton instance
         instance = this;
+        Log.d(TAG, "onCreate: MainActivity instance is now " + instance);
 
         // Initialize these here
         CLIENT_ID = getString(R.string.spotify_client_id);
         CLIENT_SECRET = getString(R.string.spotify_client_secret);
         REDIRECT_URI = SpotifyHttpManager.makeUri(getString(R.string.redirect_uri));
 
-        // Initialize the CompletableFuture
-        authenticationFuture = new CompletableFuture<>();
 
         // Initialize the PlaylistSetup Class
         PlaylistSetup.initialize(this);
@@ -71,24 +73,46 @@ public class MainActivity extends AppCompatActivity {
                 REDIRECT_URI.toString()
         );
 
+        // Initialize the CompletableFuture
+        authenticationFuture = new CompletableFuture<>();
+
         // Start authentication
-        if (spotifyApi == null) {
-            authenticateSpotify()
-                    .thenRunAsync(() -> {
-                        // Launch HomeActivity after authentication
-                        runOnUiThread(() -> {
-                            Intent intent = new Intent(MainActivity.this, HomeActivity.class);
-                            startActivity(intent);
-                        });
-                    }, executor)
-                    .exceptionally(throwable -> {
-                        runOnUiThread(() -> {
-                            Toast.makeText(this, "Error: " + throwable.getMessage(), Toast.LENGTH_LONG).show();
-                            finish(); // Close app if authentication fails
-                        });
-                        return null;
+        authenticateSpotify()
+                .thenRunAsync(() -> {
+                    // Launch HomeActivity after authentication
+                    runOnUiThread(() -> {
+                        Intent intent = new Intent(MainActivity.this, HomeActivity.class);
+                        startActivity(intent);
                     });
+                }, executor)
+                .exceptionally(throwable -> {
+                    runOnUiThread(() -> {
+                        showToast("Error: " + throwable.getMessage());
+                        finish(); // Close app if authentication fails
+                    });
+                    return null;
+                });
+
+    }
+
+    @Override
+    protected void onDestroy() {
+        // Clear singleton reference first
+        Log.d(TAG, "MainActivity onDestroy");
+        instance = null;
+
+        // Disconnect Spotify
+        if (mSpotifyAppRemote != null) {
+            SpotifyAppRemote.disconnect(mSpotifyAppRemote);
+            mSpotifyAppRemote = null;
         }
+
+        // Shutdown executor
+        if (executor != null && !executor.isShutdown()) {
+            executor.shutdown();
+        }
+
+        super.onDestroy();
     }
 
     private CompletableFuture<Void> authenticateSpotify() {
@@ -140,39 +164,15 @@ public class MainActivity extends AppCompatActivity {
                     userDisplayName = user.getDisplayName();
 
                     runOnUiThread(() -> {
-                        Toast.makeText(this, "Logged in as " + userDisplayName, Toast.LENGTH_SHORT).show();
+                        showToast("Logged in as " + userDisplayName);
                     });
                 })
                 .exceptionally(throwable -> {
                     runOnUiThread(() -> {
-                        Toast.makeText(this, "Error: " + throwable.getMessage(), Toast.LENGTH_SHORT).show();
+                        showToast("Error: " + throwable.getMessage());
                     });
                     return null;
                 });
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-    }
-
-    @Override
-    protected void onDestroy() {
-        // Clear singleton reference first
-        instance = null;
-
-        // Disconnect Spotify
-        if (mSpotifyAppRemote != null) {
-            SpotifyAppRemote.disconnect(mSpotifyAppRemote);
-            mSpotifyAppRemote = null;
-        }
-
-        // Shutdown executor
-        if (executor != null && !executor.isShutdown()) {
-            executor.shutdown();
-        }
-
-        super.onDestroy();
     }
 
     @Override
@@ -202,14 +202,14 @@ public class MainActivity extends AppCompatActivity {
                 case ERROR:
                     // Authentication failed
                     String errorMessage = response.getError();
-                    Toast.makeText(this, "Authorization failed: " + errorMessage, Toast.LENGTH_LONG).show();
+                    showToast("Authorization failed: " + errorMessage);
                     // Complete the future exceptionally to signal authentication failure
                     if (authenticationFuture != null) {
                         authenticationFuture.completeExceptionally(new Exception(errorMessage));
                     }
                     break;
                 default:
-                    Toast.makeText(this, "Spotify login was cancelled", Toast.LENGTH_SHORT).show();
+                    showToast("Spotify login was cancelled");
                     // Complete the future exceptionally to signal authentication cancellation
                     if (authenticationFuture != null) {
                         authenticationFuture.completeExceptionally(new Exception("Authentication cancelled"));
@@ -222,8 +222,8 @@ public class MainActivity extends AppCompatActivity {
     private void performInitialDeviceCheck() {
         DeviceChecker.checkPlaybackDevice(this, spotifyApi, (isCorrectDevice, message) -> {
             runOnUiThread(() -> {
-                if (!isCorrectDevice && DeviceChecker.isDeviceCheckEnabled(this)) {
-                    Toast.makeText(this, "Warning: " + message, Toast.LENGTH_LONG).show();
+                if (!isCorrectDevice && PlaybackManager.getInstance().isPlaying() && DeviceChecker.isDeviceCheckEnabled(this)) {
+                    showToast(message);
                 }
             });
         });
@@ -237,7 +237,7 @@ public class MainActivity extends AppCompatActivity {
 
     private String getAccessToken() {
         SharedPreferences prefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
-        return prefs.getString("spotify_access_token", null); // Returns null if the token is not found
+        return prefs.getString("spotify_access_token", null);
     }
 
     // Getters for important objects
@@ -255,5 +255,10 @@ public class MainActivity extends AppCompatActivity {
 
     public String getUserDisplayName() {
         return userDisplayName;
+    }
+
+    private void showToast(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        Log.v(TAG, "showed Toast: " + message);
     }
 }

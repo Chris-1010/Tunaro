@@ -81,9 +81,7 @@ public class PlaybackManager {
         void onPlaybackPositionChanged(long positionMs, long durationMs);
     }
 
-    private PlaybackManager() {
-        // Private constructor for singleton
-    }
+    private PlaybackManager() {}
 
     public static synchronized PlaybackManager getInstance() {
         if (instance == null) {
@@ -162,9 +160,7 @@ public class PlaybackManager {
                 } catch (Exception e) {
 
                     Log.e(TAG, "Failed to connect to Spotify: " + throwable.getMessage(), throwable);
-                    Toast.makeText(context.getApplicationContext(),
-                            "Failed to connect to Spotify. Please ensure the Spotify app is installed.",
-                            Toast.LENGTH_LONG).show();
+                    showToast("Failed to connect to Spotify. Please ensure the Spotify app is installed.");
 
                     // Notify listeners
                     notifyConnectionStateChanged();
@@ -285,6 +281,7 @@ public class PlaybackManager {
 
     public void togglePlayPause() {
         if (spotifyAppRemote != null && isConnected) {
+            checkPlaybackDevice();
             if (isPlaying) {
                 spotifyAppRemote.getPlayerApi().pause()
                         .setResultCallback(empty -> {
@@ -309,8 +306,8 @@ public class PlaybackManager {
                         new DeviceChecker.DeviceCheckCallback() {
                             @Override
                             public void onDeviceCheckResult(boolean isCorrectDevice, String message) {
-                                if (!isCorrectDevice && DeviceChecker.isDeviceCheckEnabled(applicationContext)) {
-                                    showToast("Device warning: " + message);
+                                if (!isCorrectDevice && PlaybackManager.instance.isPlaying() && DeviceChecker.isDeviceCheckEnabled(applicationContext)) {
+                                    showToast(message);
                                 }
                             }
 
@@ -392,7 +389,7 @@ public class PlaybackManager {
 
             listenRunnable = () -> {
                 if (isTrackingListen && !hasRecordedListen && !isSnippetMode) {
-                    recordListen(trackId);
+                    recordListen();
                     hasRecordedListen = true;
                 }
             };
@@ -416,13 +413,18 @@ public class PlaybackManager {
         listenStartTime = 0;
     }
 
-    private void recordListen(String songId) {
+    private void recordListen() {
         if (applicationContext != null && !isDeviceWarningActive) {
             DatabaseHelper dbHelper = new DatabaseHelper(applicationContext);
-            dbHelper.addListenRecord(songId);
+            String songId = currentSong.getId();
 
-            showToast("Recorded listen for song");
-            Log.d(TAG, "Recorded listen for song: " + songId);
+            if (dbHelper.hasListenWithinDuration(currentSong.getId(), System.currentTimeMillis(), currentSong.getDuration())) {
+                Log.d(TAG, "Recent listen found for song '" + currentSong.getName() + "'. Skipping recording.");
+            } else {
+                dbHelper.addListenRecord(songId);
+                showToast("Recorded listen for song");
+                Log.d(TAG, "Recorded listen for song: " + currentSong.getName() + " (" + currentSong.getArtist() + ")");
+            }
         }
     }
 
@@ -640,6 +642,7 @@ public class PlaybackManager {
     private void showToast(String message) {
         if (applicationContext != null) {
             Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show();
+            Log.v(TAG, "showed Toast: " + message);
         }
     }
 

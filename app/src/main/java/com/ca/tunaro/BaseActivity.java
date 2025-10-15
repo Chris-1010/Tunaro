@@ -1,8 +1,10 @@
 package com.ca.tunaro;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
@@ -27,6 +29,7 @@ import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 public class BaseActivity extends AppCompatActivity implements PlaybackManager.PlaybackListener {
+    private static final String TAG = "Base Activity";
 
     protected PlaybackManager playbackManager;
     private SongModel currentDisplayedSong;
@@ -61,6 +64,27 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+
+        Log.d(TAG, "onResume");
+
+        if (checkForRecovery()) return;
+
+        if (playbackManager == null) {
+            PlaybackManager.getInstance().initialize(
+                    getApplicationContext(),
+                    getString(R.string.spotify_client_id),
+                    getString(R.string.redirect_uri)
+            );
+            playbackManager = PlaybackManager.getInstance();
+        }
+
+        // Re-sync playback bar state
+        syncPlaybackBarState();
+    }
+
+    @Override
     protected void onStop() {
         super.onStop();
         playbackManager.removeListener(this);
@@ -86,6 +110,25 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         if (artistName != null) {
             artistName.clearAnimation();
         }
+    }
+
+    protected boolean checkForRecovery() {
+        MainActivity mainActivity = MainActivity.getInstance();
+        boolean needsRecovery = mainActivity == null ||
+                mainActivity.getSpotifyApi() == null ||
+                mainActivity.getUserID() == null;
+
+        if (needsRecovery) {
+            Log.d("BaseActivity", "Recovery needed, clearing task and restarting");
+            // Clear everything and restart from MainActivity
+            Intent intent = new Intent(this, MainActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+            return true; // Recovery initiated
+        }
+
+        return false; // No recovery needed
     }
 
     @Override
@@ -135,10 +178,11 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
                         SelectedSongHolder.getInstance().setSelectedSong(currentSong, mainActivity);
 
                         // Open SongView activity
-                        startActivity(new android.content.Intent(this, SongView.class));
+                        Intent intent = new Intent(this, SongView.class);
+                        startActivity(intent);
                     } else {
                         // Handle the case where no MainActivity reference is found
-                        Toast.makeText(this, "Unable to open song view", Toast.LENGTH_SHORT).show();
+                        showToast("Unable to open song view");
                     }
                 }
             });
@@ -405,5 +449,10 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         long seconds = TimeUnit.MILLISECONDS.toSeconds(durationMs) -
                 TimeUnit.MINUTES.toSeconds(minutes);
         return String.format(Locale.getDefault(), "%d:%02d", minutes, seconds);
+    }
+
+    private void showToast(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        Log.v(TAG, "showed Toast: " + message);
     }
 }

@@ -133,14 +133,14 @@ public class SpotifyHistoryFetcher {
             int durationMs = track.getDurationMs();
 
             // Check for duplicates within song duration window
-            if (!dbHelper.hasListenWithinDuration(songId, playedAt, durationMs)) {
+            if (dbHelper.hasListenWithinDuration(songId, playedAt, durationMs)) {
+                Log.d(TAG, "Recent listen found for '" + track.getName() + "'. Skipping recording.");
+            } else {
                 String timestamp = utcFormat.format(new Date(playedAt));
                 dbHelper.addListenRecordWithTimestamp(songId, timestamp);
                 addedCount++;
 
                 Log.d(TAG, "Added listen for: " + track.getName() + " at " + timestamp);
-            } else {
-                Log.d(TAG, "Skipped duplicate listen for: " + track.getName());
             }
         }
 

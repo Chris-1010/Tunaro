@@ -2,6 +2,7 @@ package com.ca.tunaro.activites;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.ImageView;
 import android.widget.Toast;
 
@@ -12,6 +13,8 @@ import com.ca.tunaro.R;
 import com.google.android.material.button.MaterialButton;
 
 public class HomeActivity extends BaseActivity {
+    private static final String TAG = "HomeActivity";
+
     // UI elements
     private ImageView settingsIcon;
     private CardView libraryButton, thisSeasonButton;
@@ -46,9 +49,9 @@ public class HomeActivity extends BaseActivity {
             startActivity(intent);
         });
 
-        thisSeasonButton.setOnClickListener(view -> Toast.makeText(this, "This Season feature coming soon", Toast.LENGTH_SHORT).show());
+        thisSeasonButton.setOnClickListener(view -> showToast("This Season feature coming soon"));
 
-        similarButton.setOnClickListener(view -> Toast.makeText(this, "Similar Songs feature coming soon", Toast.LENGTH_SHORT).show());
+        similarButton.setOnClickListener(view -> showToast("Similar Songs feature coming soon"));
 
         playlistsButton.setOnClickListener(view -> {
             Intent intent = new Intent(HomeActivity.this, PlaylistsActivity.class);
@@ -60,6 +63,11 @@ public class HomeActivity extends BaseActivity {
             startActivity(intent);
         });
 
-        playEarliestButton.setOnClickListener(view -> Toast.makeText(this, "Play from Earliest feature coming soon", Toast.LENGTH_SHORT).show());
+        playEarliestButton.setOnClickListener(view -> showToast("Play from Earliest feature coming soon"));
+    }
+
+    private void showToast(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        Log.v(TAG, "showed Toast: " + message);
     }
 }
