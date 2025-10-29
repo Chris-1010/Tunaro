@@ -27,6 +27,8 @@ import androidx.work.WorkManager;
 import com.ca.tunaro.BaseActivity;
 import com.ca.tunaro.R;
 import com.ca.tunaro.database.DatabaseHelper;
+import com.ca.tunaro.utils.PlaylistCache;
+import com.ca.tunaro.utils.SongCache;
 import com.ca.tunaro.utils.SpotifyHistoryFetcher;
 
 import java.util.concurrent.TimeUnit;
@@ -70,6 +72,8 @@ public class SettingsActivity extends BaseActivity {
     private void setupImportExportButtons() {
         Button importButton = findViewById(R.id.import_button);
         Button exportButton = findViewById(R.id.export_button);
+        Button clearCacheButton = findViewById(R.id.clear_cache_button);
+        clearCacheButton.setOnClickListener(v -> clearAllCaches());
 
         importButton.setOnClickListener(v -> importData());
         exportButton.setOnClickListener(v -> exportData());
@@ -451,6 +455,29 @@ public class SettingsActivity extends BaseActivity {
                 .putInt("last_sync_added", added)
                 .putLong("last_sync_time", System.currentTimeMillis())
                 .apply();
+    }
+
+    //#endregion
+
+    //#region Cache
+
+    private void clearAllCaches() {
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Clear Cache")
+                .setMessage("This will clear all cached playlists and songs. Are you sure?")
+                .setPositiveButton("Clear", (dialog, which) -> {
+                    // Clear playlist cache
+                    PlaylistCache playlistCache = new PlaylistCache(this);
+                    playlistCache.clearCache();
+
+                    // Clear song cache
+                    SongCache songCache = new SongCache(this);
+                    songCache.clearCache();
+
+                    Toast.makeText(this, "Cache cleared successfully", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     //#endregion
