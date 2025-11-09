@@ -9,6 +9,7 @@ import com.ca.tunaro.models.PlaylistModel;
 import com.ca.tunaro.models.SongModel;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import se.michaelthelin.spotify.SpotifyApi;
@@ -21,10 +22,16 @@ import se.michaelthelin.spotify.requests.data.playlists.GetPlaylistsItemsRequest
 
 public class PlaylistSetup {
     private static PlaylistCache playlistCache;
+    private static SongCache songCache;
+    private static final int MAX_BATCH_SIZE = 50;
     private static final Object lock = new Object();
 
     public static void initialize(Context context) {
         playlistCache = new PlaylistCache(context);
+        songCache = new SongCache(context);
+
+        // Clean up expired song cache entries on initialization
+        songCache.clearExpiredEntries();
     }
 
     private static <T> CompletableFuture<T> failedFuture(Throwable ex) {
@@ -59,7 +66,7 @@ public class PlaylistSetup {
 
         final GetListOfUsersPlaylistsRequest getListOfUsersPlaylistsRequest = spotifyApi
                 .getListOfUsersPlaylists(userID)
-                .limit(50)
+                .limit(MAX_BATCH_SIZE)
                 .offset(offset)
                 .build();
 
@@ -79,7 +86,7 @@ public class PlaylistSetup {
                                 }
                             }
                             if (playlistSimplifiedPaging.getNext() != null) {
-                                return getAllPlaylists(userID, spotifyApi, offset + 50, accumulatedPlaylists);
+                                return getAllPlaylists(userID, spotifyApi, offset + MAX_BATCH_SIZE, accumulatedPlaylists);
                             }
                         }
                         return CompletableFuture.completedFuture(accumulatedPlaylists);
@@ -90,17 +97,46 @@ public class PlaylistSetup {
     }
 
     public static CompletableFuture<ArrayList<SongModel>> getPlaylistSongs(String playlistId, SpotifyApi spotifyApi) {
-        // First try to get from cache
-        ArrayList<SongModel> cachedSongs = playlistCache.getCachedSongsForPlaylist(playlistId);
-        if (cachedSongs != null) {
-            return CompletableFuture.completedFuture(cachedSongs);
+        // First try to get song IDs from playlist cache
+        List<String> cachedSongIds = playlistCache.getCachedPlaylistSongIds(playlistId);
+        if (cachedSongIds != null) {
+            // Try to get all songs from song cache
+            ArrayList<SongModel> cachedSongs = new ArrayList<>();
+            List<String> missingSongIds = new ArrayList<>();
+
+            for (String songId : cachedSongIds) {
+                SongModel cachedSong = songCache.getCachedSong(songId);
+                if (cachedSong != null) {
+                    cachedSongs.add(cachedSong);
+                } else {
+                    missingSongIds.add(songId);
+                }
+            }
+
+            // If all songs are cached, return immediately
+            if (missingSongIds.isEmpty()) {
+                Log.d("PlaylistSetup", "All " + cachedSongs.size() + " songs found in cache for playlist " + playlistId);
+                return CompletableFuture.completedFuture(cachedSongs);
+            }
+
+            // If some songs are missing, fetch only those from API
+            Log.d("PlaylistSetup", "Found " + cachedSongs.size() + " cached songs, fetching " + missingSongIds.size() + " missing songs");
+            return fetchMissingSongs(missingSongIds, spotifyApi, cachedSongs);
         }
 
         // If not in cache, fetch from API and cache the result
         return getAllSongs(playlistId, spotifyApi, 0, new ArrayList<>())
                 .thenApply(songs -> {
                     synchronized (lock) {
-                        playlistCache.cacheSongsForPlaylist(playlistId, songs);
+                        // Cache all the songs
+                        List<String> songIds = new ArrayList<>();
+                        for (SongModel song : songs) {
+                            songCache.cacheSong(song);
+                            songIds.add(song.getId());
+                        }
+
+                        // Update the playlist cache with the song IDs
+                        playlistCache.updatePlaylistSongs(playlistId, songIds);
                     }
                     return songs;
                 })
@@ -116,7 +152,7 @@ public class PlaylistSetup {
         final GetPlaylistsItemsRequest getPlaylistsItemsRequest = spotifyApi
                 .getPlaylistsItems(id)
                 .offset(offset)
-                .limit(50)  // Spotify API maximum limit per request
+                .limit(MAX_BATCH_SIZE)
                 .build();
 
         return getPlaylistsItemsRequest.executeAsync()
@@ -137,13 +173,69 @@ public class PlaylistSetup {
                             } catch (InterruptedException e) {
                                 Thread.currentThread().interrupt();
                             }
-                            return getAllSongs(id, spotifyApi, offset + 50, accumulatedSongs);
+                            return getAllSongs(id, spotifyApi, offset + MAX_BATCH_SIZE, accumulatedSongs);
                         }
                         return CompletableFuture.completedFuture(accumulatedSongs);
                     } catch (Exception e) {
                         return failedFuture(e);
                     }
                 });
+    }
+
+    private static CompletableFuture<ArrayList<SongModel>> fetchMissingSongs(List<String> missingSongIds, SpotifyApi spotifyApi, ArrayList<SongModel> existingSongs) {
+        return CompletableFuture.supplyAsync(() -> {
+            ArrayList<SongModel> allSongs = new ArrayList<>(existingSongs);
+
+            // Fetch missing songs
+            try {
+                    // Process in batches of MAX_BATCH_SIZE
+                    for (int i = 0; i < missingSongIds.size(); i += MAX_BATCH_SIZE) {
+                        List<String> batchIds = missingSongIds.subList(i, Math.min(i + MAX_BATCH_SIZE, missingSongIds.size()));
+
+                        se.michaelthelin.spotify.requests.data.tracks.GetSeveralTracksRequest getSeveralTracksRequest =
+                                spotifyApi.getSeveralTracks(String.join(",", batchIds))
+                                        .build();
+
+                        se.michaelthelin.spotify.model_objects.specification.Track[] tracks = getSeveralTracksRequest.execute();
+
+                        for (int trackIndex = 0; trackIndex < tracks.length; trackIndex++) {
+                            if (tracks[trackIndex] != null) {
+                                SongModel songModel = createSongModelFromTrack(tracks[trackIndex]);
+                                allSongs.add(songModel);
+
+                                // Cache the newly fetched song
+                                synchronized (lock) {
+                                    songCache.cacheSong(songModel);
+                                }
+                            } else {
+                                Log.w("PlaylistSetup", "Track " + trackIndex + " of the following batch of IDs was not found: " + batchIds);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    Log.e("PlaylistSetup", "Error fetching missing songs", e);
+                }
+
+            return allSongs;
+        });
+    }
+
+    private static SongModel createSongModelFromTrack(se.michaelthelin.spotify.model_objects.specification.Track track) {
+        se.michaelthelin.spotify.model_objects.specification.Image[] images = track.getAlbum().getImages();
+        String imageUrl = images.length > 0 ? images[0].getUrl() : "";
+
+        return new SongModel(
+                track.getId(),
+                track.getName(),
+                track.getArtists(),
+                track.getDurationMs(),
+                track.getUri(),
+                track.getPopularity(),
+                track.getAlbum().getName(),
+                imageUrl,
+                null, // No playlist date for individual tracks
+                track.getAlbum().getReleaseDate()
+        );
     }
 
     private static @NonNull SongModel getSongModel(PlaylistTrack playlistTrack) {
