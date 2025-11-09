@@ -148,6 +148,14 @@
                 android:text="Export Data"
                 android:textSize="16sp" />
 
+            <Button
+                android:id="@+id/clear_cache_button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="Clear Cache"
+                android:textSize="16sp" />
+
             <!--#endregion -->
 
             <!--#region Device Check Section -->

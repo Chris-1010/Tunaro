@@ -54,7 +54,11 @@ public class DeviceChecker {
                     }
 
                     if (activeDevice == null) {
-                        // Most likely currentDevice is playing
+                        // Use Handler to post to main thread
+                        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                            callback.onDeviceCheckResult(true, "No active device found");
+                            callback.onDeviceWarningStateChanged(false);
+                        });
                         return;
                     }
 
