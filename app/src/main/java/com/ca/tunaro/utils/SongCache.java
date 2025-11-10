@@ -11,6 +11,7 @@ import com.google.gson.reflect.TypeToken;
 
 import java.lang.reflect.Type;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class SongCache {
@@ -33,25 +34,64 @@ public class SongCache {
     }
 
     //#region Cache Operations
-    public void cacheSong(SongModel song) {
-        if (song == null || song.getId() == null) {
-            Log.w(TAG, "Cannot cache null song or song with null ID");
+    public void cacheSongs(List<SongModel> songs) {
+        if (songs == null || songs.isEmpty()) {
+            Log.w(TAG, "Cannot cache null or empty song list");
             return;
         }
 
         try {
+            // Parse JSON once
             Map<String, SongModel> cachedSongs = getCachedSongsMap();
             Map<String, Long> timestamps = getCacheTimestamps();
 
-            cachedSongs.put(song.getId(), song);
-            timestamps.put(song.getId(), System.currentTimeMillis());
+            long currentTime = System.currentTimeMillis();
+            int addedCount = 0;
 
+            // Add all songs to the maps
+            for (SongModel song : songs) {
+                if (song != null && song.getId() != null) {
+                    cachedSongs.put(song.getId(), song);
+                    timestamps.put(song.getId(), currentTime);
+                    addedCount++;
+                }
+            }
+
+            // Write JSON once
             saveCachedSongs(cachedSongs);
             saveCacheTimestamps(timestamps);
 
-            Log.d(TAG, "Cached song: " + song.getName() + " (ID: " + song.getId() + ")");
+            Log.d(TAG, "Batch cached " + addedCount + " songs");
         } catch (Exception e) {
-            Log.e(TAG, "Error caching song: " + song.getId(), e);
+            Log.e(TAG, "Error batch caching songs", e);
+        }
+    }
+
+    public Map<String, SongModel> getCachedSongsMap(List<String> songIds) {
+        if (songIds == null || songIds.isEmpty()) return new HashMap<>();
+
+        try {
+            Map<String, SongModel> cachedSongsMap = getCachedSongsMap();
+            Map<String, Long> timestamps = getCacheTimestamps();
+            Map<String, SongModel> result = new HashMap<>();
+
+            for (String songId : songIds) {
+                Long cacheTime = timestamps.get(songId);
+
+                // Check if cache entry exists and is not expired
+                if (cacheTime != null && !isExpired(cacheTime)) {
+                    SongModel song = cachedSongsMap.get(songId);
+                    if (song != null) {
+                        result.put(songId, song);
+                    }
+                }
+            }
+
+            Log.d(TAG, "Batch retrieved " + result.size() + " songs from cache");
+            return result;
+        } catch (Exception e) {
+            Log.e(TAG, "Error batch retrieving cached songs", e);
+            return new HashMap<>();
         }
     }
 
