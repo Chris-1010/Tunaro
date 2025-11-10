@@ -10,6 +10,7 @@ import com.ca.tunaro.models.SongModel;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import se.michaelthelin.spotify.SpotifyApi;
@@ -23,8 +24,22 @@ import se.michaelthelin.spotify.requests.data.playlists.GetPlaylistsItemsRequest
 public class PlaylistSetup {
     private static PlaylistCache playlistCache;
     private static SongCache songCache;
-    private static final int MAX_BATCH_SIZE = 50;
+    private static final int MAX_BATCH_SIZE = 50;    // Spotify API maximum limit per request
     private static final Object lock = new Object();
+
+    public static class SongLoadResult {
+        public final ArrayList<SongModel> songs;
+        public final boolean needsCaching;
+
+        public SongLoadResult(ArrayList<SongModel> songs, boolean needsCaching) {
+            this.songs = songs;
+            this.needsCaching = needsCaching;
+        }
+    }
+
+    public interface SongLoadProgressListener {
+        void onSongsLoaded(ArrayList<SongModel> loadedSongs, int currentCount, int totalCount);
+    }
 
     public static void initialize(Context context) {
         playlistCache = new PlaylistCache(context);
@@ -96,58 +111,68 @@ public class PlaylistSetup {
                 });
     }
 
-    public static CompletableFuture<ArrayList<SongModel>> getPlaylistSongs(String playlistId, SpotifyApi spotifyApi) {
-        // First try to get song IDs from playlist cache
-        List<String> cachedSongIds = playlistCache.getCachedPlaylistSongIds(playlistId);
-        if (cachedSongIds != null) {
-            // Try to get all songs from song cache
-            ArrayList<SongModel> cachedSongs = new ArrayList<>();
-            List<String> missingSongIds = new ArrayList<>();
+    public static CompletableFuture<SongLoadResult> getPlaylistSongs(
+            String playlistId, SpotifyApi spotifyApi, SongLoadProgressListener progressListener) {
 
-            for (String songId : cachedSongIds) {
-                SongModel cachedSong = songCache.getCachedSong(songId);
-                if (cachedSong != null) {
-                    cachedSongs.add(cachedSong);
-                } else {
-                    missingSongIds.add(songId);
+        return CompletableFuture.supplyAsync(() -> {
+            List<String> cachedSongIds = playlistCache.getCachedPlaylistSongIds(playlistId);
+            if (cachedSongIds != null && !cachedSongIds.isEmpty()) {
+                Map<String, SongModel> cachedSongsMap = songCache.getCachedSongsMap(cachedSongIds);
+
+                ArrayList<SongModel> cachedSongs = new ArrayList<>();
+                List<String> missingSongIds = new ArrayList<>();
+
+                // Preserve order from cached song IDs
+                for (String songId : cachedSongIds) {
+                    SongModel song = cachedSongsMap.get(songId);
+                    if (song != null) {
+                        cachedSongs.add(song);
+                    } else {
+                        missingSongIds.add(songId);
+                    }
+                }
+
+                // Report cached songs immediately
+                if (!cachedSongs.isEmpty() && progressListener != null) {
+                    progressListener.onSongsLoaded(new ArrayList<>(cachedSongs),
+                            cachedSongs.size(), cachedSongIds.size());
+                }
+
+                // If all songs cached, return with needsCaching=false
+                if (missingSongIds.isEmpty()) {
+                    Log.d("PlaylistSetup", "All " + cachedSongs.size() + " songs found in cache");
+                    return new SongLoadResult(cachedSongs, false);
+                }
+
+                // Fetch missing songs - needs caching
+                try {
+                    ArrayList<SongModel> allSongs = fetchMissingSongs(missingSongIds, spotifyApi, cachedSongs,
+                            progressListener, cachedSongIds.size()).get();
+                    return new SongLoadResult(allSongs, true);
+                } catch (Exception e) {
+                    Log.e("PlaylistSetup", "Error fetching missing songs", e);
+                    return new SongLoadResult(cachedSongs, false);
                 }
             }
 
-            // If all songs are cached, return immediately
-            if (missingSongIds.isEmpty()) {
-                Log.d("PlaylistSetup", "All " + cachedSongs.size() + " songs found in cache for playlist " + playlistId);
-                return CompletableFuture.completedFuture(cachedSongs);
+            // Not in cache - fetch from API, needs caching
+            try {
+                ArrayList<SongModel> songs = getAllSongs(playlistId, spotifyApi, 0, new ArrayList<>(),
+                        progressListener, -1).get();
+                return new SongLoadResult(songs, true);
+            } catch (Exception e) {
+                Log.e("PlaylistSetup", "Error getting songs", e);
+                return new SongLoadResult(new ArrayList<>(), false);
             }
-
-            // If some songs are missing, fetch only those from API
-            Log.d("PlaylistSetup", "Found " + cachedSongs.size() + " cached songs, fetching " + missingSongIds.size() + " missing songs");
-            return fetchMissingSongs(missingSongIds, spotifyApi, cachedSongs);
-        }
-
-        // If not in cache, fetch from API and cache the result
-        return getAllSongs(playlistId, spotifyApi, 0, new ArrayList<>())
-                .thenApply(songs -> {
-                    synchronized (lock) {
-                        // Cache all the songs
-                        List<String> songIds = new ArrayList<>();
-                        for (SongModel song : songs) {
-                            songCache.cacheSong(song);
-                            songIds.add(song.getId());
-                        }
-
-                        // Update the playlist cache with the song IDs
-                        playlistCache.updatePlaylistSongs(playlistId, songIds);
-                    }
-                    return songs;
-                })
-                .exceptionally(throwable -> {
-                    Log.e("PlaylistSetup", "Error getting songs: " + throwable.getMessage());
-                    return new ArrayList<>();
-                });
+        });
     }
 
     private static CompletableFuture<ArrayList<SongModel>> getAllSongs(
-            String id, SpotifyApi spotifyApi, int offset, ArrayList<SongModel> accumulatedSongs) {
+            String id,
+            SpotifyApi spotifyApi,
+            int offset,
+            ArrayList<SongModel> accumulatedSongs,
+            SongLoadProgressListener progressListener, int totalCount) {
 
         final GetPlaylistsItemsRequest getPlaylistsItemsRequest = spotifyApi
                 .getPlaylistsItems(id)
@@ -165,16 +190,21 @@ public class PlaylistSetup {
                             }
                         }
 
+                        // Get total count on first request
+                        int total = totalCount == -1 ? playlistTrackPaging.getTotal() : totalCount;
+
+                        // Report progress for this batch
+                        if (progressListener != null) {
+                            progressListener.onSongsLoaded(new ArrayList<>(accumulatedSongs),
+                                    accumulatedSongs.size(), total);
+                        }
+
                         // Continue loading if there are more songs
                         if (playlistTrackPaging.getNext() != null) {
-                            // Add a small delay to avoid rate limiting
-                            try {
-                                Thread.sleep(50);
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                            }
-                            return getAllSongs(id, spotifyApi, offset + MAX_BATCH_SIZE, accumulatedSongs);
+                            return getAllSongs(id, spotifyApi, offset + MAX_BATCH_SIZE,
+                                    accumulatedSongs, progressListener, total);
                         }
+
                         return CompletableFuture.completedFuture(accumulatedSongs);
                     } catch (Exception e) {
                         return failedFuture(e);
@@ -182,39 +212,59 @@ public class PlaylistSetup {
                 });
     }
 
-    private static CompletableFuture<ArrayList<SongModel>> fetchMissingSongs(List<String> missingSongIds, SpotifyApi spotifyApi, ArrayList<SongModel> existingSongs) {
+    public static void cacheSongsInBackground(String playlistId, ArrayList<SongModel> songs) {
+        Log.d("PlaylistSetup", "Starting background cache for " + songs.size() + " songs");
+
+        synchronized (lock) {
+            // SongCache: Cache all songs
+            songCache.cacheSongs(songs);
+
+            // PlaylistCache: Update with song IDs
+            List<String> songIds = new ArrayList<>();
+            for (SongModel song : songs) {
+                songIds.add(song.getId());
+            }
+            playlistCache.updatePlaylistSongs(playlistId, songIds);
+        }
+
+        Log.d("PlaylistSetup", "Background cache completed for playlist " + playlistId);
+    }
+
+    private static CompletableFuture<ArrayList<SongModel>> fetchMissingSongs(
+            List<String> missingSongIds, SpotifyApi spotifyApi, ArrayList<SongModel> existingSongs,
+            SongLoadProgressListener progressListener, int totalExpected) {
+
         return CompletableFuture.supplyAsync(() -> {
             ArrayList<SongModel> allSongs = new ArrayList<>(existingSongs);
 
-            // Fetch missing songs
             try {
-                    // Process in batches of MAX_BATCH_SIZE
-                    for (int i = 0; i < missingSongIds.size(); i += MAX_BATCH_SIZE) {
-                        List<String> batchIds = missingSongIds.subList(i, Math.min(i + MAX_BATCH_SIZE, missingSongIds.size()));
+                for (int i = 0; i < missingSongIds.size(); i += MAX_BATCH_SIZE) {
+                    List<String> batchIds = missingSongIds.subList(i, Math.min(i + MAX_BATCH_SIZE, missingSongIds.size()));
 
-                        se.michaelthelin.spotify.requests.data.tracks.GetSeveralTracksRequest getSeveralTracksRequest =
-                                spotifyApi.getSeveralTracks(String.join(",", batchIds))
-                                        .build();
+                    se.michaelthelin.spotify.requests.data.tracks.GetSeveralTracksRequest getSeveralTracksRequest =
+                            spotifyApi.getSeveralTracks(String.join(",", batchIds))
+                                    .build();
 
-                        se.michaelthelin.spotify.model_objects.specification.Track[] tracks = getSeveralTracksRequest.execute();
+                    se.michaelthelin.spotify.model_objects.specification.Track[] tracks = getSeveralTracksRequest.execute();
 
-                        for (int trackIndex = 0; trackIndex < tracks.length; trackIndex++) {
-                            if (tracks[trackIndex] != null) {
-                                SongModel songModel = createSongModelFromTrack(tracks[trackIndex]);
-                                allSongs.add(songModel);
-
-                                // Cache the newly fetched song
-                                synchronized (lock) {
-                                    songCache.cacheSong(songModel);
-                                }
-                            } else {
-                                Log.w("PlaylistSetup", "Track " + trackIndex + " of the following batch of IDs was not found: " + batchIds);
-                            }
+                    for (int trackIndex = 0; trackIndex < tracks.length; trackIndex++) {
+                        if (tracks[trackIndex] != null) {
+                            SongModel songModel = createSongModelFromTrack(tracks[trackIndex]);
+                            allSongs.add(songModel);
+                        } else {
+                            Log.w("PlaylistSetup", "Track " + trackIndex + " was not found");
                         }
                     }
-                } catch (Exception e) {
-                    Log.e("PlaylistSetup", "Error fetching missing songs", e);
+
+                    // Report progress after each batch
+                    if (progressListener != null) {
+                        progressListener.onSongsLoaded(new ArrayList<>(allSongs),
+                                allSongs.size(), totalExpected);
+                    }
                 }
+            } catch (Exception e) {
+                Log.e("PlaylistSetup", "Error fetching missing songs", e);
+            }
 
             return allSongs;
         });
