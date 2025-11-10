@@ -343,18 +343,20 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         }
     }
 
-    private void showLoading(boolean isLoading, int loadedCount, int totalCount) {
-        View loadingView = findViewById(R.id.loading_view);
-        TextView loadingText = findViewById(R.id.loading_text);
+    private void showShimmerLoading(boolean isLoading) {
+        View shimmerView = findViewById(R.id.shimmer_view_container);
+        RecyclerView recyclerView = findViewById(R.id.song_recycler_view);
 
-        if (loadingView != null) {
-            loadingView.setVisibility(isLoading ? View.VISIBLE : View.GONE);
+        if (shimmerView != null) {
+            shimmerView.setVisibility(isLoading ? View.VISIBLE : View.GONE);
+            if (isLoading) {
+                ((com.facebook.shimmer.ShimmerFrameLayout) shimmerView).startShimmer();
+            } else {
+                ((com.facebook.shimmer.ShimmerFrameLayout) shimmerView).stopShimmer();
+            }
         }
 
-        if (loadingText != null && isLoading) {
-            String progress = String.format("Loading songs (%d/%d)...", loadedCount, totalCount);
-            loadingText.setText(progress);
-        }
+        recyclerView.setVisibility(isLoading ? View.GONE : View.VISIBLE);
     }
 
     @Override
