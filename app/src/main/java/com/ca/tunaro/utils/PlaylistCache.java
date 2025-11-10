@@ -67,6 +67,11 @@ public class PlaylistCache {
                     for (SongModel song : playlist.getSongs()) {
                         songIds.add(song.getId());
                     }
+
+                    // Store song IDs separately for this playlist
+                    String songIdsJson = gson.toJson(songIds);
+                    prefs.edit().putString(SONGS_KEY_PREFIX + playlist.getId(), songIdsJson).apply();
+
                     Log.d(TAG, "Caching " + songIds.size() + " song IDs for playlist: " + playlist.getPlaylistName());
                 } else {
                     Log.d(TAG, "Playlist " + playlist.getPlaylistName() + " has no songs loaded yet - caching empty list");
@@ -134,31 +139,21 @@ public class PlaylistCache {
 
     public List<String> getCachedPlaylistSongIds(String playlistId) {
         try {
-            String playlistsJson = prefs.getString(PLAYLISTS_KEY, null);
-            if (playlistsJson == null) {
+            // Store song IDs separately per playlist for faster access
+            String songIdsJson = prefs.getString(SONGS_KEY_PREFIX + playlistId, null);
+            if (songIdsJson == null) {
+                Log.d(TAG, "No cached song IDs found for playlist " + playlistId);
                 return null;
             }
 
-            Type metadataListType = new TypeToken<List<PlaylistMetadata>>(){}.getType();
-            List<PlaylistMetadata> metadataList = gson.fromJson(playlistsJson, metadataListType);
+            Type listType = new TypeToken<List<String>>(){}.getType();
+            List<String> songIds = gson.fromJson(songIdsJson, listType);
 
-            if (metadataList != null) {
-                for (PlaylistMetadata metadata : metadataList) {
-                    if (metadata.getId().equals(playlistId)) {
-                        List<String> songIds = metadata.getSongIds();
-                        if (songIds != null) {
-                            Log.d(TAG, "Found " + songIds.size() + " song IDs for playlist " + playlistId);
-                            return songIds;
-                        } else {
-                            Log.d(TAG, "Song IDs list is null for playlist " + playlistId);
-                            return null;
-                        }
-                    }
-                }
+            if (songIds != null) {
+                Log.d(TAG, "Found " + songIds.size() + " song IDs for playlist " + playlistId);
             }
 
-            Log.d(TAG, "No cached song IDs found for playlist " + playlistId);
-            return null;
+            return songIds;
         } catch (Exception e) {
             Log.e(TAG, "Error retrieving cached song IDs for playlist " + playlistId, e);
             return null;
@@ -167,37 +162,11 @@ public class PlaylistCache {
 
     public void updatePlaylistSongs(String playlistId, List<String> songIds) {
         try {
-            String playlistsJson = prefs.getString(PLAYLISTS_KEY, null);
-            if (playlistsJson == null) return;
+            // Store song IDs separately for faster access
+            String songIdsJson = gson.toJson(songIds);
+            prefs.edit().putString(SONGS_KEY_PREFIX + playlistId, songIdsJson).apply();
 
-            Type metadataListType = new TypeToken<List<PlaylistMetadata>>(){}.getType();
-            List<PlaylistMetadata> metadataList = gson.fromJson(playlistsJson, metadataListType);
-
-            if (metadataList != null) {
-                for (PlaylistMetadata metadata : metadataList) {
-                    if (metadata.getId().equals(playlistId)) {
-                        // Update the song IDs for this playlist
-                        PlaylistMetadata updatedMetadata = new PlaylistMetadata(
-                                metadata.getId(),
-                                metadata.getName(),
-                                metadata.getSongCount(),
-                                metadata.getImageUrl(),
-                                songIds
-                        );
-
-                        // Replace in list
-                        int index = metadataList.indexOf(metadata);
-                        metadataList.set(index, updatedMetadata);
-
-                        // Save back to preferences
-                        String updatedJson = gson.toJson(metadataList);
-                        prefs.edit().putString(PLAYLISTS_KEY, updatedJson).apply();
-
-                        Log.d(TAG, "Updated playlist " + playlistId + " with " + songIds.size() + " song IDs");
-                        return;
-                    }
-                }
-            }
+            Log.d(TAG, "Updated playlist " + playlistId + " with " + songIds.size() + " song IDs");
         } catch (Exception e) {
             Log.e(TAG, "Error updating playlist songs", e);
         }
