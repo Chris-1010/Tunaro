@@ -13,4 +13,5 @@
     <color name="tanAccent">#e3cdb3</color>
     <color name="faintTanAccent">#80E3CDB3</color>
     <color name="purpleTheme">#4C00B7</color>
+    <color name="shimmer_placeholder">#6F6F6F</color>
 </resources>
