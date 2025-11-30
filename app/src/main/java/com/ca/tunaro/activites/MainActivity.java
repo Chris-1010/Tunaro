@@ -125,14 +125,6 @@ public class MainActivity extends AppCompatActivity {
 
         AuthorizationClient.openLoginActivity(this, REQUEST_CODE, request);
 
-        // update spotifyAPI
-        spotifyApi = new SpotifyApi.Builder()
-                .setClientId(CLIENT_ID)
-                .setClientSecret(CLIENT_SECRET)
-                .setRedirectUri(REDIRECT_URI)
-                .setAccessToken(getAccessToken())
-                .build();
-
         // Create a new CompletableFuture for this authentication process
         CompletableFuture<Void> authFuture = new CompletableFuture<>();
 
@@ -140,15 +132,10 @@ public class MainActivity extends AppCompatActivity {
         this.authenticationFuture = authFuture;
 
         // Return a new CompletableFuture that chains the authentication and user profile fetch
-        return authFuture.thenCompose(aVoid -> {
-            spotifyApi.setAccessToken(getAccessToken());
-            return getCurrentUsersProfile_Async();
-        }).thenRunAsync(() -> {
-            runOnUiThread(() -> {
-                connectSpotifyAppRemote();
-                performInitialDeviceCheck();
-            });
-        }, executor);
+        return authFuture.thenCompose(aVoid -> getCurrentUsersProfile_Async()).thenRunAsync(() -> runOnUiThread(() -> {
+            connectSpotifyAppRemote();
+            performInitialDeviceCheck();
+        }), executor);
     }
 
     public void connectSpotifyAppRemote() {
@@ -163,14 +150,10 @@ public class MainActivity extends AppCompatActivity {
                     userID = user.getId();
                     userDisplayName = user.getDisplayName();
 
-                    runOnUiThread(() -> {
-                        showToast("Logged in as " + userDisplayName);
-                    });
+                    runOnUiThread(() -> showToast("Logged in as " + userDisplayName));
                 })
                 .exceptionally(throwable -> {
-                    runOnUiThread(() -> {
-                        showToast("Error: " + throwable.getMessage());
-                    });
+                    runOnUiThread(() -> showToast("Error: " + throwable.getMessage()));
                     return null;
                 });
     }
@@ -181,6 +164,12 @@ public class MainActivity extends AppCompatActivity {
 
         if (requestCode == REQUEST_CODE) {
             AuthorizationResponse response = AuthorizationClient.getResponse(resultCode, intent);
+            Log.d(TAG, "Auth response type: " + response.getType());
+            Log.d(TAG, "Result code: " + resultCode);
+            if (response.getType() == AuthorizationResponse.Type.ERROR) {
+                Log.e(TAG, "Auth error: " + response.getError());
+            }
+
             switch (response.getType()) {
                 case TOKEN:
                     // Authentication successful
@@ -220,24 +209,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void performInitialDeviceCheck() {
-        DeviceChecker.checkPlaybackDevice(this, spotifyApi, (isCorrectDevice, message) -> {
-            runOnUiThread(() -> {
-                if (!isCorrectDevice && PlaybackManager.getInstance().isPlaying() && DeviceChecker.isDeviceCheckEnabled(this)) {
-                    showToast(message);
-                }
-            });
-        });
+        DeviceChecker.checkPlaybackDevice(this, spotifyApi, (isCorrectDevice, message) -> runOnUiThread(() -> {
+            if (!isCorrectDevice && PlaybackManager.getInstance().isPlaying() && DeviceChecker.isDeviceCheckEnabled(this)) {
+                showToast(message);
+            }
+        }));
     }
 
     private void saveAccessToken(String token) {
         // Save token to SharedPreferences or secure storage
         SharedPreferences prefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
         prefs.edit().putString("spotify_access_token", token).apply();
-    }
-
-    private String getAccessToken() {
-        SharedPreferences prefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
-        return prefs.getString("spotify_access_token", null);
     }
 
     // Getters for important objects
@@ -251,10 +233,6 @@ public class MainActivity extends AppCompatActivity {
 
     public String getUserID() {
         return userID;
-    }
-
-    public String getUserDisplayName() {
-        return userDisplayName;
     }
 
     private void showToast(String message) {
