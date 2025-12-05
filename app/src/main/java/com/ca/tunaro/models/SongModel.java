@@ -2,41 +2,81 @@ package com.ca.tunaro.models;
 
 import com.ca.tunaro.activites.MainActivity;
 
+import java.io.Serializable;
 import java.util.Date;
 
-import se.michaelthelin.spotify.SpotifyApi;
 import se.michaelthelin.spotify.model_objects.specification.ArtistSimplified;
 
-public class SongModel {
-    // See https://developer.spotify.com/documentation/web-api/reference/get-playlists-tracks to add more (also change the 'fields' parameter in the PlaylistSetup.java file)
+public class SongModel implements Serializable {
     String id;
     String name;
     String[] artists;
-    int duration;    // duration_ms
-    String uri;
-    int popularity;    // a score out of 100 which is based on how much the song is played and how recently (Dev Note: Seems to me more like a 'trending' score)
-    String albumName;
-    String albumCoverUrl;    // images[1]["url"] (1 is the second index in the list which holds image sizes of 300x300)
-    Date dateAddedToPlaylist;    // added_at (a string in date-time format. i.e. "2021-09-14T22:45:17Z")
-    String releaseDate;    // album["release_date"]    (most often in a format like YYYY-MM)
+    int duration;               // milliseconds
+    String uri;                 // Spotify URI for playback
+    int popularity;             // a score out of 100 which is based on how much the song has been played recently
+    Album album;
+    String isrc;                // International Standard Recording Code
+    Date dateAddedToPlaylist;   // added_at (for sorting by date added)
+
+    //#region Nested class for Album
+
+    // This is to avoid creating an extra unnecessary file for a simple model
+    // which is only ever used in the context of a SongModel
+
+    public static class Album implements Serializable {
+        String id;
+        String name;
+        String albumType;       // single, album, or compilation
+        String releaseDate;
+        String coverImage;
+
+        public Album(String id, String name, String albumType, String releaseDate, String coverImage) {
+            this.id = id;
+            this.name = name;
+            this.albumType = albumType;
+            this.releaseDate = releaseDate;
+            this.coverImage = coverImage;
+        }
+
+        public String getId() {
+            return id;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public String getAlbumType() {
+            return albumType;
+        }
+
+        public String getReleaseDate() {
+            return releaseDate;
+        }
+
+        public String getCoverImage() {
+            return coverImage;
+        }
+    }
+
+    //#endregion
 
     //#region Constructors
 
-    public SongModel(String id, String name, String[] artists, int duration, String uri, int popularity, String albumName, String albumCoverUrl, Date dateAddedToPlaylist, String releaseDate) {
+    public SongModel(String id, String name, String[] artists, int duration, String uri, int popularity, Album album, String isrc, Date dateAddedToPlaylist) {
         this.id = id;
         this.name = name;
         this.artists = artists;
         this.duration = duration;
         this.uri = uri;
         this.popularity = popularity;
-        this.albumName = albumName;
-        this.albumCoverUrl = albumCoverUrl;
+        this.album = album;
+        this.isrc = isrc;
         this.dateAddedToPlaylist = dateAddedToPlaylist;
-        this.releaseDate = releaseDate;
     }
 
-    public SongModel(String id, String name, ArtistSimplified[] artists, int duration, String uri, int popularity, String albumName, String albumCoverUrl, Date dateAddedToPlaylist, String releaseDate) {
-        this(id, name, extractArtistNames(artists), duration, uri, popularity, albumName, albumCoverUrl, dateAddedToPlaylist, releaseDate);
+    public SongModel(String id, String name, ArtistSimplified[] artists, int duration, String uri, int popularity, Album album, String isrc, Date dateAddedToPlaylist) {
+        this(id, name, extractArtistNames(artists), duration, uri, popularity, album, isrc, dateAddedToPlaylist);
     }
 
     //#endregion
@@ -122,12 +162,29 @@ public class SongModel {
         void onError(String error);
     }
 
+    // Album methods
+    public String getAlbumId() {
+        return album.getId();
+    }
+
+    public String getAlbumType() {
+        return album.getAlbumType();
+    }
+
     public String getAlbumName() {
-        return albumName;
+        return album.getName();
     }
 
     public String getAlbumCoverUrl() {
-        return albumCoverUrl;
+        return album.getCoverImage();
+    }
+
+    public String getReleaseDate() {
+        return album.getReleaseDate();
+    }
+
+    public String getIsrc() {
+        return isrc;
     }
 
     public Date getDateAddedToPlaylist() {
@@ -136,10 +193,6 @@ public class SongModel {
 
     public String getDateAddedToPlaylistString() {
         return dateAddedToPlaylist.toString();
-    }
-
-    public String getReleaseDate() {
-        return releaseDate;
     }
 
     //#endregion
