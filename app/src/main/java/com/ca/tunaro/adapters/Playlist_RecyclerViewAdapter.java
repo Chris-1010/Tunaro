@@ -39,7 +39,7 @@ public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(context).inflate(R.layout.recycler_view_row, parent, false);
+        View view = LayoutInflater.from(context).inflate(R.layout.playlist_recycler_view_row, parent, false);
         return new ViewHolder(view, recyclerViewInterface, longClickListener);
     }
 
@@ -72,7 +72,6 @@ public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_
         notifyDataSetChanged();
     }
 
-    // Important to have static here:
     public static class ViewHolder extends RecyclerView.ViewHolder {
         ImageView imageView;
         ImageView favouriteIcon;
@@ -81,7 +80,7 @@ public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_
         public ViewHolder(@NonNull View itemView, Playlist_RecyclerViewInterface recyclerViewInterface, OnItemLongClickListener longClickListener) {
             super(itemView);
             playlistName = itemView.findViewById(R.id.songNameView);
-            songCount = itemView.findViewById(R.id.artistView);
+            songCount = itemView.findViewById(R.id.songCountView);
             imageView = itemView.findViewById(R.id.albumCoverView);
             favouriteIcon = itemView.findViewById(R.id.favouriteIcon);
 
