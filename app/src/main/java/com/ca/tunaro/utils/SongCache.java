@@ -61,7 +61,7 @@ public class SongCache {
             saveCachedSongs(cachedSongs);
             saveCacheTimestamps(timestamps);
 
-            Log.d(TAG, "Batch cached " + addedCount + " songs");
+            Log.d(TAG, "Batch cached " + addedCount + " song" + (addedCount == 1 ? "" : "s"));
         } catch (Exception e) {
             Log.e(TAG, "Error batch caching songs", e);
         }
