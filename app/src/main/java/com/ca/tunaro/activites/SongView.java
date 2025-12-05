@@ -57,7 +57,7 @@ public class SongView extends BaseActivity {
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
 
-            // Get your playback bar
+            // Get playback bar
             View playbackBar = findViewById(R.id.playback_bar);
 
             // Apply bottom margin to playback bar equal to navigation bar height
@@ -100,7 +100,7 @@ public class SongView extends BaseActivity {
         String albumCover = selectedSong.getAlbumCoverUrl();
         String albumName = selectedSong.getAlbumName();
         String duration = selectedSong.getDurationString();
-        String popularity = String.valueOf(selectedSong.getPopularity());
+        int popularity = selectedSong.getPopularity();
 
         TextView nameView = findViewById(R.id.SongView_SongName);
         TextView artistView = findViewById(R.id.SongView_ArtistName);
@@ -116,12 +116,15 @@ public class SongView extends BaseActivity {
                 .into(albumCoverImageView);
         albumView.setText(albumName);
         durationView.setText(duration);
-        if (!popularity.equals("0")) popularityView.setText("Popularity: " + popularity + "%");
+
+        if (popularity > 0) {
+            popularityView.setText(getString(R.string.popularity_value, popularity));
+        }
         else selectedSong.fetchPopularityAsync(new SongModel.PopularityCallback() {
             // Fetch it from Spotify, asynchronously
             @Override
             public void onPopularityFetched(int popularity) {
-                popularityView.setText("Popularity: " + popularity + "%");
+                popularityView.setText(getString(R.string.popularity_value, popularity));
             }
 
             @Override

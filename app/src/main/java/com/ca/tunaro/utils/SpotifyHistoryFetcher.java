@@ -147,6 +147,9 @@ public class SpotifyHistoryFetcher {
         return addedCount;
     }
 
+    /**
+     * Resets progress counters and cancellation flag
+     **/
     private void resetCounters() {
         totalProcessed.set(0);
         totalAdded.set(0);

@@ -37,6 +37,7 @@ import com.ca.tunaro.interfaces.Song_RecyclerViewInterface;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
 import se.michaelthelin.spotify.SpotifyApi;
@@ -92,8 +93,12 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         RecyclerView recyclerView = findViewById(R.id.song_recycler_view);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
 
+        // Initialize adapter, empty for now
+        adapter = new Song_RecyclerViewAdapter(this, this, new ArrayList<>());
+        recyclerView.setAdapter(adapter);
+
         // Show loading state while fetching songs
-        showLoading(true, 0, selectedPlaylist.getSongCount());
+        showShimmerLoading(true);
 
         // Get SpotifyApi instance from MainActivity
         SpotifyApi spotifyApi;
@@ -105,32 +110,52 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             return;
         }
 
-        // Load songs for the playlist
-        PlaylistSetup.getPlaylistSongs(selectedPlaylist.getId(), spotifyApi)
-                .thenAccept(songs -> {
-                    if (songs == null) {
+        // Load songs with progress updates
+        PlaylistSetup.getPlaylistSongs(selectedPlaylist.getId(), spotifyApi,
+                        (loadedSongs, currentCount, totalCount) -> runOnUiThread(() -> {
+                            // Update adapter progressively as songs load
+                            allSongs = new ArrayList<>(loadedSongs);
+                            adapter.updateSongs(loadedSongs);
+
+                            // Hide shimmer when songs start loading in
+                            if (currentCount > 0) {
+                                showShimmerLoading(false);
+                            }
+
+                            Log.d(TAG, "Loaded " + currentCount + " / " + totalCount + " songs");
+                        }))
+                .thenAccept(result -> {
+                    if (result.songs == null) {
                         throw new CompletionException(new Exception("No songs retrieved"));
                     }
-                    selectedPlaylist.setSongs(songs);
-                    allSongs = new ArrayList<>(songs);  // Store a copy of all songs in ArrayList
+                    selectedPlaylist.setSongs(result.songs);
+                    allSongs = new ArrayList<>(result.songs);
 
                     runOnUiThread(() -> {
-                        showLoading(false, songs.size(), selectedPlaylist.getSongCount());
-                        adapter = new Song_RecyclerViewAdapter(this, this, this, selectedPlaylist.getSongs());
-                        recyclerView.setAdapter(adapter);
+                        showShimmerLoading(false);
+                        adapter.updateSongs(result.songs);
+
+                        // Setup search and sorting after songs are loaded
                         setupSearch();
                         setupSorting();
+
+                        // Only cache if needed
+                        if (result.needsCaching) {
+                            CompletableFuture.runAsync(() -> {
+                                PlaylistSetup.cacheSongsInBackground(selectedPlaylist.getId(), result.songs);
+                            });
+                        } else {
+                            Log.d(TAG, "Skipping cache - all songs already cached");
+                        }
                     });
                 })
                 .exceptionally(throwable -> {
                     runOnUiThread(() -> {
-                        showLoading(false, 0, selectedPlaylist.getSongCount());
+                        showShimmerLoading(false);
                         showToast("Error loading songs: " + throwable.getMessage());
                     });
                     return null;
                 });
-
-
     }
 
     private void setupInitialUI() {
@@ -186,7 +211,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
     private void filterSongs(String query) {
         if (query == null || query.isEmpty()) {
-            adapter.updateSongs(new ArrayList<>(allSongs));  // Create a new ArrayList from allSongs
+            adapter.updateSongs(allSongs);
             return;
         }
 
@@ -343,18 +368,20 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         }
     }
 
-    private void showLoading(boolean isLoading, int loadedCount, int totalCount) {
-        View loadingView = findViewById(R.id.loading_view);
-        TextView loadingText = findViewById(R.id.loading_text);
+    private void showShimmerLoading(boolean isLoading) {
+        View shimmerView = findViewById(R.id.shimmer_view_container);
+        RecyclerView recyclerView = findViewById(R.id.song_recycler_view);
 
-        if (loadingView != null) {
-            loadingView.setVisibility(isLoading ? View.VISIBLE : View.GONE);
+        if (shimmerView != null) {
+            shimmerView.setVisibility(isLoading ? View.VISIBLE : View.GONE);
+            if (isLoading) {
+                ((com.facebook.shimmer.ShimmerFrameLayout) shimmerView).startShimmer();
+            } else {
+                ((com.facebook.shimmer.ShimmerFrameLayout) shimmerView).stopShimmer();
+            }
         }
 
-        if (loadingText != null && isLoading) {
-            String progress = String.format("Loading songs (%d/%d)...", loadedCount, totalCount);
-            loadingText.setText(progress);
-        }
+        recyclerView.setVisibility(isLoading ? View.GONE : View.VISIBLE);
     }
 
     @Override
@@ -365,13 +392,10 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     }
 
     /**
-     * Launch a new activity (SongView) that shows a detailed display (last listened to, popularity, release date, etc.), very similar to the PlaylistView for the top half (showing the album cover and the name underneath.
-     * The user can add details about the song like where they heard the song first, favourite parts of the song, ratings, and general notes.
+     * Launch SongView activity when selected
      */
     @Override
     public void onItemClick(int position, View itemView) {
-        // Change over to the PlaylistView Activity
-
         SongModel clickedSong = adapter.getSongs().get(position);
 
         // Set the selected song in the singleton
