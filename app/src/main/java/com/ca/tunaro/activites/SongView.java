@@ -111,6 +111,7 @@ public class SongView extends BaseActivity {
         TextView popularityView = findViewById(R.id.SongView_SongPopularity);
 
         nameView.setText(name);
+        nameView.setSelected(true); // Enable marquee
         artistView.setText(artist);
 
         Glide.with(this)
