@@ -11,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.ca.tunaro.models.PlaylistModel;
 import com.ca.tunaro.interfaces.Playlist_RecyclerViewInterface;
 import com.ca.tunaro.R;
@@ -59,6 +60,9 @@ public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_
         // Load image using Glide
         Glide.with(context)
                 .load(model.getImage())
+                .placeholder(R.drawable.playlist_placeholder)
+                .error(R.drawable.playlist_placeholder)
+                .transition(DrawableTransitionOptions.withCrossFade())
                 .into(holder.imageView);
     }
 

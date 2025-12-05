@@ -17,6 +17,7 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.ca.tunaro.activites.MainActivity;
 import com.ca.tunaro.activites.PlaylistView;
 import com.ca.tunaro.activites.SongView;
@@ -429,6 +430,9 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         if (albumCover != null && !isDestroyed() && !isFinishing()) {
             Glide.with(this)
                     .load(song.getAlbumCoverUrl())
+                    .placeholder(R.drawable.playlist_placeholder)
+                    .error(R.drawable.playlist_placeholder)
+                    .transition(DrawableTransitionOptions.withCrossFade())
                     .into(albumCover);
         }
     }

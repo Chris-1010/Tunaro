@@ -20,6 +20,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager2.widget.ViewPager2;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.ca.tunaro.BaseActivity;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.R;
@@ -111,8 +112,12 @@ public class SongView extends BaseActivity {
 
         nameView.setText(name);
         artistView.setText(artist);
+
         Glide.with(this)
                 .load(albumCover)
+                .placeholder(R.drawable.song_placeholder)
+                .error(R.drawable.song_placeholder)
+                .transition(DrawableTransitionOptions.withCrossFade())
                 .into(albumCoverImageView);
         albumView.setText(albumName);
         durationView.setText(duration);

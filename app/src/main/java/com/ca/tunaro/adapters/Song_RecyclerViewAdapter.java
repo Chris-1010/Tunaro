@@ -11,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.R;
 import com.ca.tunaro.models.SongModel;
@@ -54,6 +55,9 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         // Load image using Glide
         Glide.with(context)
                 .load(model.getAlbumCoverUrl())
+                .placeholder(R.drawable.song_placeholder)
+                .error(R.drawable.song_placeholder)
+                .transition(DrawableTransitionOptions.withCrossFade())
                 .into(holder.imageCoverView);
 
         // Check if the song has notes/snippets and show/hide the corresponding icon accordingly
