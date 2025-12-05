@@ -52,15 +52,11 @@ public class SpotifyHistoryFetcher {
             try {
                 resetCounters();
 
-                String after = dbHelper.getLastSyncCursor(); // null if no cursor - Spotify API default value used
+                // Start from current time and go backwards
+                String currentTime = String.valueOf(System.currentTimeMillis());
+                Log.d(TAG, "Fetching history from present going backwards");
 
-                Log.d(TAG, after == null ? "Fetching history from beginning" : "Fetching history from " + after);
-
-                fetchHistoryRecursive(after, callback);
-
-                // Save current timestamp as cursor after successful sync
-                String currentCursor = String.valueOf(System.currentTimeMillis());
-                dbHelper.saveLastSyncCursor(currentCursor);
+                fetchHistoryRecursive(currentTime, callback);
 
                 callback.onComplete(totalProcessed.get(), totalAdded.get());
 
@@ -71,7 +67,7 @@ public class SpotifyHistoryFetcher {
         });
     }
 
-    private void fetchHistoryRecursive(String after, ProgressCallback callback) {
+    private void fetchHistoryRecursive(String before, ProgressCallback callback) {
         if (isCancelled) {
             Log.d(TAG, "Fetch cancelled by user");
             return;
@@ -82,11 +78,10 @@ public class SpotifyHistoryFetcher {
                     spotifyApi.getCurrentUsersRecentlyPlayedTracks()
                             .limit(ITEMS_PER_REQUEST);
 
-            if (after != null) {
-                Date afterDate = new Date(Long.parseLong(after));
-                requestBuilder.after(afterDate); // Start from cursor timestamp
+            if (before != null) {
+                Date beforeDate = new Date(Long.parseLong(before));
+                requestBuilder.before(beforeDate); // Go backwards from this timestamp
             }
-            // else if after is null, Spotify API provides a default `after` value (i.e 19/01/2017)
 
             GetCurrentUsersRecentlyPlayedTracksRequest request = requestBuilder.build();
 
@@ -94,7 +89,7 @@ public class SpotifyHistoryFetcher {
             PlayHistory[] items = response.getItems();
 
             if (items == null || items.length == 0) {
-                Log.d(TAG, "No more items to fetch");
+                Log.d(TAG, "No more items to fetch - reached end of available history");
                 return;
             }
 
@@ -107,10 +102,23 @@ public class SpotifyHistoryFetcher {
             // Update progress callback
             callback.onProgress(totalProcessed.get(), totalAdded.get());
 
-            // Continue fetching if there's a next page
-            String nextAfter = response.getCursors() != null ? response.getCursors()[0].getAfter() : null;
-            if (nextAfter != null && !nextAfter.equals(after) && !isCancelled) {
-                fetchHistoryRecursive(nextAfter, callback);
+            // Continue fetching if there's more
+            String nextBefore = null;
+            try {
+                // Extract before parameter from URL like:
+                // https://api.spotify.com/v1/me/player/recently-played?before=1757775505838&limit=50
+                String[] parts = response.getNext().split("before=");
+                if (parts.length > 1) {
+                    String beforePart = parts[1];
+                    String[] beforeValue = beforePart.split("&");
+                    nextBefore = beforeValue[0];
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to extract before parameter from URL: " + response.getNext(), e);
+            }
+
+            if (nextBefore != null && !nextBefore.equals(before) && !isCancelled) {
+                fetchHistoryRecursive(nextBefore, callback);
             }
 
         } catch (Exception e) {
@@ -147,6 +155,9 @@ public class SpotifyHistoryFetcher {
         return addedCount;
     }
 
+    /**
+     * Resets progress counters and cancellation flag
+     **/
     private void resetCounters() {
         totalProcessed.set(0);
         totalAdded.set(0);

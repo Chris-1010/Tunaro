@@ -113,7 +113,7 @@ public class SongDetailsFragment extends Fragment {
         int popularity = song.getPopularity();
         if (popularity > 0) {
             popularityRow.setVisibility(View.VISIBLE);
-            popularityView.setText(popularity + "%");
+            popularityView.setText(getString(R.string.popularity_value, popularity));
         }
     }
 

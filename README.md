@@ -16,6 +16,80 @@ Tunaro is a music tracking and note-taking app that integrates with Spotify. It 
 - **Search Functionality**: Search within playlists or library for specific songs
 - **Sort Options**: Sort songs by various criteria (Date Added, Title, Length, Artist)
 - **Playback Controls**: Global playback bar that persists across app navigation
+- **Listening History Tracking**: Automatic recording of when songs are played with background sync from Spotify
+- **Favorite Playlists**: Mark playlists as favorites for quick access
+- **Data Export/Import**: Backup and restore your notes and snippets using JSON export functionality
+
+## Technical Details
+
+### Tech Stack
+
+**Language**: Java (~7,040 lines across 35 files)
+
+**Android Framework**:
+- AndroidX with Material Design Components
+- Navigation Framework
+- WorkManager for background tasks
+- ViewBinding for type-safe view references
+
+**Spotify Integration**:
+- Spotify Web API (via `spotify-web-api-java` v8.4.1)
+- Spotify App Remote SDK (v0.8.0) for playback control
+- Spotify Auth SDK (v1.2.5) for authentication
+
+**Key Libraries**:
+- **Database**: SQLite with custom DatabaseHelper
+- **HTTP Client**: OkHttp3
+- **JSON**: Gson for serialization
+- **Image Loading**: Glide
+- **Async/Concurrency**: CompletableFuture, ExecutorService
+- **UI Animations**: Shimmer (Facebook)
+
+**Build System**: Gradle with Kotlin DSL
+
+### Project Structure
+
+```
+app/src/main/java/com/ca/tunaro/
+├── activities/      # 7 main screens (Home, Playlists, Library, SongView, etc.)
+├── adapters/        # RecyclerView adapters for displaying lists
+├── callbacks/       # Swipe gesture callbacks for item interactions
+├── database/        # SQLite data access layer (DatabaseHelper)
+├── fragments/       # UI fragments for Notes and Snippets
+├── interfaces/      # RecyclerView item click listeners
+├── managers/        # PlaybackManager singleton for playback state
+├── models/          # Data models (Song, Playlist, Note, Snippet)
+├── workers/         # Background sync worker for listening history
+└── utils/           # Helper utilities
+```
+
+### Architecture
+
+The app follows **MVC (Model-View-Controller)** architecture with several design patterns:
+
+- **Singleton Pattern**: PlaybackManager and MainActivity ensure centralized state management for playback and Spotify API access
+- **Observer Pattern**: PlaybackListener interface allows multiple components to subscribe to playback state changes
+- **Repository Pattern**: DatabaseHelper provides a centralized data access layer with CRUD operations
+- **Async Operations**: CompletableFuture pattern for non-blocking Spotify API calls and database operations
+
+**Key Components**:
+- `MainActivity.java`: Entry point with Spotify OAuth authentication
+- `PlaybackManager.java`: Manages playback state, listen tracking, and snippet playback
+- `DatabaseHelper.java`: Central data access for all local storage operations
+- `HomeActivity.java`: Main navigation hub
+- `SongView.java`: Detailed song view with notes and snippets management
+
+### Database Schema
+
+The app uses **SQLite** (TunaroDB v7) with five tables:
+
+1. **song_notes**: User annotations with UUID, song ID, note type, content, and timestamps
+2. **song_snippets**: Time-based song snippets with start/end times and ranking inclusion flags
+3. **favourite_playlists**: IDs of playlists marked as favorites
+4. **archived_playlists**: IDs of archived playlists
+5. **listen_history**: UTC timestamped listening events with duplicate prevention
+
+Additional storage via SharedPreferences for Spotify tokens and sync cursor tracking.
 
 ### Planned/Potential Future Features
 

@@ -61,6 +61,8 @@ public class SongView extends BaseActivity {
 
             // Apply bottom inset to playback bar
             View playbackBar = findViewById(R.id.playback_bar);
+
+            // Apply bottom margin to playback bar equal to navigation bar height
             if (playbackBar != null) {
                 ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) playbackBar.getLayoutParams();
                 params.bottomMargin = systemBars.bottom;

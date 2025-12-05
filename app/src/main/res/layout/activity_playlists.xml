@@ -48,7 +48,7 @@
             android:clipToPadding="false"
             android:paddingTop="50dp"
             android:paddingBottom="150dp"
-            tools:listitem="@layout/recycler_view_row" />
+            tools:listitem="@layout/playlist_recycler_view_row" />
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
     <ProgressBar
