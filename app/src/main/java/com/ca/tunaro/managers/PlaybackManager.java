@@ -12,6 +12,7 @@ import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.models.SongSnippet;
 import com.ca.tunaro.utils.DeviceChecker;
+import com.ca.tunaro.utils.SongCache;
 import com.spotify.android.appremote.api.ConnectionParams;
 import com.spotify.android.appremote.api.Connector;
 import com.spotify.android.appremote.api.SpotifyAppRemote;
@@ -53,7 +54,6 @@ public class PlaybackManager {
 
     // Track Listening
     private boolean isTrackingListen = false;
-    private long listenStartTime = 0;
     private final long LISTEN_THRESHOLD_MS = 10000; // 10 seconds
     private String currentListenTrackId = null;
     private boolean hasRecordedListen = false;
@@ -241,6 +241,13 @@ public class PlaybackManager {
 
     // Helper method to create SongModel
     private SongModel createSongModelFromRemoteTrack(Track remoteTrack, String id, String[] artistNames) {
+        // Check if song is in cache first
+        SongCache songCache = new SongCache(this.applicationContext);
+        SongModel cachedSong = songCache.getCachedSong(id);
+        if (cachedSong != null) {
+            return cachedSong;
+        }
+
         // Convert Spotify URI image format to web URL format
         String imageUrl = remoteTrack.imageUri.raw;
         if (imageUrl != null && imageUrl.startsWith("spotify:image:")) {
@@ -273,9 +280,7 @@ public class PlaybackManager {
                         notifyPlaybackStateChanged();
                         checkPlaybackDevice();
                     })
-                    .setErrorCallback(throwable -> {
-                        Log.e(TAG, "Error playing song: " + throwable.getMessage());
-                    });
+                    .setErrorCallback(throwable -> Log.e(TAG, "Error playing song: " + throwable.getMessage()));
         }
     }
 
@@ -385,7 +390,6 @@ public class PlaybackManager {
         // Only start tracking if a listen for this track hasn't already been recorded
         if (!hasRecordedListen && !isTrackingListen) {
             isTrackingListen = true;
-            listenStartTime = System.currentTimeMillis();
 
             listenRunnable = () -> {
                 if (isTrackingListen && !hasRecordedListen && !isSnippetMode) {
@@ -410,7 +414,6 @@ public class PlaybackManager {
         stopListenTracking();
         hasRecordedListen = false;
         currentListenTrackId = null;
-        listenStartTime = 0;
     }
 
     private void recordListen() {
@@ -460,14 +463,11 @@ public class PlaybackManager {
         spotifyAppRemote.getPlayerApi().play("spotify:track:" + snippet.getSongId())
                 .setResultCallback(empty -> {
                     // Add delay to ensure song loads
-                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                        spotifyAppRemote.getPlayerApi().pause()
-                                .setResultCallback(pauseResult -> {
-                                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                                        seekToSnippetStart(snippet);
-                                    }, 100);
-                                });
-                    }, 100);
+                    new Handler(Looper.getMainLooper()).postDelayed(() ->
+                            spotifyAppRemote.getPlayerApi().pause()
+                            .setResultCallback(pauseResult ->
+                                    new Handler(Looper.getMainLooper()).postDelayed(() ->
+                                            seekToSnippetStart(snippet), 100)), 100);
                 })
                 .setErrorCallback(throwable -> {
                     showToast("Error playing song: " + throwable.getMessage());
