@@ -23,6 +23,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.ca.tunaro.BaseActivity;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.models.PlaylistModel;
@@ -169,8 +170,13 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
         nameView.setText(playlistName);
         countView.setText(getString(R.string.song_count, songCount));
+
+        // Load main playlist image
         Glide.with(this)
                 .load(playlistImage)
+                .placeholder(R.drawable.playlist_placeholder)
+                .error(R.drawable.playlist_placeholder)
+                .transition(DrawableTransitionOptions.withCrossFade())
                 .into(imageView);
     }
 

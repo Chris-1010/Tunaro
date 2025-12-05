@@ -257,6 +257,15 @@ public class PlaybackManager {
             imageUrl = "https://i.scdn.co/image/" + imageId;
         }
 
+        // Create Album object - using limited data from remote track
+        SongModel.Album album = new SongModel.Album(
+                null, // Album ID not available from remote track
+                remoteTrack.album.name,
+                null, // Album type not available from remote track
+                null, // Release date not available from remote track
+                imageUrl
+        );
+
         return new SongModel(
                 id,
                 remoteTrack.name,
@@ -264,9 +273,8 @@ public class PlaybackManager {
                 (int) remoteTrack.duration,
                 remoteTrack.uri,
                 0, // Don't have popularity from playback
-                remoteTrack.album.name,
-                imageUrl,
-                null,
+                album,
+                "", // ISRC not available from remote track
                 null
         );
     }
