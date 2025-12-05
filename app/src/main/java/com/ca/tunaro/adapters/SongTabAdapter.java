@@ -6,12 +6,13 @@ import androidx.fragment.app.FragmentActivity;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
 
 import com.ca.tunaro.models.SongModel;
+import com.ca.tunaro.fragments.SongDetailsFragment;
 import com.ca.tunaro.fragments.SongNotesFragment;
 import com.ca.tunaro.fragments.SongSnippetsFragment;
 
 public class SongTabAdapter extends FragmentStateAdapter {
     private final SongModel song;
-    private final Fragment[] fragments = new Fragment[2];
+    private final Fragment[] fragments = new Fragment[3];
 
     public SongTabAdapter(@NonNull FragmentActivity fragmentActivity, SongModel song) {
         super(fragmentActivity);
@@ -21,13 +22,18 @@ public class SongTabAdapter extends FragmentStateAdapter {
     @NonNull
     @Override
     public Fragment createFragment(int position) {
-        // Keeping the switch over an 'if' statement in case there'll be more tabs in the future
         switch (position) {
+            case 0:
+                fragments[0] = SongDetailsFragment.newInstance(song);
+                break;
             case 1:
-                fragments[position] = SongSnippetsFragment.newInstance(song);
+                fragments[1] = SongNotesFragment.newInstance(song);
+                break;
+            case 2:
+                fragments[2] = SongSnippetsFragment.newInstance(song);
                 break;
             default:
-                fragments[0] = SongNotesFragment.newInstance(song);
+                fragments[0] = SongDetailsFragment.newInstance(song);
         }
 
         return fragments[position];
@@ -35,6 +41,6 @@ public class SongTabAdapter extends FragmentStateAdapter {
 
     @Override
     public int getItemCount() {
-        return 2;
+        return 3;
     }
 }

@@ -2,6 +2,7 @@ package com.ca.tunaro.activites;
 
 import android.annotation.SuppressLint;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -12,63 +13,61 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.activity.EdgeToEdge;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
-import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager2.widget.ViewPager2;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.ca.tunaro.BaseActivity;
-import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.R;
-import com.ca.tunaro.utils.SelectedSongHolder;
-import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.adapters.SongTabAdapter;
-import com.google.android.material.appbar.AppBarLayout;
+import com.ca.tunaro.models.SongModel;
+import com.ca.tunaro.utils.ColorExtractor;
+import com.ca.tunaro.utils.SelectedSongHolder;
 import com.google.android.material.tabs.TabLayout;
-
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 public class SongView extends BaseActivity {
     private static final String TAG = "SongView";
 
-    // Fields
     private SongModel selectedSong;
     private TabLayout tabLayout;
     private ViewPager2 viewPager;
     private SongTabAdapter tabAdapter;
-    private AppBarLayout appBarLayout;
 
-    // Creation
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         if (checkForRecovery()) return;
 
-        EdgeToEdge.enable(this);
         setContentView(R.layout.activity_song_view);
 
+        // Apply window insets properly to avoid content behind system bars
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
 
-            // Get your playback bar
-            View playbackBar = findViewById(R.id.playback_bar);
+            // Apply top inset to header content
+            View headerContent = findViewById(R.id.header_content);
+            if (headerContent != null) {
+                headerContent.setPadding(
+                        headerContent.getPaddingLeft(),
+                        systemBars.top + 16,
+                        headerContent.getPaddingRight(),
+                        headerContent.getPaddingBottom()
+                );
+            }
 
-            // Apply bottom margin to playback bar equal to navigation bar height
+            // Apply bottom inset to playback bar
+            View playbackBar = findViewById(R.id.playback_bar);
             if (playbackBar != null) {
                 ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) playbackBar.getLayoutParams();
                 params.bottomMargin = systemBars.bottom;
                 playbackBar.setLayoutParams(params);
             }
 
-            return insets;
+            return WindowInsetsCompat.CONSUMED;
         });
 
         // Retrieve the selected song
@@ -78,37 +77,41 @@ public class SongView extends BaseActivity {
             return;
         }
 
-        // Initialize AppBarLayout
-        appBarLayout = findViewById(R.id.appbar);
-
-        // Set up basic song info
+        // Set up UI components
+        setupBackButton();
         setupBasicSongInfo();
+        setupAlbumCoverLongPress();
+        setupDynamicBackground();
         setupTabs();
-        setupListeningHistory();
-
-        // Add play button functionality
-        ImageView playButton = findViewById(R.id.play_button);
-        playButton.setOnClickListener(v -> playSong());
-
-        // Force the collapsible details part to be collapsed initially
-        appBarLayout.setExpanded(false, false);
     }
 
-    // Setup methods
+    private void setupBackButton() {
+        LinearLayout backButton = findViewById(R.id.back_button);
+        TextView backButtonText = findViewById(R.id.back_button_text);
+
+        // Get playlist/source name from intent extras if available
+        String source = getIntent().getStringExtra("source");
+        String playlistName = getIntent().getStringExtra("playlist_name");
+
+        if (playlistName != null && !playlistName.isEmpty()) {
+            backButtonText.setText("Back to " + playlistName);
+        } else if ("library".equals(source)) {
+            backButtonText.setText("Back to Library");
+        } else {
+            backButtonText.setText("Back");
+        }
+
+        backButton.setOnClickListener(v -> finish());
+    }
+
     private void setupBasicSongInfo() {
         String name = selectedSong.getName();
         String artist = selectedSong.getArtist();
         String albumCover = selectedSong.getAlbumCoverUrl();
-        String albumName = selectedSong.getAlbumName();
-        String duration = selectedSong.getDurationString();
-        String popularity = String.valueOf(selectedSong.getPopularity());
 
         TextView nameView = findViewById(R.id.SongView_SongName);
         TextView artistView = findViewById(R.id.SongView_ArtistName);
         ImageView albumCoverImageView = findViewById(R.id.SongView_AlbumCover);
-        TextView albumView = findViewById(R.id.SongView_AlbumName);
-        TextView durationView = findViewById(R.id.SongView_SongDuration);
-        TextView popularityView = findViewById(R.id.SongView_SongPopularity);
 
         nameView.setText(name);
         nameView.setSelected(true); // Enable marquee
@@ -120,42 +123,66 @@ public class SongView extends BaseActivity {
                 .error(R.drawable.song_placeholder)
                 .transition(DrawableTransitionOptions.withCrossFade())
                 .into(albumCoverImageView);
-        albumView.setText(albumName);
-        durationView.setText(duration);
-        if (!popularity.equals("0")) popularityView.setText("Popularity: " + popularity + "%");
-        else selectedSong.fetchPopularityAsync(new SongModel.PopularityCallback() {
-            // Fetch it from Spotify, asynchronously
+    }
+
+    private void setupAlbumCoverLongPress() {
+        ImageView albumCoverImageView = findViewById(R.id.SongView_AlbumCover);
+        albumCoverImageView.setOnLongClickListener(v -> {
+            playSong();
+            return true;
+        });
+    }
+
+    private void setupDynamicBackground() {
+        String albumCover = selectedSong.getAlbumCoverUrl();
+
+        ColorExtractor.extractColors(this, albumCover, new ColorExtractor.ColorExtractionCallback() {
             @Override
-            public void onPopularityFetched(int popularity) {
-                popularityView.setText("Popularity: " + popularity + "%");
+            public void onColorExtracted(int dominantColor, int vibrantColor) {
+                if (ColorExtractor.hasSufficientContrast(dominantColor, Color.BLACK, 0)) {
+                    applyGradientBackground(dominantColor);
+                    return;
+                }
+                applyGradientBackground(vibrantColor);
             }
 
             @Override
-            public void onError(String error) {
-
+            public void onError() {
+                applyGradientBackground(Color.parseColor("#424242"));
             }
         });
+    }
+
+    private void applyGradientBackground(int dominantColor) {
+        View mainLayout = findViewById(R.id.main);
+
+        if (mainLayout != null) {
+            GradientDrawable gradient = new GradientDrawable(
+                    GradientDrawable.Orientation.TR_BL,
+                    new int[]{dominantColor, Color.BLACK}
+            );
+            mainLayout.setBackground(gradient);
+        }
     }
 
     private void setupTabs() {
         tabLayout = findViewById(R.id.tab_layout);
         viewPager = findViewById(R.id.view_pager);
 
-        // First get a DatabaseHelper instance
-        DatabaseHelper dbHelper = new DatabaseHelper(this);
+        // Enable nested scrolling so fragments can trigger collapse
+        ViewCompat.setNestedScrollingEnabled(viewPager, true);
 
         // Configure the TabLayout appearance
         tabLayout.setBackgroundColor(Color.TRANSPARENT);
-        tabLayout.setTabRippleColor(null); // Remove ripple effect (feedback on screen upon pressing a tab)
-
-        // Add padding around the TabLayout
+        tabLayout.setTabRippleColor(null);
         tabLayout.setPadding(16, 8, 16, 8);
 
+        // Create adapter with 3 tabs: Details, Notes, Snippets
         tabAdapter = new SongTabAdapter(this, selectedSong);
         viewPager.setAdapter(tabAdapter);
 
         // Create custom tab views
-        String[] tabTitles = {"Notes", "Snippets"};
+        String[] tabTitles = {"Details", "Notes", "Snippets"};
         for (int i = 0; i < tabTitles.length; i++) {
             TabLayout.Tab tab = tabLayout.newTab();
             @SuppressLint("InflateParams") View customView = LayoutInflater.from(this).inflate(R.layout.custom_tab, null, false);
@@ -164,23 +191,25 @@ public class SongView extends BaseActivity {
             TextView tabBadgeView = customView.findViewById(R.id.tab_badge);
 
             tabTitleView.setText(tabTitles[i]);
-
-            // Set text color based on position (will update in selection listener)
             tabTitleView.setTextColor(i == 0 ? Color.BLACK : Color.WHITE);
 
-            // Set the badge count
-            int count = 0;
-            if (i == 0) {
-                // Get actual notes count
-                count = dbHelper.getSongNotes(selectedSong.getId()).size();
-            } else if (i == 1) {
-                // For snippets tab (placeholder for now)
-                count = dbHelper.getSongSnippets(selectedSong.getId()).size();
-            }
+            // Set badge count for Notes and Snippets tabs
+            if (i > 0) {
+                com.ca.tunaro.database.DatabaseHelper dbHelper = new com.ca.tunaro.database.DatabaseHelper(this);
+                int count = 0;
 
-            if (count > 0) {
-                tabBadgeView.setVisibility(View.VISIBLE);
-                tabBadgeView.setText(String.valueOf(count));
+                if (i == 1) { // Notes
+                    count = dbHelper.getSongNotes(selectedSong.getId()).size();
+                } else if (i == 2) { // Snippets
+                    count = dbHelper.getSongSnippets(selectedSong.getId()).size();
+                }
+
+                if (count > 0) {
+                    tabBadgeView.setVisibility(View.VISIBLE);
+                    tabBadgeView.setText(String.valueOf(count));
+                } else {
+                    tabBadgeView.setVisibility(View.GONE);
+                }
             } else {
                 tabBadgeView.setVisibility(View.GONE);
             }
@@ -194,7 +223,6 @@ public class SongView extends BaseActivity {
             @Override
             public void onTabSelected(TabLayout.Tab tab) {
                 viewPager.setCurrentItem(tab.getPosition());
-                // Update text color when tab is selected
                 View customView = tab.getCustomView();
                 if (customView != null) {
                     TextView tabTitleView = customView.findViewById(R.id.tab_title);
@@ -204,7 +232,6 @@ public class SongView extends BaseActivity {
 
             @Override
             public void onTabUnselected(TabLayout.Tab tab) {
-                // Update text color when tab is unselected
                 View customView = tab.getCustomView();
                 if (customView != null) {
                     TextView tabTitleView = customView.findViewById(R.id.tab_title);
@@ -224,115 +251,25 @@ public class SongView extends BaseActivity {
             }
         });
 
-        // Select Notes tab by default. TODO Allow preference in settings
+        // Select Details tab by default
         viewPager.setCurrentItem(0);
-    }
-
-    private void setupListeningHistory() {
-        LinearLayout historySection = findViewById(R.id.listening_history_section);
-        RecyclerView historyRecycler = findViewById(R.id.listening_history_recycler);
-        TextView listenCountView = findViewById(R.id.listen_count);
-
-        if (selectedSong == null) return;
-
-        DatabaseHelper dbHelper = new DatabaseHelper(this);
-        List<String> listenHistory = dbHelper.getListenHistory(selectedSong.getId());
-
-        if (listenHistory.isEmpty()) {
-            historySection.setVisibility(View.GONE);
-            return;
-        }
-
-        // Show the history section
-        historySection.setVisibility(View.VISIBLE);
-
-        // Update the listen count display
-        int totalListens = listenHistory.size();
-        listenCountView.setText(totalListens + " TOTAL LISTENS");
-        listenCountView.setVisibility(View.VISIBLE);
-
-        // Group listens by relative time periods
-        Map<String, Integer> groupedListens = groupListensByTimePeriod(listenHistory);
-        if (
-            playbackManager.isConnected() &&
-            playbackManager.isPlaying() &&
-            playbackManager.getCurrentSong() == selectedSong &&
-            !groupedListens.containsKey("1 minute ago")
-        ) {
-            groupedListens.put("Just Now", 1);
-        }
-
-        // Create a LinearLayout to hold the history items
-        LinearLayout historyContainer = new LinearLayout(this);
-        historyContainer.setOrientation(LinearLayout.VERTICAL);
-
-        // Add each grouped period as a TextView
-        for (Map.Entry<String, Integer> entry : groupedListens.entrySet()) {
-            TextView textView = new TextView(this);
-
-            String timeDescription = entry.getKey();
-            int count = entry.getValue();
-
-            // Format the display text
-            String displayText = timeDescription;
-            if (count > 1) {
-                displayText += " - " + count + " listens";
-            }
-
-            textView.setText(displayText);
-            textView.setTextColor(getResources().getColor(android.R.color.white));
-            textView.setTextSize(14f);
-            textView.setPadding(0, 8, 0, 8);
-
-            historyContainer.addView(textView);
-        }
-
-        // Replace RecyclerView with the LinearLayout container
-        ViewGroup parent = (ViewGroup) historyRecycler.getParent();
-        int index = parent.indexOfChild(historyRecycler);
-        parent.removeView(historyRecycler);
-        parent.addView(historyContainer, index);
-    }
-
-    private Map<String, Integer> groupListensByTimePeriod(List<String> timestamps) {
-        Map<String, Integer> grouped = new LinkedHashMap<>();
-        java.text.SimpleDateFormat inputFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
-        inputFormat.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
-
-        for (String timestamp : timestamps) {
-            try {
-                java.util.Date listenDate = inputFormat.parse(timestamp);
-                String timeDescription = DatabaseHelper.getRelativeTimeDescription(listenDate);
-
-                grouped.put(timeDescription, grouped.getOrDefault(timeDescription, 0) + 1);
-            } catch (Exception e) {
-                // Fallback for malformed timestamps
-                grouped.put("Unknown time", grouped.getOrDefault("Unknown time", 0) + 1);
-            }
-        }
-
-        return grouped;
     }
 
     private void playSong() {
         if (!playbackManager.isConnected()) {
             showToast("Connecting to Spotify...");
-            // Use PlaybackManager to reconnect
             playbackManager.connectSpotify(this, () -> {
-                // After connection, play the song
                 if (selectedSong != null) {
                     playbackManager.playSong(selectedSong);
                     showToast("Playing " + selectedSong.getName());
                 }
             });
         } else if (selectedSong != null) {
-            // Already connected, just play
             playbackManager.playSong(selectedSong);
             showToast("Playing " + selectedSong.getName());
         }
     }
 
-    // Destroy
     @Override
     protected void onDestroy() {
         super.onDestroy();
