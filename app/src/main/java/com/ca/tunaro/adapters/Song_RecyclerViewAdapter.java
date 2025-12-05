@@ -23,7 +23,6 @@ import java.util.Date;
 
 public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_RecyclerViewAdapter.ViewHolder> {
     private final Context context;
-    private final PlaylistView activity;
     private final Song_RecyclerViewInterface recyclerViewInterface;
     private ArrayList<SongModel> songModels;
     private final DatabaseHelper dbHelper;
@@ -31,9 +30,8 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
     private int currentSortOption = -1; // Track current sort option
     private boolean shouldShowContextualInfo = false;
 
-    public Song_RecyclerViewAdapter(Context context, PlaylistView playlistView, Song_RecyclerViewInterface recyclerViewInterface, ArrayList<SongModel> songModels) {
+    public Song_RecyclerViewAdapter(Context context, Song_RecyclerViewInterface recyclerViewInterface, ArrayList<SongModel> songModels) {
         this.context = context;
-        this.activity = playlistView;
         this.recyclerViewInterface = recyclerViewInterface;
         this.songModels = songModels;
         this.dbHelper = new DatabaseHelper(context);
@@ -48,7 +46,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
 
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-        SongModel model = getSongModels().get(position);
+        SongModel model = songModels.get(position);
         holder.songNameView.setSelected(true); // Enable marquee
         holder.songNameView.setText(model.getName());
         holder.artistView.setText(model.getArtist());
