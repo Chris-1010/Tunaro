@@ -45,6 +45,9 @@
         <activity
             android:name=".activites.PlaylistView"
             android:exported="false" />
+        <activity
+            android:name=".activites.SongWebInfoActivity"
+            android:exported="false" />
 
         <activity
             android:name="com.spotify.sdk.android.auth.LoginActivity"
