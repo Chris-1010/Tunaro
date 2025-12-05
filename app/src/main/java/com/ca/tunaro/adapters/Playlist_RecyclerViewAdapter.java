@@ -47,6 +47,7 @@ public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         PlaylistModel model = playlistModels.get(position);
+        holder.playlistName.setSelected(true); // Enable marquee
         holder.playlistName.setText(model.getPlaylistName());
         holder.songCount.setText(context.getString(R.string.song_count, model.getSongCount()));
         holder.imageView.setTag(position);    // Store the model index in the tag of the ImageView, to be obtained later

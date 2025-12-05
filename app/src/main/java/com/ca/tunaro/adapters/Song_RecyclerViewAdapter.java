@@ -49,6 +49,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         SongModel model = getSongModels().get(position);
+        holder.songNameView.setSelected(true); // Enable marquee
         holder.songNameView.setText(model.getName());
         holder.artistView.setText(model.getArtist());
 

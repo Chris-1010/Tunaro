@@ -168,6 +168,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         TextView countView = findViewById(R.id.detailed_songCount);
         ImageView imageView = findViewById(R.id.detailed_playlistCover);
 
+        // Enable marquee for long playlist names
+        nameView.setSelected(true);
         nameView.setText(playlistName);
         countView.setText(getString(R.string.song_count, songCount));
 
