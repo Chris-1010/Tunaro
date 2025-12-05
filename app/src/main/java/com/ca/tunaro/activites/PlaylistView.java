@@ -94,7 +94,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
 
         // Initialize adapter, empty for now
-        adapter = new Song_RecyclerViewAdapter(this, this, this, new ArrayList<>());
+        adapter = new Song_RecyclerViewAdapter(this, this, new ArrayList<>());
         recyclerView.setAdapter(adapter);
 
         // Show loading state while fetching songs
@@ -392,13 +392,10 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     }
 
     /**
-     * Launch a new activity (SongView) that shows a detailed display (last listened to, popularity, release date, etc.), very similar to the PlaylistView for the top half (showing the album cover and the name underneath.
-     * The user can add details about the song like where they heard the song first, favourite parts of the song, ratings, and general notes.
+     * Launch SongView activity when selected
      */
     @Override
     public void onItemClick(int position, View itemView) {
-        // Change over to the PlaylistView Activity
-
         SongModel clickedSong = adapter.getSongs().get(position);
 
         // Set the selected song in the singleton
