@@ -2,6 +2,8 @@ package com.ca.tunaro.activites;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -16,6 +18,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
+import androidx.appcompat.widget.Toolbar;
+import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -27,6 +31,7 @@ import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.ca.tunaro.BaseActivity;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.models.PlaylistModel;
+import com.ca.tunaro.utils.ColorExtractor;
 import com.ca.tunaro.utils.PlaylistSetup;
 import com.ca.tunaro.R;
 import com.ca.tunaro.utils.SelectedPlaylistHolder;
@@ -34,6 +39,8 @@ import com.ca.tunaro.utils.SelectedSongHolder;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.adapters.Song_RecyclerViewAdapter;
 import com.ca.tunaro.interfaces.Song_RecyclerViewInterface;
+import com.google.android.material.appbar.AppBarLayout;
+import com.google.android.material.appbar.CollapsingToolbarLayout;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -180,6 +187,69 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 .error(R.drawable.playlist_placeholder)
                 .transition(DrawableTransitionOptions.withCrossFade())
                 .into(imageView);
+
+        // Set up Collapsible Header
+        Toolbar toolbar = findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+            getSupportActionBar().setDisplayShowHomeEnabled(true);
+        }
+
+        // Handle toolbar navigation click
+        toolbar.setNavigationOnClickListener(v -> finish());
+
+        // Get references to views
+        ImageView collapsedImage = findViewById(R.id.collapsed_playlist_image);
+        AppBarLayout appBarLayout = findViewById(R.id.app_bar);
+        CollapsingToolbarLayout collapsingToolbar = findViewById(R.id.collapsing_toolbar);
+
+        // Set playlist name as toolbar title
+        collapsingToolbar.setTitle(selectedPlaylist.getPlaylistName());
+        collapsingToolbar.setCollapsedTitleTextColor(getResources().getColor(android.R.color.white, getTheme()));
+        collapsingToolbar.setExpandedTitleColor(getResources().getColor(android.R.color.transparent, getTheme()));
+
+        // Load the same image into collapsed view
+        Glide.with(this)
+                .load(selectedPlaylist.getImage())
+                .placeholder(R.drawable.playlist_placeholder)
+                .error(R.drawable.playlist_placeholder)
+                .transition(DrawableTransitionOptions.withCrossFade())
+                .into(collapsedImage);
+
+        // Add AppBarLayout offset listener to fade in/out the collapsed image
+        appBarLayout.addOnOffsetChangedListener((appBar, verticalOffset) -> {
+            float percentage = Math.abs(verticalOffset) / (float) appBar.getTotalScrollRange();
+            collapsedImage.setAlpha(percentage);
+        });
+
+        // Extract colors from the playlist image and apply dynamic background
+        ColorExtractor.extractColors(this, playlistImage, new ColorExtractor.ColorExtractionCallback() {
+            @Override
+            public void onColorExtracted(int dominantColor, int vibrantColor) {
+                if (ColorExtractor.hasSufficientContrast(dominantColor, Color.BLACK, 0)) {
+                    applyGradientBackground(dominantColor);
+                    return;
+                }
+                applyGradientBackground(vibrantColor);
+            }
+
+            @Override
+            public void onError() {
+                applyGradientBackground(Color.parseColor("#424242"));
+            }
+        });
+    }
+
+    private void applyGradientBackground(int dominantColor) {
+        CoordinatorLayout mainLayout = findViewById(R.id.main);
+
+        if (mainLayout != null) {
+            GradientDrawable gradient = new GradientDrawable(GradientDrawable.Orientation.TR_BL, // Top-right to bottom-left
+                    new int[]{dominantColor, Color.BLACK});
+
+            mainLayout.setBackground(gradient);
+        }
     }
 
     private void setupSearch() {
@@ -415,6 +485,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
         // Start the SongView activity
         Intent intent = new Intent(this, SongView.class);
+        intent.putExtra("playlist_name", selectedPlaylist.getPlaylistName());
         startActivity(intent);
     }
 
