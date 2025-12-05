@@ -8,12 +8,9 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
 import android.view.View;
-import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -29,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import se.michaelthelin.spotify.SpotifyApi;
+import se.michaelthelin.spotify.model_objects.specification.AlbumSimplified;
 import se.michaelthelin.spotify.requests.data.tracks.GetTrackRequest;
 
 public class LibraryActivity extends BaseActivity implements Library_RecyclerViewInterface {
@@ -133,6 +131,25 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
         getTrackRequest.executeAsync()
                 .thenAccept(track -> {
                     runOnUiThread(() -> {
+                        AlbumSimplified trackAlbum = track.getAlbum();
+                        String imageUrl = trackAlbum.getImages()[0].getUrl();
+
+                        // Create Album object
+                        SongModel.Album album = new SongModel.Album(
+                                trackAlbum.getId(),
+                                trackAlbum.getName(),
+                                trackAlbum.getAlbumType().getType(),
+                                trackAlbum.getReleaseDate(),
+                                imageUrl
+                        );
+
+                        // Extract ISRC from external IDs
+                        String isrc = "";
+                        if (track.getExternalIds() != null && track.getExternalIds().getExternalIds() != null) {
+                            java.util.Map<String, String> externalIds = track.getExternalIds().getExternalIds();
+                            isrc = externalIds.getOrDefault("isrc", "");
+                        }
+
                         SongModel songModel = new SongModel(
                                 track.getId(),
                                 track.getName(),
@@ -140,10 +157,9 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
                                 track.getDurationMs(),
                                 track.getUri(),
                                 track.getPopularity(),
-                                track.getAlbum().getName(),
-                                track.getAlbum().getImages()[0].getUrl(),
-                                null,
-                                track.getAlbum().getReleaseDate()
+                                album,
+                                isrc,
+                                null
                         );
 
                         allSongs.add(songModel);
@@ -199,6 +215,25 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
                     runOnUiThread(() -> {
                         setLoadingState(false);
 
+                        AlbumSimplified trackAlbum = track.getAlbum();
+                        String imageUrl = trackAlbum.getImages()[0].getUrl();
+
+                        // Create Album object
+                        SongModel.Album album = new SongModel.Album(
+                                trackAlbum.getId(),
+                                trackAlbum.getName(),
+                                trackAlbum.getAlbumType().getType(),
+                                trackAlbum.getReleaseDate(),
+                                imageUrl
+                        );
+
+                        // Extract ISRC from external IDs
+                        String isrc = "";
+                        if (track.getExternalIds() != null && track.getExternalIds().getExternalIds() != null) {
+                            java.util.Map<String, String> externalIds = track.getExternalIds().getExternalIds();
+                            isrc = externalIds.getOrDefault("isrc", "");
+                        }
+
                         // Create SongModel from Spotify Track
                         SongModel songModel = new SongModel(
                                 track.getId(),
@@ -207,10 +242,9 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
                                 track.getDurationMs(),
                                 track.getUri(),
                                 track.getPopularity(),
-                                track.getAlbum().getName(),
-                                track.getAlbum().getImages()[0].getUrl(),
-                                null, // Unnecessary for library view
-                                track.getAlbum().getReleaseDate()
+                                album,
+                                isrc,
+                                null // Unnecessary for library view
                         );
 
                         // Set the selected song in the singleton

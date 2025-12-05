@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import se.michaelthelin.spotify.SpotifyApi;
+import se.michaelthelin.spotify.model_objects.specification.AlbumSimplified;
 import se.michaelthelin.spotify.model_objects.specification.Image;
 import se.michaelthelin.spotify.model_objects.specification.PlaylistSimplified;
 import se.michaelthelin.spotify.model_objects.specification.PlaylistTrack;
@@ -245,7 +246,7 @@ public class PlaylistSetup {
                             spotifyApi.getSeveralTracks(String.join(",", batchIds))
                                     .build();
 
-                    se.michaelthelin.spotify.model_objects.specification.Track[] tracks = getSeveralTracksRequest.execute();
+                    Track[] tracks = getSeveralTracksRequest.execute();
 
                     for (int trackIndex = 0; trackIndex < tracks.length; trackIndex++) {
                         if (tracks[trackIndex] != null) {
@@ -270,9 +271,26 @@ public class PlaylistSetup {
         });
     }
 
-    private static SongModel createSongModelFromTrack(se.michaelthelin.spotify.model_objects.specification.Track track) {
-        se.michaelthelin.spotify.model_objects.specification.Image[] images = track.getAlbum().getImages();
+    private static SongModel createSongModelFromTrack(Track track) {
+        AlbumSimplified trackAlbum = track.getAlbum();
+        Image[] images = trackAlbum.getImages();
         String imageUrl = images.length > 0 ? images[0].getUrl() : "";
+
+        // Create Album object
+        SongModel.Album album = new SongModel.Album(
+                trackAlbum.getId(),
+                trackAlbum.getName(),
+                trackAlbum.getAlbumType().getType(),
+                trackAlbum.getReleaseDate(),
+                imageUrl
+        );
+
+        // Extract ISRC from external IDs
+        String isrc = "";
+        if (track.getExternalIds() != null && track.getExternalIds().getExternalIds() != null) {
+            Map<String, String> externalIds = track.getExternalIds().getExternalIds();
+            isrc = externalIds.getOrDefault("isrc", "");
+        }
 
         return new SongModel(
                 track.getId(),
@@ -281,17 +299,33 @@ public class PlaylistSetup {
                 track.getDurationMs(),
                 track.getUri(),
                 track.getPopularity(),
-                track.getAlbum().getName(),
-                imageUrl,
-                null, // No playlist date for individual tracks
-                track.getAlbum().getReleaseDate()
+                album,
+                isrc,
+                null // No playlist date for individual tracks
         );
     }
 
     private static @NonNull SongModel getSongModel(PlaylistTrack playlistTrack) {
         Track track = (Track) playlistTrack.getTrack();
-        Image[] images = track.getAlbum().getImages();
+        AlbumSimplified trackAlbum = track.getAlbum();
+        Image[] images = trackAlbum.getImages();
         String imageUrl = images.length > 0 ? images[0].getUrl() : "";
+
+        // Create Album object
+        SongModel.Album album = new SongModel.Album(
+                trackAlbum.getId(),
+                trackAlbum.getName(),
+                trackAlbum.getAlbumType().getType(),
+                trackAlbum.getReleaseDate(),
+                imageUrl
+        );
+
+        // Extract ISRC from external IDs
+        String isrc = "";
+        if (track.getExternalIds() != null && track.getExternalIds().getExternalIds() != null) {
+            Map<String, String> externalIds = track.getExternalIds().getExternalIds();
+            isrc = externalIds.getOrDefault("isrc", "");
+        }
 
         return new SongModel(
                 track.getId(),
@@ -300,10 +334,9 @@ public class PlaylistSetup {
                 track.getDurationMs(),
                 track.getUri(),
                 track.getPopularity(),
-                track.getAlbum().getName(),
-                imageUrl,
-                playlistTrack.getAddedAt(),
-                track.getAlbum().getReleaseDate()
+                album,
+                isrc,
+                playlistTrack.getAddedAt()
         );
     }
 
