@@ -22,7 +22,9 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class DatabaseHelper extends SQLiteOpenHelper {
@@ -659,6 +661,40 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         cursor.close();
         db.close();
         return timestamp;
+    }
+
+    public Map<String, String> getMostRecentListenTimestampsBatch(List<String> songIds) {
+        Map<String, String> results = new HashMap<>();
+        if (songIds == null || songIds.isEmpty()) return results;
+
+        SQLiteDatabase db = this.getReadableDatabase();
+
+        // Build placeholders for IN clause
+        StringBuilder placeholders = new StringBuilder();
+        for (int i = 0; i < songIds.size(); i++) {
+            if (i > 0) placeholders.append(",");
+            placeholders.append("?");
+        }
+
+        // Query to get most recent timestamp for each song ID
+        String query = "SELECT " + COLUMN_SONG_ID + ", MAX(" + COLUMN_LISTEN_TIMESTAMP + ") as latest " +
+                "FROM " + TABLE_LISTEN_HISTORY +
+                " WHERE " + COLUMN_SONG_ID + " IN (" + placeholders + ")" +
+                " GROUP BY " + COLUMN_SONG_ID;
+
+        Cursor cursor = db.rawQuery(query, songIds.toArray(new String[0]));
+
+        if (cursor.moveToFirst()) {
+            do {
+                String songId = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SONG_ID));
+                String timestamp = cursor.getString(cursor.getColumnIndexOrThrow("latest"));
+                results.put(songId, timestamp);
+            } while (cursor.moveToNext());
+        }
+
+        cursor.close();
+        db.close();
+        return results;
     }
 
     public int getListenCount(String songId) {
