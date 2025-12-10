@@ -23,9 +23,6 @@ public class SongTabAdapter extends FragmentStateAdapter {
     @Override
     public Fragment createFragment(int position) {
         switch (position) {
-            case 0:
-                fragments[0] = SongDetailsFragment.newInstance(song);
-                break;
             case 1:
                 fragments[1] = SongNotesFragment.newInstance(song);
                 break;
