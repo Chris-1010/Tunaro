@@ -31,11 +31,13 @@ import com.google.android.material.tabs.TabLayout;
 public class SongView extends BaseActivity {
     private static final String TAG = "SongView";
 
+    // Fields
     private SongModel selectedSong;
     private TabLayout tabLayout;
     private ViewPager2 viewPager;
     private SongTabAdapter tabAdapter;
 
+    // Creation
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -106,6 +108,7 @@ public class SongView extends BaseActivity {
         backButton.setOnClickListener(v -> finish());
     }
 
+    // Setup methods
     private void setupBasicSongInfo() {
         String name = selectedSong.getName();
         String artist = selectedSong.getArtist();
@@ -272,6 +275,7 @@ public class SongView extends BaseActivity {
         }
     }
 
+    // Destroy
     @Override
     protected void onDestroy() {
         super.onDestroy();
