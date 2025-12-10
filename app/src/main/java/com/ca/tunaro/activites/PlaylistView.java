@@ -45,6 +45,8 @@ import com.google.android.material.appbar.CollapsingToolbarLayout;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
@@ -386,13 +388,21 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 break;
             case 1: // Last Listened
                 DatabaseHelper dbHelper = new DatabaseHelper(this);
-                java.text.SimpleDateFormat inputFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
+                List<String> songIds = new ArrayList<>();
+                for (SongModel song : songs) {
+                    songIds.add(song.getId());
+                }
+
+                Map<String, String> timestampMap = dbHelper.getMostRecentListenTimestampsBatch(songIds);
+
+                java.text.SimpleDateFormat inputFormat = new java.text.SimpleDateFormat(
+                        "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
                 inputFormat.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
 
                 comparator = (song1, song2) -> {
-                    // Get timestamps for both songs
-                    String timestamp1 = dbHelper.getMostRecentListenTimestamp(song1.getId());
-                    String timestamp2 = dbHelper.getMostRecentListenTimestamp(song2.getId());
+                    // Use pre-fetched timestamps
+                    String timestamp1 = timestampMap.get(song1.getId());
+                    String timestamp2 = timestampMap.get(song2.getId());
 
                     Date date1 = null;
                     Date date2 = null;
