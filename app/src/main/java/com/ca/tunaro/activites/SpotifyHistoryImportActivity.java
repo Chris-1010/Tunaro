@@ -35,6 +35,7 @@ public class SpotifyHistoryImportActivity extends AppCompatActivity {
     private ProgressBar importProgress;
     private TextView importStatus;
     private TextView importDetails;
+    private View processingWarningContainer;
 
     private List<Uri> selectedFileUris = new ArrayList<>();
     private DatabaseHelper databaseHelper;
@@ -85,6 +86,7 @@ public class SpotifyHistoryImportActivity extends AppCompatActivity {
         importProgress = findViewById(R.id.import_progress);
         importStatus = findViewById(R.id.import_status);
         importDetails = findViewById(R.id.import_details);
+        processingWarningContainer = findViewById(R.id.processing_warning_container);
     }
 
     private void setupClickListeners() {
@@ -125,6 +127,7 @@ public class SpotifyHistoryImportActivity extends AppCompatActivity {
     private void startImport() {
         selectFilesButton.setEnabled(false);
         startImportButton.setEnabled(false);
+        processingWarningContainer.setVisibility(View.VISIBLE);
         importProgress.setVisibility(View.VISIBLE);
         importProgress.setIndeterminate(false);
         importProgress.setMax(selectedFileUris.size());
@@ -170,6 +173,7 @@ public class SpotifyHistoryImportActivity extends AppCompatActivity {
             final int finalSkipped = totalSkipped;
 
             runOnUiThread(() -> {
+                processingWarningContainer.setVisibility(View.GONE);
                 importProgress.setVisibility(View.GONE);
                 importStatus.setText("Import Complete!");
                 importDetails.setText(String.format(
