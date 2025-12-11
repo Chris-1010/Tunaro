@@ -933,21 +933,24 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         // Import listening history
         if (importData.listenHistory != null) {
             SQLiteDatabase db = dbHelper.getWritableDatabase();
-            for (ListenHistoryEntry entry : importData.listenHistory) {
-                // Check if entry already exists to avoid duplicates
-                if (!dbHelper.dataExistsByUUID(db, TABLE_LISTEN_HISTORY, entry.getUuid())) {
-                    ContentValues values = new ContentValues();
-                    values.put("uuid", entry.getUuid());
-                    values.put("song_id", entry.getSongId());
-                    values.put("listen_timestamp", entry.getListenTimestamp());
+            try {
+                for (ListenHistoryEntry entry : importData.listenHistory) {
+                    // Check if entry already exists to avoid duplicates
+                    if (!dbHelper.dataExistsByUUID(db, TABLE_LISTEN_HISTORY, entry.getUuid())) {
+                        ContentValues values = new ContentValues();
+                        values.put(COLUMN_UUID, entry.getUuid());
+                        values.put(COLUMN_SONG_ID, entry.getSongId());
+                        values.put(COLUMN_LISTEN_TIMESTAMP, entry.getListenTimestamp());
 
-                    long result = db.insert(TABLE_LISTEN_HISTORY, null, values);
-                    if (result != -1) {
-                        stats.listenHistoryAdded++;
+                        long result = db.insert(TABLE_LISTEN_HISTORY, null, values);
+                        if (result != -1) {
+                            stats.listenHistoryAdded++;
+                        }
                     }
                 }
+            } finally {
+                db.close();
             }
-            db.close();
         }
 
         // Import sync cursor
