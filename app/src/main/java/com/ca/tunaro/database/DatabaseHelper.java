@@ -739,19 +739,19 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     //#region ======== SYNC CURSOR METHODS ========
 
-    public void saveLastSyncCursor(String cursor) {
+    public void saveLastSyncCursor(Context context, String cursor) {
         // Save to SharedPreferences
-        SharedPreferences prefs = MainActivity.getInstance().getSharedPreferences("TunaroPrefs", Context.MODE_PRIVATE);
+        SharedPreferences prefs = context.getSharedPreferences("TunaroPrefs", Context.MODE_PRIVATE);
         prefs.edit().putString(CURSOR_PREF_KEY, cursor).apply();
     }
 
-    public String getLastSyncCursor() {
-        SharedPreferences prefs = MainActivity.getInstance().getSharedPreferences("TunaroPrefs", Context.MODE_PRIVATE);
+    public String getLastSyncCursor(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences("TunaroPrefs", Context.MODE_PRIVATE);
         return prefs.getString(CURSOR_PREF_KEY, null);
     }
 
-    public boolean hasLastSyncCursor() {
-        return getLastSyncCursor() != null;
+    public boolean hasLastSyncCursor(Context context) {
+        return getLastSyncCursor(context) != null;
     }
 
     // Batch method to check for existing listens within song duration
@@ -848,17 +848,30 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         exportData.listenHistory = dbHelper.getAllListenHistory();
 
         // Export last sync cursor
-        exportData.lastSyncCursor = dbHelper.getLastSyncCursor();
+        exportData.lastSyncCursor = dbHelper.getLastSyncCursor(context);
 
         // Return JSON string
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
         return gson.toJson(exportData);
     }
 
-    public static void writeExportToUri(Context context, Uri uri, String jsonData) throws IOException {
+    public static void writeExportToUri(Context context, Uri uri) throws IOException {
+        DatabaseHelper dbHelper = new DatabaseHelper(context);
+
         try (OutputStream outputStream = context.getContentResolver().openOutputStream(uri);
              OutputStreamWriter writer = new OutputStreamWriter(Objects.requireNonNull(outputStream))) {
-            writer.write(jsonData);
+
+            Gson gson = new GsonBuilder().setPrettyPrinting().create();
+
+            // Stream JSON directly to file to avoid memory issues
+            ExportData exportData = new ExportData();
+            exportData.notes = dbHelper.getAllNotes();
+            exportData.archivedPlaylists = dbHelper.getArchivedPlaylistIds();
+            exportData.snippets = dbHelper.getAllSnippets();
+            exportData.listenHistory = dbHelper.getAllListenHistory();
+            exportData.lastSyncCursor = dbHelper.getLastSyncCursor(context);
+
+            gson.toJson(exportData, writer);
         }
     }
 
@@ -920,26 +933,29 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         // Import listening history
         if (importData.listenHistory != null) {
             SQLiteDatabase db = dbHelper.getWritableDatabase();
-            for (ListenHistoryEntry entry : importData.listenHistory) {
-                // Check if entry already exists to avoid duplicates
-                if (!dbHelper.dataExistsByUUID(db, TABLE_LISTEN_HISTORY, entry.getUuid())) {
-                    ContentValues values = new ContentValues();
-                    values.put("uuid", entry.getUuid());
-                    values.put("song_id", entry.getSongId());
-                    values.put("listen_timestamp", entry.getListenTimestamp());
+            try {
+                for (ListenHistoryEntry entry : importData.listenHistory) {
+                    // Check if entry already exists to avoid duplicates
+                    if (!dbHelper.dataExistsByUUID(db, TABLE_LISTEN_HISTORY, entry.getUuid())) {
+                        ContentValues values = new ContentValues();
+                        values.put(COLUMN_UUID, entry.getUuid());
+                        values.put(COLUMN_SONG_ID, entry.getSongId());
+                        values.put(COLUMN_LISTEN_TIMESTAMP, entry.getListenTimestamp());
 
-                    long result = db.insert(TABLE_LISTEN_HISTORY, null, values);
-                    if (result != -1) {
-                        stats.listenHistoryAdded++;
+                        long result = db.insert(TABLE_LISTEN_HISTORY, null, values);
+                        if (result != -1) {
+                            stats.listenHistoryAdded++;
+                        }
                     }
                 }
+            } finally {
+                db.close();
             }
-            db.close();
         }
 
         // Import sync cursor
         if (importData.lastSyncCursor != null) {
-            dbHelper.saveLastSyncCursor(importData.lastSyncCursor);
+            dbHelper.saveLastSyncCursor(context, importData.lastSyncCursor);
         }
 
         return stats;
