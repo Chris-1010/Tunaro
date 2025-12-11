@@ -176,18 +176,33 @@ public class SongDetailsFragment extends Fragment {
         });
     }
 
-    private Map<String, Integer> groupListensByTimePeriod(List<String> timestamps) {
+    private static Map<String, Integer> groupListensByTimePeriod(List<String> timestamps) {
         Map<String, Integer> grouped = new LinkedHashMap<>();
-        java.text.SimpleDateFormat inputFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
-        inputFormat.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+
+        // Support both formats - with and without milliseconds
+        java.text.SimpleDateFormat formatWithMillis = new java.text.SimpleDateFormat(
+                "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
+        java.text.SimpleDateFormat formatWithoutMillis = new java.text.SimpleDateFormat(
+                "yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault());
+
+        formatWithMillis.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+        formatWithoutMillis.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
 
         for (String timestamp : timestamps) {
             try {
-                java.util.Date listenDate = inputFormat.parse(timestamp);
-                String timeDescription = DatabaseHelper.getRelativeTimeDescription(listenDate);
+                java.util.Date listenDate;
 
+                // Try with milliseconds first, then without
+                try {
+                    listenDate = formatWithMillis.parse(timestamp);
+                } catch (java.text.ParseException e) {
+                    listenDate = formatWithoutMillis.parse(timestamp);
+                }
+
+                String timeDescription = DatabaseHelper.getRelativeTimeDescription(listenDate);
                 grouped.put(timeDescription, grouped.getOrDefault(timeDescription, 0) + 1);
             } catch (Exception e) {
+                // Fallback for malformed timestamps
                 grouped.put("Unknown time", grouped.getOrDefault("Unknown time", 0) + 1);
             }
         }
