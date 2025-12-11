@@ -739,19 +739,19 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     //#region ======== SYNC CURSOR METHODS ========
 
-    public void saveLastSyncCursor(String cursor) {
+    public void saveLastSyncCursor(Context context, String cursor) {
         // Save to SharedPreferences
-        SharedPreferences prefs = MainActivity.getInstance().getSharedPreferences("TunaroPrefs", Context.MODE_PRIVATE);
+        SharedPreferences prefs = context.getSharedPreferences("TunaroPrefs", Context.MODE_PRIVATE);
         prefs.edit().putString(CURSOR_PREF_KEY, cursor).apply();
     }
 
-    public String getLastSyncCursor() {
-        SharedPreferences prefs = MainActivity.getInstance().getSharedPreferences("TunaroPrefs", Context.MODE_PRIVATE);
+    public String getLastSyncCursor(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences("TunaroPrefs", Context.MODE_PRIVATE);
         return prefs.getString(CURSOR_PREF_KEY, null);
     }
 
-    public boolean hasLastSyncCursor() {
-        return getLastSyncCursor() != null;
+    public boolean hasLastSyncCursor(Context context) {
+        return getLastSyncCursor(context) != null;
     }
 
     // Batch method to check for existing listens within song duration
@@ -848,7 +848,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         exportData.listenHistory = dbHelper.getAllListenHistory();
 
         // Export last sync cursor
-        exportData.lastSyncCursor = dbHelper.getLastSyncCursor();
+        exportData.lastSyncCursor = dbHelper.getLastSyncCursor(context);
 
         // Return JSON string
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -869,7 +869,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             exportData.archivedPlaylists = dbHelper.getArchivedPlaylistIds();
             exportData.snippets = dbHelper.getAllSnippets();
             exportData.listenHistory = dbHelper.getAllListenHistory();
-            exportData.lastSyncCursor = dbHelper.getLastSyncCursor();
+            exportData.lastSyncCursor = dbHelper.getLastSyncCursor(context);
 
             gson.toJson(exportData, writer);
         }
@@ -955,7 +955,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
         // Import sync cursor
         if (importData.lastSyncCursor != null) {
-            dbHelper.saveLastSyncCursor(importData.lastSyncCursor);
+            dbHelper.saveLastSyncCursor(context, importData.lastSyncCursor);
         }
 
         return stats;
