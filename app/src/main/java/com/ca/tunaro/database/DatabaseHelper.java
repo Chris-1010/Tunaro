@@ -10,6 +10,7 @@ import android.net.Uri;
 import android.util.Log;
 
 import com.ca.tunaro.activites.MainActivity;
+import com.ca.tunaro.models.ListenHistoryEntry;
 import com.ca.tunaro.models.SongNote;
 import com.ca.tunaro.models.SongSnippet;
 import com.google.gson.Gson;
@@ -593,6 +594,31 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     //#region ======== LISTEN HISTORY METHODS ========
 
+    // Get all listen history
+    private List<ListenHistoryEntry> getAllListenHistory() {
+        List<ListenHistoryEntry> allHistory = new ArrayList<>();
+        String selectQuery = "SELECT * FROM " + TABLE_LISTEN_HISTORY + " ORDER BY " + COLUMN_LISTEN_TIMESTAMP + " ASC";
+
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(selectQuery, null);
+
+        if (cursor.moveToFirst()) {
+            do {
+                ListenHistoryEntry entry = new ListenHistoryEntry(
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_UUID)),
+                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_ID)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SONG_ID)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_LISTEN_TIMESTAMP))
+                );
+                allHistory.add(entry);
+            } while (cursor.moveToNext());
+        }
+
+        cursor.close();
+        db.close();
+        return allHistory;
+    }
+
     public void addListenRecord(String songId) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
@@ -794,6 +820,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         public List<SongNote> notes;
         public List<String> archivedPlaylists;
         public List<SongSnippet> snippets;
+        public List<ListenHistoryEntry> listenHistory;
         public String lastSyncCursor;
         public String exportDate;
         public int databaseVersion;
@@ -816,6 +843,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
         // Export all snippets
         exportData.snippets = dbHelper.getAllSnippets();
+
+        // Export all listening history
+        exportData.listenHistory = dbHelper.getAllListenHistory();
 
         // Export last sync cursor
         exportData.lastSyncCursor = dbHelper.getLastSyncCursor();
@@ -887,6 +917,26 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             }
         }
 
+        // Import listening history
+        if (importData.listenHistory != null) {
+            SQLiteDatabase db = dbHelper.getWritableDatabase();
+            for (ListenHistoryEntry entry : importData.listenHistory) {
+                // Check if entry already exists to avoid duplicates
+                if (!dbHelper.dataExistsByUUID(db, TABLE_LISTEN_HISTORY, entry.getUuid())) {
+                    ContentValues values = new ContentValues();
+                    values.put("uuid", entry.getUuid());
+                    values.put("song_id", entry.getSongId());
+                    values.put("listen_timestamp", entry.getListenTimestamp());
+
+                    long result = db.insert(TABLE_LISTEN_HISTORY, null, values);
+                    if (result != -1) {
+                        stats.listenHistoryAdded++;
+                    }
+                }
+            }
+            db.close();
+        }
+
         // Import sync cursor
         if (importData.lastSyncCursor != null) {
             dbHelper.saveLastSyncCursor(importData.lastSyncCursor);
@@ -920,6 +970,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         public int notesAdded = 0;
         public int playlistsArchived = 0;
         public int snippetsAdded = 0;
+        public int listenHistoryAdded = 0;
 
         public String getSummary() {
             List<String> parts = new ArrayList<>();
@@ -928,6 +979,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 parts.add(playlistsArchived + " playlist" + (playlistsArchived == 1 ? "" : "s") + " archived");
             if (snippetsAdded > 0)
                 parts.add(snippetsAdded + " snippet" + (snippetsAdded == 1 ? "" : "s"));
+            if (listenHistoryAdded > 0)
+                parts.add(listenHistoryAdded + " listen record" + (listenHistoryAdded == 1 ? "" : "s"));
 
             if (parts.isEmpty()) {
                 return "No new data imported";
