@@ -1,5 +1,6 @@
 package com.ca.tunaro.activites;
 
+import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
@@ -110,13 +111,27 @@ public class SettingsActivity extends BaseActivity {
             new ActivityResultContracts.CreateDocument("application/json"),
             uri -> {
                 if (uri != null) {
-                    try {
-                        String jsonData = DatabaseHelper.generateExportJson(this);
-                        DatabaseHelper.writeExportToUri(this, uri, jsonData);
-                        showToast("Data exported successfully!");
-                    } catch (Exception e) {
-                        showToast("Export failed: " + e.getMessage());
-                    }
+                    // Show progress dialog to keep user on screen
+                    ProgressDialog progressDialog = new ProgressDialog(this);
+                    progressDialog.setMessage("Exporting data...");
+                    progressDialog.setCancelable(false);
+                    progressDialog.show();
+
+                    // Run export on background thread to avoid freezing UI
+                    new Thread(() -> {
+                        try {
+                            DatabaseHelper.writeExportToUri(this, uri);
+                            runOnUiThread(() -> {
+                                progressDialog.dismiss();
+                                showToast("Data exported successfully!");
+                            });
+                        } catch (Exception e) {
+                            runOnUiThread(() -> {
+                                progressDialog.dismiss();
+                                showToast("Export failed: " + e.getMessage());
+                            });
+                        }
+                    }).start();
                 }
             }
     );

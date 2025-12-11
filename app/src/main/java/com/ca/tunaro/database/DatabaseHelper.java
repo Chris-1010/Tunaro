@@ -855,10 +855,23 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return gson.toJson(exportData);
     }
 
-    public static void writeExportToUri(Context context, Uri uri, String jsonData) throws IOException {
+    public static void writeExportToUri(Context context, Uri uri) throws IOException {
+        DatabaseHelper dbHelper = new DatabaseHelper(context);
+
         try (OutputStream outputStream = context.getContentResolver().openOutputStream(uri);
              OutputStreamWriter writer = new OutputStreamWriter(Objects.requireNonNull(outputStream))) {
-            writer.write(jsonData);
+
+            Gson gson = new GsonBuilder().setPrettyPrinting().create();
+
+            // Stream JSON directly to file to avoid memory issues
+            ExportData exportData = new ExportData();
+            exportData.notes = dbHelper.getAllNotes();
+            exportData.archivedPlaylists = dbHelper.getArchivedPlaylistIds();
+            exportData.snippets = dbHelper.getAllSnippets();
+            exportData.listenHistory = dbHelper.getAllListenHistory();
+            exportData.lastSyncCursor = dbHelper.getLastSyncCursor();
+
+            gson.toJson(exportData, writer);
         }
     }
 
