@@ -97,8 +97,16 @@
                 android:id="@+id/start_history_sync_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="8dp"
                 android:text="Start Manual Sync"
+                android:textSize="16sp" />
+
+            <Button
+                android:id="@+id/import_spotify_history_button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:text="Import Spotify Listening History"
                 android:textSize="16sp" />
 
             <ProgressBar
@@ -127,7 +135,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
                 android:layout_marginBottom="16dp"
-                android:text="Data Management"
+                android:text="Tunaro Data Management"
                 android:textColor="@color/white"
                 android:textSize="20sp"
                 android:textStyle="bold" />
@@ -137,7 +145,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
-                android:text="Import Data"
+                android:text="Import Tunaro Data"
                 android:textSize="16sp" />
 
             <Button
@@ -145,7 +153,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="24dp"
-                android:text="Export Data"
+                android:text="Export Tunaro Data"
                 android:textSize="16sp" />
 
             <Button

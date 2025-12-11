@@ -395,9 +395,13 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
                 Map<String, String> timestampMap = dbHelper.getMostRecentListenTimestampsBatch(songIds);
 
-                java.text.SimpleDateFormat inputFormat = new java.text.SimpleDateFormat(
+                // Support both timestamp formats (milliseconds included for Tunaro records, not for Spotify)
+                java.text.SimpleDateFormat formatWithMillis = new java.text.SimpleDateFormat(
                         "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
-                inputFormat.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+                java.text.SimpleDateFormat formatWithoutMillis = new java.text.SimpleDateFormat(
+                        "yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault());
+                formatWithMillis.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+                formatWithoutMillis.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
 
                 comparator = (song1, song2) -> {
                     // Use pre-fetched timestamps
@@ -409,14 +413,24 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
                     if (timestamp1 != null) {
                         try {
-                            date1 = inputFormat.parse(timestamp1);
+                            // Try with milliseconds first, then without
+                            try {
+                                date1 = formatWithMillis.parse(timestamp1);
+                            } catch (java.text.ParseException e) {
+                                date1 = formatWithoutMillis.parse(timestamp1);
+                            }
                         } catch (java.text.ParseException e) {
                             // Leave as null
                         }
                     }
                     if (timestamp2 != null) {
                         try {
-                            date2 = inputFormat.parse(timestamp2);
+                            // Try with milliseconds first, then without
+                            try {
+                                date2 = formatWithMillis.parse(timestamp2);
+                            } catch (java.text.ParseException e) {
+                                date2 = formatWithoutMillis.parse(timestamp2);
+                            }
                         } catch (java.text.ParseException e) {
                             // Leave as null
                         }

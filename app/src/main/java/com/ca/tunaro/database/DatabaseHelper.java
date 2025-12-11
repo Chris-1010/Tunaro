@@ -72,40 +72,40 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     //#region Create table queries
     private static final String CREATE_TABLE_FAVOURITE_PLAYLISTS =
             "CREATE TABLE " + TABLE_FAVOURITE_PLAYLISTS + "("
-                    + COLUMN_ID +           " INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    + COLUMN_PLAYLIST_ID +  " TEXT UNIQUE NOT NULL"
+                    + COLUMN_ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + COLUMN_PLAYLIST_ID + " TEXT UNIQUE NOT NULL"
                     + ")";
     private static final String CREATE_TABLE_ARCHIVED_PLAYLISTS =
             "CREATE TABLE " + TABLE_ARCHIVED_PLAYLISTS + "("
-                    + COLUMN_ID +           " INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    + COLUMN_PLAYLIST_ID +  " TEXT UNIQUE NOT NULL"
+                    + COLUMN_ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + COLUMN_PLAYLIST_ID + " TEXT UNIQUE NOT NULL"
                     + ")";
     private static final String CREATE_TABLE_SONG_NOTES =
             "CREATE TABLE " + TABLE_SONG_NOTES + "("
-                    + COLUMN_UUID +         " TEXT UNIQUE NOT NULL,"
-                    + COLUMN_ID +           " INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    + COLUMN_SONG_ID +      " TEXT NOT NULL,"
-                    + COLUMN_NOTE_TYPE +    " TEXT NOT NULL,"
-                    + COLUMN_CONTENT +      " TEXT NOT NULL,"
-                    + COLUMN_TIMESTAMP +    " TEXT DEFAULT (strftime('%d-%m-%Y %H:%M', 'now', 'localtime'))"
+                    + COLUMN_UUID + " TEXT UNIQUE NOT NULL,"
+                    + COLUMN_ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + COLUMN_SONG_ID + " TEXT NOT NULL,"
+                    + COLUMN_NOTE_TYPE + " TEXT NOT NULL,"
+                    + COLUMN_CONTENT + " TEXT NOT NULL,"
+                    + COLUMN_TIMESTAMP + " TEXT DEFAULT (strftime('%d-%m-%Y %H:%M', 'now', 'localtime'))"
                     + ")";
 
     private static final String CREATE_TABLE_SONG_SNIPPETS =
             "CREATE TABLE " + TABLE_SONG_SNIPPETS + "("
-                    + COLUMN_UUID +                 " TEXT UNIQUE NOT NULL,"
-                    + COLUMN_ID +                   " INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    + COLUMN_SONG_ID +              " TEXT NOT NULL,"
-                    + COLUMN_SNIPPET_NO +           " INTEGER NOT NULL,"
-                    + COLUMN_TITLE +                " TEXT,"
-                    + COLUMN_START_TIME +           " INTEGER NOT NULL,"
-                    + COLUMN_END_TIME +             " INTEGER NOT NULL,"
-                    + COLUMN_INCLUDE_IN_RANKINGS +  " INTEGER DEFAULT 1"
+                    + COLUMN_UUID + " TEXT UNIQUE NOT NULL,"
+                    + COLUMN_ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + COLUMN_SONG_ID + " TEXT NOT NULL,"
+                    + COLUMN_SNIPPET_NO + " INTEGER NOT NULL,"
+                    + COLUMN_TITLE + " TEXT,"
+                    + COLUMN_START_TIME + " INTEGER NOT NULL,"
+                    + COLUMN_END_TIME + " INTEGER NOT NULL,"
+                    + COLUMN_INCLUDE_IN_RANKINGS + " INTEGER DEFAULT 1"
                     + ")";
     private static final String CREATE_TABLE_LISTEN_HISTORY =
             "CREATE TABLE " + TABLE_LISTEN_HISTORY + "("
-                    + COLUMN_UUID +             " TEXT UNIQUE NOT NULL,"
-                    + COLUMN_ID +               " INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    + COLUMN_SONG_ID +          " TEXT NOT NULL,"
+                    + COLUMN_UUID + " TEXT UNIQUE NOT NULL,"
+                    + COLUMN_ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + COLUMN_SONG_ID + " TEXT NOT NULL,"
                     + COLUMN_LISTEN_TIMESTAMP + " TEXT NOT NULL"
                     + ")";
     //#endregion
@@ -762,6 +762,28 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return hasListen;
     }
 
+    // Check if a listen record already exists for exact song_id and timestamp
+    // Used for importing extended history to prevent duplicates
+    public boolean hasExactListen(String songId, String utcTimestamp) {
+        SQLiteDatabase db = this.getReadableDatabase();
+
+        Cursor cursor = db.rawQuery(
+                "SELECT COUNT(*) FROM " + TABLE_LISTEN_HISTORY +
+                        " WHERE " + COLUMN_SONG_ID + " = ? AND " +
+                        COLUMN_LISTEN_TIMESTAMP + " = ?",
+                new String[]{songId, utcTimestamp}
+        );
+
+        boolean exists = false;
+        if (cursor.moveToFirst()) {
+            exists = cursor.getInt(0) > 0;
+        }
+
+        cursor.close();
+        db.close();
+        return exists;
+    }
+
     //#endregion
 
     //#endregion
@@ -902,8 +924,10 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         public String getSummary() {
             List<String> parts = new ArrayList<>();
             if (notesAdded > 0) parts.add(notesAdded + " note" + (notesAdded == 1 ? "" : "s"));
-            if (playlistsArchived > 0) parts.add(playlistsArchived + " playlist" + (playlistsArchived == 1 ? "" : "s") + " archived");
-            if (snippetsAdded > 0) parts.add(snippetsAdded + " snippet" + (snippetsAdded == 1 ? "" : "s"));
+            if (playlistsArchived > 0)
+                parts.add(playlistsArchived + " playlist" + (playlistsArchived == 1 ? "" : "s") + " archived");
+            if (snippetsAdded > 0)
+                parts.add(snippetsAdded + " snippet" + (snippetsAdded == 1 ? "" : "s"));
 
             if (parts.isEmpty()) {
                 return "No new data imported";
@@ -919,6 +943,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     /**
      * Get a relative time description from a Date object
+     *
      * @param date The date to get relative time for
      * @return A human-readable relative time string (e.g., "2 hours ago", "1 day ago")
      */
@@ -961,6 +986,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     /**
      * Get a relative time description from a timestamp string
+     *
      * @param timestamp The UTC timestamp string in format "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
      * @return A human-readable relative time string, or "Unknown" if parsing fails
      */
@@ -970,10 +996,20 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         }
 
         try {
-            java.text.SimpleDateFormat inputFormat = new java.text.SimpleDateFormat(
+            // Support both timestamp formats
+            java.text.SimpleDateFormat formatWithMillis = new java.text.SimpleDateFormat(
                     "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
-            inputFormat.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
-            java.util.Date date = inputFormat.parse(timestamp);
+            java.text.SimpleDateFormat formatWithoutMillis = new java.text.SimpleDateFormat(
+                    "yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault());
+            formatWithMillis.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+            formatWithoutMillis.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+
+            java.util.Date date;
+            try {
+                date = formatWithMillis.parse(timestamp);
+            } catch (java.text.ParseException e) {
+                date = formatWithoutMillis.parse(timestamp);
+            }
 
             return getRelativeTimeDescription(date);
         } catch (java.text.ParseException e) {
