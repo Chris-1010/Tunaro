@@ -219,6 +219,9 @@ public class SettingsActivity extends BaseActivity {
         historySyncProgress = findViewById(R.id.history_sync_progress);
         historySyncStatus = findViewById(R.id.history_sync_status);
 
+        Button importSpotifyHistoryButton = findViewById(R.id.import_spotify_history_button);
+        importSpotifyHistoryButton.setOnClickListener(v -> openSpotifyHistoryImport());
+
         startHistorySyncButton.setOnClickListener(v -> {
             if (historyFetcher != null && !historyFetcher.isCancelled()) {
                 // Currently syncing - cancel it
@@ -460,6 +463,11 @@ public class SettingsActivity extends BaseActivity {
     //#endregion
 
     //#region Cache
+
+    private void openSpotifyHistoryImport() {
+        android.content.Intent intent = new android.content.Intent(this, SpotifyHistoryImportActivity.class);
+        startActivity(intent);
+    }
 
     private void clearAllCaches() {
         new androidx.appcompat.app.AlertDialog.Builder(this)
