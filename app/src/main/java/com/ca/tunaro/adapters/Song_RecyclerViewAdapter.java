@@ -20,6 +20,7 @@ import com.ca.tunaro.activites.PlaylistView;
 
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Map;
 
 public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_RecyclerViewAdapter.ViewHolder> {
     private final Context context;
@@ -29,6 +30,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
 
     private int currentSortOption = -1; // Track current sort option
     private boolean shouldShowContextualInfo = false;
+    private Map<String, Integer> listenCountMap = null; // Cached listen counts for performance
 
     public Song_RecyclerViewAdapter(Context context, Song_RecyclerViewInterface recyclerViewInterface, ArrayList<SongModel> songModels) {
         this.context = context;
@@ -91,6 +93,26 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
 
                 case 3: // Length/Duration
                     holder.contextualInfoView.setText("Duration: " + model.getDurationString());
+                    break;
+
+                case 5: // Popularity
+                    int popularity = model.getPopularity();
+                    holder.contextualInfoView.setText("Popularity: " + popularity + "/100");
+                    break;
+
+                case 6: // Listen Count
+                    int listenCount = 0;
+                    if (listenCountMap != null) {
+                        listenCount = listenCountMap.getOrDefault(model.getId(), 0);
+                    }
+                    String listenText = listenCount == 1 ? "1 listen" : listenCount + " listens";
+                    holder.contextualInfoView.setText(listenText);
+                    break;
+
+                case 7: // Release Date
+                    String releaseDate = model.getReleaseDate();
+                    String formattedReleaseDate = formatReleaseDateForDisplay(releaseDate);
+                    holder.contextualInfoView.setText("Released: " + formattedReleaseDate);
                     break;
             }
         } else {
@@ -161,13 +183,63 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
 
     public void updateSortContext(int sortOption) {
         this.currentSortOption = sortOption;
-        // Show contextual info for Date Added (0) and Last Listened (1), and Length (3)
-        this.shouldShowContextualInfo = (sortOption == 0 || sortOption == 1 || sortOption == 3);
+        // Show contextual info for Date Added (0), Last Listened (1), Length (3), Popularity (5), Listen Count (6), and Release Date (7)
+        this.shouldShowContextualInfo = (sortOption == 0 || sortOption == 1 || sortOption == 3 || sortOption == 5 || sortOption == 6 || sortOption == 7);
+        notifyDataSetChanged();
+    }
+
+    public void updateListenCounts(Map<String, Integer> listenCountMap) {
+        this.listenCountMap = listenCountMap;
         notifyDataSetChanged();
     }
 
     private String formatDateForDisplay(Date date) {
         java.text.SimpleDateFormat formatter = new java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault());
         return formatter.format(date);
+    }
+
+    private String formatReleaseDateForDisplay(String releaseDate) {
+        if (releaseDate == null || releaseDate.isEmpty()) {
+            return "Unknown";
+        }
+
+        try {
+            // Parse the date string (Spotify format: "YYYY-MM-DD", "YYYY-MM", or "YYYY")
+            String[] parts = releaseDate.split("-");
+
+            if (parts.length == 1) {
+                // Only year available
+                return parts[0];
+            } else if (parts.length == 2) {
+                // Year and month available
+                int month = Integer.parseInt(parts[1]);
+                String[] monthNames = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+                return monthNames[month - 1] + " " + parts[0];
+            } else if (parts.length == 3) {
+                // Full date available
+                int day = Integer.parseInt(parts[2]);
+                int month = Integer.parseInt(parts[1]);
+                String year = parts[0];
+                String[] monthNames = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+
+                // If January 1st, show only year
+                if (month == 1 && day == 1) {
+                    return year;
+                }
+                // If 1st of any month, show month and year only
+                else if (day == 1) {
+                    return monthNames[month - 1] + " " + year;
+                }
+                // Otherwise show full date
+                else {
+                    return day + " " + monthNames[month - 1] + " " + year;
+                }
+            }
+        } catch (Exception e) {
+            // If parsing fails, return the original string
+            return releaseDate;
+        }
+
+        return releaseDate;
     }
 }
