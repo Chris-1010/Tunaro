@@ -87,6 +87,18 @@
                     android:contentDescription="@string/playlistCoverImage"
                     android:scaleType="centerCrop"
                     tools:srcCompat="@tools:sample/backgrounds/scenic" />
+
+                <!-- Filter toggle icon -->
+                <ImageView
+                    android:id="@+id/filter_toggle_icon"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="end"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="12dp"
+                    android:contentDescription="Toggle Filters"
+                    android:src="@drawable/ic_filter" />
             </androidx.appcompat.widget.Toolbar>
 
         </com.google.android.material.appbar.CollapsingToolbarLayout>
@@ -97,48 +109,54 @@
         android:id="@+id/controls_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@android:color/black"
+        android:background="@color/black"
         android:elevation="8dp"
         android:orientation="vertical"
         android:padding="8dp"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
-        <ImageView
-            android:id="@+id/search_icon"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:clickable="true"
-            android:contentDescription="Search Icon"
-            android:focusable="true"
-            android:padding="12dp"
-            android:src="@android:drawable/ic_menu_search"
-            android:visibility="visible" />
-
-        <EditText
-            android:id="@+id/search_bar"
+        <!-- Search row -->
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_margin="8dp"
-            android:background="@android:drawable/editbox_background"
-            android:hint="Search songs..."
-            android:padding="8dp"
-            android:textColor="@android:color/black"
-            android:textColorHint="@android:color/darker_gray"
-            android:visibility="gone" />
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/search_icon"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Search Icon"
+                android:padding="12dp"
+                android:src="@drawable/ic_search"
+                android:visibility="visible" />
+
+            <EditText
+                android:id="@+id/search_bar"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:background="@android:drawable/editbox_background"
+                android:hint="Search songs..."
+                android:padding="8dp"
+                android:textColor="@android:color/black"
+                android:textColorHint="@android:color/darker_gray"
+                android:visibility="visible" />
+        </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
             <ImageView
                 android:id="@+id/sort_icon"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:clickable="true"
                 android:contentDescription="Sort By"
-                android:focusable="true"
                 android:padding="12dp"
                 android:src="@drawable/ic_sort"
                 android:visibility="visible" />
@@ -146,10 +164,12 @@
             <Spinner
                 android:id="@+id/sort_spinner"
                 android:layout_width="0dp"
-                android:layout_height="50dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
                 android:layout_weight="1"
-                android:paddingHorizontal="15dp"
-                android:paddingVertical="12dp"
+                android:paddingHorizontal="4dp"
+                android:paddingVertical="8dp"
+                android:theme="@style/WhiteSpinnerTheme"
                 android:visibility="visible" />
 
             <ImageView

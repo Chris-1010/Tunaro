@@ -59,18 +59,21 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     private Song_RecyclerViewAdapter adapter;
 
     // Searching
-    private ImageView searchIcon;
     private EditText searchBar;
     private ArrayList<SongModel> allSongs = new ArrayList<>();
 
     // Sorting
-    private ImageView sortIcon;
     private ImageView sortDirectionIcon;
     private Spinner sortSpinner;
     private boolean isAscending = false;
     private SharedPreferences prefs;
     private static final String SORT_PREF_KEY = "playlist_sort_option";
     private static final String SORT_DIRECTION_KEY = "playlist_sort_direction";
+
+    // Filter toggle
+    private ImageView filterToggleIcon;
+    private View controlsContainer;
+    private static final String CONTROLS_VISIBLE_KEY = "controls_visible";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -148,6 +151,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                         // Setup search and sorting after songs are loaded
                         setupSearch();
                         setupSorting();
+                        setupFilterToggle();
 
                         // Only cache if needed
                         if (result.needsCaching) {
@@ -255,23 +259,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     }
 
     private void setupSearch() {
-        searchIcon = findViewById(R.id.search_icon);
         searchBar = findViewById(R.id.search_bar);
-
-        searchIcon.setVisibility(View.VISIBLE);
-
-        searchIcon.setOnClickListener(v -> {
-            if (searchBar.getVisibility() == View.GONE) {
-                // Show search bar
-                searchBar.setVisibility(View.VISIBLE);
-                searchBar.requestFocus();
-            } else {
-                // Hide search bar and clear search
-                searchBar.setVisibility(View.GONE);
-                searchBar.setText("");
-                adapter.updateSongs(allSongs);
-            }
-        });
 
         searchBar.addTextChangedListener(new TextWatcher() {
             @Override
@@ -291,7 +279,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
     private void filterSongs(String query) {
         if (query == null || query.isEmpty()) {
-            adapter.updateSongs(allSongs);
+            // Re-apply current sort when clearing search
+            sortSongs(sortSpinner.getSelectedItemPosition());
             return;
         }
 
@@ -306,26 +295,59 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             }
         }
 
+        // Apply current sort to filtered results
+        int currentSortOption = sortSpinner.getSelectedItemPosition();
+        applySortToList(filteredList, currentSortOption);
         adapter.updateSongs(filteredList);
+
+        // Update contextual info display
+        adapter.updateSortContext(currentSortOption);
+
+        // Update listen count map if sorting by Listen Count
+        if (currentSortOption == 6) {
+            DatabaseHelper listenCountDbHelper = new DatabaseHelper(this);
+            List<String> listenCountSongIds = new ArrayList<>();
+            for (SongModel song : filteredList) {
+                listenCountSongIds.add(song.getId());
+            }
+            Map<String, Integer> listenCountMap = listenCountDbHelper.getListenCountsBatch(listenCountSongIds);
+            adapter.updateListenCounts(listenCountMap);
+        }
     }
 
     private void setupSorting() {
-        sortIcon = findViewById(R.id.sort_icon);
         sortDirectionIcon = findViewById(R.id.sort_direction_icon);
         sortSpinner = findViewById(R.id.sort_spinner);
-
-        sortIcon.setVisibility(View.VISIBLE);
 
         // Initialize SharedPreferences
         prefs = getSharedPreferences("PlaylistPrefs", MODE_PRIVATE);
 
-        // Set up spinner adapter
-        ArrayAdapter<String> sortAdapter = new ArrayAdapter<>(
-                this,
-                android.R.layout.simple_spinner_item,
-                new String[]{"Date Added", "Last Listened", "Title", "Length", "Artist"}
-        );
-        sortAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        // Set up spinner adapter with custom view
+        String[] sortOptions = new String[]{"Date Added", "Last Listened", "Title", "Length", "Artist", "Popularity", "Listen Count", "Release Date"};
+        ArrayAdapter<String> sortAdapter = new ArrayAdapter<String>(this, R.layout.spinner_dropdown_item, sortOptions) {
+            @Override
+            public View getView(int position, View convertView, android.view.ViewGroup parent) {
+                // Create a completely custom TextView programmatically for selected item
+                TextView textView = new TextView(getContext());
+                textView.setText(getItem(position));
+                textView.setTextColor(Color.WHITE);
+                textView.setTextSize(16);
+                textView.setPadding(0, 0, 0, 0);  // No padding - spinner already has padding
+                textView.setGravity(android.view.Gravity.CENTER_VERTICAL);
+                textView.setSingleLine(true);
+                textView.setEllipsize(null);
+
+                // Set layout parameters to ensure text isn't clipped
+                android.view.ViewGroup.LayoutParams params = new android.view.ViewGroup.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                );
+                textView.setLayoutParams(params);
+
+                return textView;
+            }
+        };
+        sortAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
         sortSpinner.setAdapter(sortAdapter);
 
         // Load saved preferences
@@ -339,33 +361,66 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
         updateSortDirectionIcon();
 
-        // Set up click listeners
-        sortIcon.setOnClickListener(v -> {
-            if (sortSpinner.getVisibility() == View.GONE) {
-                sortSpinner.setVisibility(View.VISIBLE);
-                sortDirectionIcon.setVisibility(View.VISIBLE);
-            } else {
-                sortSpinner.setVisibility(View.GONE);
-                sortDirectionIcon.setVisibility(View.GONE);
-            }
-        });
-
+        // Set up click listener for sort direction
         sortDirectionIcon.setOnClickListener(v -> {
             isAscending = !isAscending;
             updateSortDirectionIcon();
             prefs.edit().putBoolean(SORT_DIRECTION_KEY, isAscending).apply();
-            sortSongs(sortSpinner.getSelectedItemPosition());
+
+            // If there's an active search, re-filter to maintain search results
+            String currentQuery = searchBar.getText().toString();
+            if (!currentQuery.isEmpty()) {
+                filterSongs(currentQuery);
+            } else {
+                sortSongs(sortSpinner.getSelectedItemPosition());
+            }
         });
 
         sortSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 prefs.edit().putInt(SORT_PREF_KEY, position).apply();
-                sortSongs(position);
+
+                // If there's an active search, re-filter to maintain search results
+                String currentQuery = searchBar.getText().toString();
+                if (!currentQuery.isEmpty()) {
+                    filterSongs(currentQuery);
+                } else {
+                    sortSongs(position);
+                }
             }
 
             @Override
             public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+    }
+
+    private void setupFilterToggle() {
+        filterToggleIcon = findViewById(R.id.filter_toggle_icon);
+        controlsContainer = findViewById(R.id.controls_container);
+
+        // Load saved visibility state
+        boolean controlsVisible = prefs.getBoolean(CONTROLS_VISIBLE_KEY, true); // Default to visible
+        controlsContainer.setVisibility(controlsVisible ? View.VISIBLE : View.GONE);
+
+        // Toggle controls visibility when filter icon is clicked
+        filterToggleIcon.setOnClickListener(v -> {
+            boolean isVisible = controlsContainer.getVisibility() == View.VISIBLE;
+            controlsContainer.setVisibility(isVisible ? View.GONE : View.VISIBLE);
+
+            // Save the state
+            prefs.edit().putBoolean(CONTROLS_VISIBLE_KEY, !isVisible).apply();
+
+            // When hiding controls, reset to Date Added (Newest first) and clear search
+            if (isVisible) {
+                searchBar.setText("");
+                isAscending = false; // Newest first
+                sortSpinner.setSelection(0); // Date Added
+                prefs.edit().putInt(SORT_PREF_KEY, 0).apply();
+                prefs.edit().putBoolean(SORT_DIRECTION_KEY, false).apply();
+                updateSortDirectionIcon();
+                sortSongs(0);
             }
         });
     }
@@ -376,12 +431,9 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 R.drawable.ic_arrow_downward);
     }
 
-    private void sortSongs(int sortOption) {
-        if (adapter == null || selectedPlaylist == null) return;
-
-        ArrayList<SongModel> songs = new ArrayList<>(allSongs);
-
+    private void applySortToList(ArrayList<SongModel> songs, int sortOption) {
         Comparator<SongModel> comparator = null;
+
         switch (sortOption) {
             case 0: // Date Added
                 comparator = Comparator.comparing(SongModel::getDateAddedToPlaylist);
@@ -404,7 +456,6 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 formatWithoutMillis.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
 
                 comparator = (song1, song2) -> {
-                    // Use pre-fetched timestamps
                     String timestamp1 = timestampMap.get(song1.getId());
                     String timestamp2 = timestampMap.get(song2.getId());
 
@@ -413,7 +464,6 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
                     if (timestamp1 != null) {
                         try {
-                            // Try with milliseconds first, then without
                             try {
                                 date1 = formatWithMillis.parse(timestamp1);
                             } catch (java.text.ParseException e) {
@@ -425,7 +475,6 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                     }
                     if (timestamp2 != null) {
                         try {
-                            // Try with milliseconds first, then without
                             try {
                                 date2 = formatWithMillis.parse(timestamp2);
                             } catch (java.text.ParseException e) {
@@ -436,15 +485,14 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                         }
                     }
 
-                    // Compare dates
                     if (date1 != null && date2 != null) {
                         return date1.compareTo(date2);
                     } else if (date1 != null) {
-                        return 1; // date1 comes after null dates
+                        return 1;
                     } else if (date2 != null) {
-                        return -1; // date2 comes after null dates
+                        return -1;
                     } else {
-                        return 0; // both null, equal
+                        return 0;
                     }
                 };
                 break;
@@ -457,6 +505,40 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             case 4: // Artist
                 comparator = Comparator.comparing(SongModel::getArtist, String.CASE_INSENSITIVE_ORDER);
                 break;
+            case 5: // Popularity
+                comparator = Comparator.comparingInt(SongModel::getPopularity);
+                break;
+            case 6: // Listen Count
+                DatabaseHelper listenCountDbHelper = new DatabaseHelper(this);
+                List<String> listenCountSongIds = new ArrayList<>();
+                for (SongModel song : songs) {
+                    listenCountSongIds.add(song.getId());
+                }
+
+                Map<String, Integer> listenCountMap = listenCountDbHelper.getListenCountsBatch(listenCountSongIds);
+
+                comparator = (song1, song2) -> {
+                    int count1 = listenCountMap.getOrDefault(song1.getId(), 0);
+                    int count2 = listenCountMap.getOrDefault(song2.getId(), 0);
+                    return Integer.compare(count1, count2);
+                };
+                break;
+            case 7: // Release Date
+                comparator = (song1, song2) -> {
+                    String date1 = song1.getReleaseDate();
+                    String date2 = song2.getReleaseDate();
+
+                    if (date1 != null && date2 != null) {
+                        return date1.compareTo(date2);
+                    } else if (date1 != null) {
+                        return 1;
+                    } else if (date2 != null) {
+                        return -1;
+                    } else {
+                        return 0;
+                    }
+                };
+                break;
         }
 
         if (comparator != null) {
@@ -464,9 +546,29 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 comparator = comparator.reversed();
             }
             songs.sort(comparator);
-            adapter.updateSongs(songs);
+        }
+    }
 
-            adapter.updateSortContext(sortOption);
+    private void sortSongs(int sortOption) {
+        if (adapter == null || selectedPlaylist == null) return;
+
+        ArrayList<SongModel> songs = new ArrayList<>(allSongs);
+
+        // Apply sort to the list
+        applySortToList(songs, sortOption);
+        adapter.updateSongs(songs);
+
+        adapter.updateSortContext(sortOption);
+
+        // Pass listen count map to adapter for efficient display (only for Listen Count sort)
+        if (sortOption == 6) {
+            DatabaseHelper listenCountDbHelper = new DatabaseHelper(this);
+            List<String> listenCountSongIds = new ArrayList<>();
+            for (SongModel song : songs) {
+                listenCountSongIds.add(song.getId());
+            }
+            Map<String, Integer> listenCountMap = listenCountDbHelper.getListenCountsBatch(listenCountSongIds);
+            adapter.updateListenCounts(listenCountMap);
         }
     }
 
