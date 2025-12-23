@@ -723,18 +723,38 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return results;
     }
 
-    public int getListenCount(String songId) {
-        SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery("SELECT COUNT(*) FROM " + TABLE_LISTEN_HISTORY +
-                " WHERE " + COLUMN_SONG_ID + " = ?", new String[]{songId});
+    public Map<String, Integer> getListenCountsBatch(List<String> songIds) {
+        Map<String, Integer> results = new HashMap<>();
+        if (songIds == null || songIds.isEmpty()) return results;
 
-        int count = 0;
-        if (cursor.moveToFirst()) {
-            count = cursor.getInt(0);
+        SQLiteDatabase db = this.getReadableDatabase();
+
+        // Build placeholders for IN clause
+        StringBuilder placeholders = new StringBuilder();
+        for (int i = 0; i < songIds.size(); i++) {
+            if (i > 0) placeholders.append(",");
+            placeholders.append("?");
         }
+
+        // Query to get count for each song ID
+        String query = "SELECT " + COLUMN_SONG_ID + ", COUNT(*) as count " +
+                "FROM " + TABLE_LISTEN_HISTORY +
+                " WHERE " + COLUMN_SONG_ID + " IN (" + placeholders + ")" +
+                " GROUP BY " + COLUMN_SONG_ID;
+
+        Cursor cursor = db.rawQuery(query, songIds.toArray(new String[0]));
+
+        if (cursor.moveToFirst()) {
+            do {
+                String songId = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SONG_ID));
+                int count = cursor.getInt(cursor.getColumnIndexOrThrow("count"));
+                results.put(songId, count);
+            } while (cursor.moveToNext());
+        }
+
         cursor.close();
         db.close();
-        return count;
+        return results;
     }
 
     //#region ======== SYNC CURSOR METHODS ========
