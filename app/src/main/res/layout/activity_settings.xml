@@ -33,14 +33,14 @@
             android:orientation="vertical"
             android:padding="16dp">
 
-            <!--#region History Sync Section -->
+            <!--#region Automatic Fetcher Section -->
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="32dp"
                 android:layout_marginBottom="16dp"
-                android:text="Listening History Sync"
+                android:text="Automatic Spotify Listening History Fetching"
                 android:textColor="@color/white"
                 android:textSize="20sp"
                 android:textStyle="bold" />
@@ -49,82 +49,61 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
-                android:text="Sync your Spotify listening history to fill gaps when the app wasn't running"
+                android:text="Register to automatically sync your Spotify listening history without keeping the app open"
                 android:textColor="@color/white"
                 android:textSize="14sp" />
 
-            <!--#region Background Sync Settings -->
-
-            <LinearLayout
+            <!-- Before Registration State -->
+            <Button
+                android:id="@+id/register_fetcher_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
+                android:layout_marginBottom="16dp"
+                android:text="Register for Automatic Fetching"
+                android:textSize="16sp"
+                android:visibility="gone" />
+
+            <!-- After Registration State -->
+            <TextView
+                android:id="@+id/fetcher_statistics"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:textColor="@color/white"
+                android:textSize="14sp"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/fetcher_enable_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
                 android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                android:visibility="gone">
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Enable background sync"
+                    android:text="Enable automatic fetching"
                     android:textColor="@color/white"
                     android:textSize="16sp" />
 
-                <CheckBox
-                    android:id="@+id/enable_background_sync"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/fetcher_enable_switch"
+                    android:layout_width="50dp"
+                    android:layout_height="50dp" />
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/background_sync_status"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp"
-                android:textSize="14sp" />
-
-            <TextView
-                android:id="@+id/background_sync_details"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:textSize="12sp"
-                android:visibility="gone" />
-
-            <!--#endregion-->
-
-            <Button
-                android:id="@+id/start_history_sync_button"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:text="Start Manual Sync"
-                android:textSize="16sp" />
-
+            <!-- Import Spotify History button (always visible) -->
             <Button
                 android:id="@+id/import_spotify_history_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="24dp"
                 android:text="Import Spotify Listening History"
                 android:textSize="16sp" />
-
-            <ProgressBar
-                android:id="@+id/history_sync_progress"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:layout_marginBottom="8dp"
-                android:visibility="gone" />
-
-            <TextView
-                android:id="@+id/history_sync_status"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp"
-                android:textAlignment="center"
-                android:textColor="@color/white"
-                android:textSize="14sp" />
 
             <!--#endregion-->
 
@@ -154,14 +133,6 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="24dp"
                 android:text="Export Tunaro Data"
-                android:textSize="16sp" />
-
-            <Button
-                android:id="@+id/clear_cache_button"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:text="Clear Cache"
                 android:textSize="16sp" />
 
             <!--#endregion -->
@@ -239,6 +210,48 @@
                 android:textColor="@color/white"
                 android:textSize="12sp"
                 android:visibility="gone" />
+
+            <!--#endregion-->
+
+            <!--#region Danger Zone Section -->
+
+            <LinearLayout
+                android:id="@+id/danger_zone_section"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="16dp"
+                android:background="#33FF0000"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    android:text="Danger Zone"
+                    android:textColor="#FF6666"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/clear_cache_button"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:text="Clear Cache"
+                    android:textSize="16sp" />
+
+                <Button
+                    android:id="@+id/deregister_fetcher_button"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:backgroundTint="#D32F2F"
+                    android:text="Deregister Automatic Fetcher"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:visibility="gone" />
+            </LinearLayout>
 
             <!--#endregion-->
         </LinearLayout>
