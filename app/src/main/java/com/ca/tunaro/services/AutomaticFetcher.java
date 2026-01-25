@@ -35,6 +35,30 @@ public class AutomaticFetcher {
     private final Context context;
     private final ServerApiClient apiClient;
 
+    // Static fetch state tracking for cross-activity visibility
+    private static volatile boolean fetchInProgress = false;
+    private static FetchCompletionListener completionListener = null;
+
+    public interface FetchCompletionListener {
+        void onFetchCompleted(int importedCount);
+    }
+
+    public static boolean isFetchInProgress() {
+        return fetchInProgress;
+    }
+
+    public static void setFetchCompletionListener(FetchCompletionListener listener) {
+        completionListener = listener;
+    }
+
+    private static void notifyFetchCompleted(int importedCount) {
+        fetchInProgress = false;
+        if (completionListener != null) {
+            completionListener.onFetchCompleted(importedCount);
+            completionListener = null; // Clear after notifying
+        }
+    }
+
     public AutomaticFetcher(Context context) {
         this.context = context;
         this.apiClient = new ServerApiClient();
@@ -50,7 +74,7 @@ public class AutomaticFetcher {
         private boolean enabled;
 
         public FetcherCredentials(String username, String password, String jwtToken,
-                                 String apiKey, boolean registered, boolean enabled) {
+                                  String apiKey, boolean registered, boolean enabled) {
             this.username = username;
             this.password = password;
             this.jwtToken = jwtToken;
@@ -59,12 +83,29 @@ public class AutomaticFetcher {
             this.enabled = enabled;
         }
 
-        public String getUsername() { return username; }
-        public String getPassword() { return password; }
-        public String getJwtToken() { return jwtToken; }
-        public String getApiKey() { return apiKey; }
-        public boolean isRegistered() { return registered; }
-        public boolean isEnabled() { return enabled; }
+        public String getUsername() {
+            return username;
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public String getJwtToken() {
+            return jwtToken;
+        }
+
+        public String getApiKey() {
+            return apiKey;
+        }
+
+        public boolean isRegistered() {
+            return registered;
+        }
+
+        public boolean isEnabled() {
+            return enabled;
+        }
     }
 
     public FetcherCredentials getStoredCredentials() {
@@ -85,22 +126,13 @@ public class AutomaticFetcher {
     private void storeCredentials(String username, String password, String jwt, String apiKey) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         prefs.edit()
-            .putString(PREF_USERNAME, username)
-            .putString(PREF_PASSWORD, password)
-            .putString(PREF_JWT_TOKEN, jwt)
-            .putString(PREF_API_KEY, apiKey)
-            .putBoolean(PREF_REGISTERED, true)
-            .putBoolean(PREF_ENABLED, true)
-            .apply();
-    }
-
-    private void updateStoredApiKey(String newApiKey) {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        prefs.edit()
-            .putString(PREF_API_KEY, newApiKey)
-            .putBoolean(PREF_REGISTERED, true)
-            .putBoolean(PREF_ENABLED, true)
-            .apply();
+                .putString(PREF_USERNAME, username)
+                .putString(PREF_PASSWORD, password)
+                .putString(PREF_JWT_TOKEN, jwt)
+                .putString(PREF_API_KEY, apiKey)
+                .putBoolean(PREF_REGISTERED, true)
+                .putBoolean(PREF_ENABLED, true)
+                .apply();
     }
 
     public void setEnabled(boolean enabled) {
@@ -111,9 +143,9 @@ public class AutomaticFetcher {
     public void markAsDeregistered() {
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         prefs.edit()
-            .putBoolean(PREF_REGISTERED, false)
-            .putBoolean(PREF_ENABLED, false)
-            .apply();
+                .putBoolean(PREF_REGISTERED, false)
+                .putBoolean(PREF_ENABLED, false)
+                .apply();
     }
 
     private String getStoredSpotifyRefreshToken() {
@@ -125,11 +157,12 @@ public class AutomaticFetcher {
     //#region Registration Flow
     public interface RegistrationCallback {
         void onSuccess();
+
         void onError(String error);
     }
 
-    public CompletableFuture<Void> registerAutomaticFetcher(RegistrationCallback callback) {
-        return CompletableFuture.runAsync(() -> {
+    public void registerAutomaticFetcher(RegistrationCallback callback) {
+        CompletableFuture.runAsync(() -> {
             try {
                 MainActivity mainActivity = MainActivity.getInstance();
                 if (mainActivity == null) {
@@ -145,9 +178,16 @@ public class AutomaticFetcher {
 
                 FetcherCredentials existingCreds = getStoredCredentials();
 
-                if (existingCreds != null && !existingCreds.getPassword().isEmpty()) {
+                if (existingCreds != null && existingCreds.getPassword() != null && !existingCreds.getPassword().isEmpty()) {
                     // Re-registration with existing credentials
-                    registerWithExistingCredentials(existingCreds, callback);
+                    try {
+                        registerWithExistingCredentials(existingCreds);
+                        callback.onSuccess();
+                    } catch (Exception e) {
+                        Log.w(TAG, "Re-registration failed, trying new registration", e);
+                        // Fall back to new registration with fresh credentials
+                        registerWithNewCredentials(spotifyUserId, UUID.randomUUID().toString(), callback);
+                    }
                 } else {
                     // First-time registration
                     String password = UUID.randomUUID().toString();
@@ -198,34 +238,32 @@ public class AutomaticFetcher {
         }
     }
 
-    private void registerWithExistingCredentials(FetcherCredentials creds, RegistrationCallback callback) {
-        try {
-            // Login with existing credentials
-            ServerApiClient.LoginResponse loginResponse = apiClient.login(
+    private void registerWithExistingCredentials(FetcherCredentials creds) throws Exception {
+        // Login with existing credentials
+        ServerApiClient.LoginResponse loginResponse = apiClient.login(
                 creds.getUsername(),
                 creds.getPassword()
-            );
-            String jwtToken = loginResponse.getAccessToken();
+        );
+        String jwtToken = loginResponse.getAccessToken();
 
-            // Generate new API key (old one was revoked)
-            ServerApiClient.ApiKeyResponse apiKeyResponse = apiClient.generateApiKey(jwtToken);
-            String newApiKey = apiKeyResponse.getApiKey();
+        // Generate new API key (old one was revoked)
+        ServerApiClient.ApiKeyResponse apiKeyResponse = apiClient.generateApiKey(jwtToken);
+        String newApiKey = apiKeyResponse.getApiKey();
 
-            // Update stored API key
-            updateStoredApiKey(newApiKey);
+        // Update stored API key and JWT
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        prefs.edit()
+                .putString(PREF_API_KEY, newApiKey)
+                .putString(PREF_JWT_TOKEN, jwtToken)
+                .putBoolean(PREF_REGISTERED, true)
+                .putBoolean(PREF_ENABLED, true)
+                .apply();
 
-            // Import current Spotify tokens to server
-            importSpotifyTokensToServer(jwtToken);
+        // Import current Spotify tokens to server
+        importSpotifyTokensToServer(jwtToken);
 
-            // Initial fetch
-            performInitialFetch(jwtToken);
-
-            callback.onSuccess();
-
-        } catch (Exception e) {
-            Log.e(TAG, "Re-registration failed", e);
-            callback.onError("Re-registration failed: " + e.getMessage());
-        }
+        // Initial fetch
+        performInitialFetch(jwtToken);
     }
 
     private void retryWithModifiedUsername(String baseUsername, RegistrationCallback callback) {
@@ -265,10 +303,10 @@ public class AutomaticFetcher {
         int expiresIn = prefs.getInt("spotify_expires_in", 3600);
 
         apiClient.importSpotifyTokens(
-            jwtToken,
-            spotifyAccessToken,
-            spotifyRefreshToken,
-            expiresIn
+                jwtToken,
+                spotifyAccessToken,
+                spotifyRefreshToken,
+                expiresIn
         );
     }
 
@@ -297,14 +335,15 @@ public class AutomaticFetcher {
     //#region Fetch-on-Launch Flow
     public interface FetchCallback {
         void onSuccess(int importedCount);
+
         void onError(String error);
     }
 
     private String refreshJwtToken(FetcherCredentials creds) throws Exception {
         // Login to get a fresh JWT token (JWTs expire after 15-30 minutes typically)
         ServerApiClient.LoginResponse loginResponse = apiClient.login(
-            creds.getUsername(),
-            creds.getPassword()
+                creds.getUsername(),
+                creds.getPassword()
         );
 
         String freshJwtToken = loginResponse.getAccessToken();
@@ -325,6 +364,9 @@ public class AutomaticFetcher {
             return CompletableFuture.completedFuture(null);
         }
 
+        // Mark fetch as in progress
+        fetchInProgress = true;
+
         return CompletableFuture.runAsync(() -> {
             try {
                 // Refresh JWT token on every launch (JWT tokens expire)
@@ -332,7 +374,7 @@ public class AutomaticFetcher {
 
                 // Check Spotify connection status on server
                 ServerApiClient.SpotifyStatusResponse statusResponse = apiClient.checkSpotifyStatus(
-                    freshJwtToken
+                        freshJwtToken
                 );
 
                 if (!statusResponse.isConnected()) {
@@ -342,13 +384,14 @@ public class AutomaticFetcher {
 
                 // Fetch unimported listens
                 ServerApiClient.ListensResponse listensResponse = apiClient.fetchListens(
-                    freshJwtToken
+                        freshJwtToken
                 );
                 List<ServerApiClient.Listen> listens = listensResponse.getListens();
 
                 if (listens.isEmpty()) {
                     Log.d(TAG, "No new listens to import");
                     updateLastFetchStats(0, System.currentTimeMillis());
+                    notifyFetchCompleted(0);
                     callback.onSuccess(0);
                     return;
                 }
@@ -362,7 +405,9 @@ public class AutomaticFetcher {
                 // Update statistics
                 updateStatistics(importResults);
 
-                callback.onSuccess(importResults.getSuccessCount());
+                int count = importResults.getSuccessCount();
+                notifyFetchCompleted(count);
+                callback.onSuccess(count);
 
             } catch (Exception e) {
                 Log.e(TAG, "Fetch failed on first attempt", e);
@@ -378,9 +423,12 @@ public class AutomaticFetcher {
                     acknowledgeImport(retryJwtToken, results);
                     updateStatistics(results);
 
-                    callback.onSuccess(results.getSuccessCount());
+                    int count = results.getSuccessCount();
+                    notifyFetchCompleted(count);
+                    callback.onSuccess(count);
                 } catch (Exception retryError) {
                     Log.e(TAG, "Fetch failed on retry", retryError);
+                    notifyFetchCompleted(0);
                     callback.onError("Failed to fetch listening history");
                 }
             }
@@ -396,17 +444,28 @@ public class AutomaticFetcher {
         private boolean allImported;
 
         public ImportResults(int successCount, int failedCount,
-                            List<String> successfulTrackIds, boolean allImported) {
+                             List<String> successfulTrackIds, boolean allImported) {
             this.successCount = successCount;
             this.failedCount = failedCount;
             this.successfulTrackIds = successfulTrackIds;
             this.allImported = allImported;
         }
 
-        public int getSuccessCount() { return successCount; }
-        public int getFailedCount() { return failedCount; }
-        public List<String> getSuccessfulTrackIds() { return successfulTrackIds; }
-        public boolean isAllImported() { return allImported; }
+        public int getSuccessCount() {
+            return successCount;
+        }
+
+        public int getFailedCount() {
+            return failedCount;
+        }
+
+        public List<String> getSuccessfulTrackIds() {
+            return successfulTrackIds;
+        }
+
+        public boolean isAllImported() {
+            return allImported;
+        }
     }
 
     private ImportResults importListens(List<ServerApiClient.Listen> listens) {
@@ -430,19 +489,19 @@ public class AutomaticFetcher {
                         trackDuration)) {
 
                     dbHelper.addListenRecordWithTimestamp(
-                        listen.getTrackId(),
-                        listen.getPlayedAt()
+                            listen.getTrackId(),
+                            listen.getPlayedAt()
                     );
 
                     successfulIds.add(listen.getTrackId());
                     successCount++;
 
                     Log.d(TAG, "Imported listen: " +
-                          (listen.getTrackName() != null ? listen.getTrackName() : listen.getTrackId()));
+                            (listen.getTrackName() != null ? listen.getTrackName() : listen.getTrackId()));
                 } else {
                     Log.d(TAG, "Duplicate listen detected for " +
-                          (listen.getTrackName() != null ? listen.getTrackName() : listen.getTrackId()) +
-                          ", skipping");
+                            (listen.getTrackName() != null ? listen.getTrackName() : listen.getTrackId()) +
+                            ", skipping");
                     // Still counts as success (handled gracefully)
                     successfulIds.add(listen.getTrackId());
                     successCount++;
@@ -454,17 +513,17 @@ public class AutomaticFetcher {
         }
 
         return new ImportResults(
-            successCount,
-            failedCount,
-            successfulIds,
-            failedCount == 0
+                successCount,
+                failedCount,
+                successfulIds,
+                failedCount == 0
         );
     }
 
     private long parseTimestampToMillis(String utcTimestamp) throws ParseException {
         SimpleDateFormat dateFormat = new SimpleDateFormat(
-            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
-            Locale.getDefault()
+                "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+                Locale.getDefault()
         );
         dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
         Date date = dateFormat.parse(utcTimestamp);
@@ -481,10 +540,10 @@ public class AutomaticFetcher {
                     apiClient.acknowledgeListens(jwtToken, "All", 0, null);
                 } else {
                     apiClient.acknowledgeListens(
-                        jwtToken,
-                        "Partial",
-                        results.getSuccessCount(),
-                        results.getSuccessfulTrackIds()
+                            jwtToken,
+                            "Partial",
+                            results.getSuccessCount(),
+                            results.getSuccessfulTrackIds()
                     );
                 }
 
@@ -517,10 +576,10 @@ public class AutomaticFetcher {
 
         int currentTotal = prefs.getInt(PREF_TOTAL_IMPORTED, 0);
         prefs.edit()
-            .putInt(PREF_TOTAL_IMPORTED, currentTotal + results.getSuccessCount())
-            .putLong(PREF_LAST_FETCH_TIME, System.currentTimeMillis())
-            .putInt(PREF_TOTAL_FETCH_COUNT, prefs.getInt(PREF_TOTAL_FETCH_COUNT, 0) + 1)
-            .apply();
+                .putInt(PREF_TOTAL_IMPORTED, currentTotal + results.getSuccessCount())
+                .putLong(PREF_LAST_FETCH_TIME, System.currentTimeMillis())
+                .putInt(PREF_TOTAL_FETCH_COUNT, prefs.getInt(PREF_TOTAL_FETCH_COUNT, 0) + 1)
+                .apply();
     }
 
     private void updateLastFetchStats(int imported, long timestamp) {
@@ -529,14 +588,14 @@ public class AutomaticFetcher {
         if (imported > 0) {
             int currentTotal = prefs.getInt(PREF_TOTAL_IMPORTED, 0);
             prefs.edit()
-                .putInt(PREF_TOTAL_IMPORTED, currentTotal + imported)
-                .apply();
+                    .putInt(PREF_TOTAL_IMPORTED, currentTotal + imported)
+                    .apply();
         }
 
         prefs.edit()
-            .putLong(PREF_LAST_FETCH_TIME, timestamp)
-            .putInt(PREF_TOTAL_FETCH_COUNT, prefs.getInt(PREF_TOTAL_FETCH_COUNT, 0) + 1)
-            .apply();
+                .putLong(PREF_LAST_FETCH_TIME, timestamp)
+                .putInt(PREF_TOTAL_FETCH_COUNT, prefs.getInt(PREF_TOTAL_FETCH_COUNT, 0) + 1)
+                .apply();
     }
 
     public String getStatisticsDisplay() {
@@ -553,8 +612,8 @@ public class AutomaticFetcher {
         }
 
         return totalImported + " total imported\n" +
-               "Last fetch: " + relativeTime + "\n" +
-               "Total fetches: " + fetchCount;
+                "Last fetch: " + relativeTime + "\n" +
+                "Total fetches: " + fetchCount;
     }
 
     private String getRelativeTimeString(long timestamp) {
@@ -581,6 +640,7 @@ public class AutomaticFetcher {
     //#region Deregistration
     public interface DeregistrationCallback {
         void onSuccess();
+
         void onError(String error);
     }
 

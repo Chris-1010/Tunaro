@@ -250,6 +250,13 @@ public class SettingsActivity extends BaseActivity {
         boolean isRegistered = creds != null && creds.isRegistered();
         updateRegistrationStatus(isRegistered);
 
+        // Check if a fetch is already in progress (from MainActivity launch)
+        if (isRegistered && AutomaticFetcher.isFetchInProgress()) {
+            showFetchProgress(true);
+            // Register to be notified when fetch completes
+            AutomaticFetcher.setFetchCompletionListener(this::onFetchCompleted);
+        }
+
         // Setup registration button
         registerButton.setOnClickListener(v -> {
             showToast("Registering for automatic fetching...");
@@ -353,24 +360,49 @@ public class SettingsActivity extends BaseActivity {
     }
 
     private void performFetch() {
+        showFetchProgress(true);
+
         automaticFetcher.performFetchOnLaunch(new AutomaticFetcher.FetchCallback() {
             @Override
             public void onSuccess(int importedCount) {
                 runOnUiThread(() -> {
+                    showFetchProgress(false);
                     if (importedCount > 0) {
                         showToast("Imported " + importedCount + " new listens");
-                        // Update statistics display
-                        TextView statisticsText = findViewById(R.id.fetcher_statistics);
-                        statisticsText.setText(automaticFetcher.getStatisticsDisplay());
                     }
+                    // Update statistics display
+                    TextView statisticsText = findViewById(R.id.fetcher_statistics);
+                    statisticsText.setText(automaticFetcher.getStatisticsDisplay());
                 });
             }
 
             @Override
             public void onError(String error) {
                 runOnUiThread(() -> {
+                    showFetchProgress(false);
                     showToast("Fetch failed: " + error);
                 });
+            }
+        });
+    }
+
+    private void showFetchProgress(boolean show) {
+        LinearLayout progressLayout = findViewById(R.id.fetcher_progress_layout);
+        if (progressLayout != null) {
+            progressLayout.setVisibility(show ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    private void onFetchCompleted(int importedCount) {
+        runOnUiThread(() -> {
+            showFetchProgress(false);
+            if (importedCount > 0) {
+                showToast("Imported " + importedCount + " new listens");
+            }
+            // Update statistics display
+            TextView statisticsText = findViewById(R.id.fetcher_statistics);
+            if (statisticsText != null && automaticFetcher != null) {
+                statisticsText.setText(automaticFetcher.getStatisticsDisplay());
             }
         });
     }

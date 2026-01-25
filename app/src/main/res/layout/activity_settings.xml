@@ -73,6 +73,31 @@
                 android:textSize="14sp"
                 android:visibility="gone" />
 
+            <!-- Fetch in progress indicator -->
+            <LinearLayout
+                android:id="@+id/fetcher_progress_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <ProgressBar
+                    android:id="@+id/fetcher_progress_spinner"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="12dp" />
+
+                <TextView
+                    android:id="@+id/fetcher_progress_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Fetching listening history..."
+                    android:textColor="@color/white"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
             <LinearLayout
                 android:id="@+id/fetcher_enable_layout"
                 android:layout_width="match_parent"
