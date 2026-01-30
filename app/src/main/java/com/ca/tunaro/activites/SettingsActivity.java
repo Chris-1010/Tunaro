@@ -259,21 +259,15 @@ public class SettingsActivity extends BaseActivity {
 
         // Setup registration button
         registerButton.setOnClickListener(v -> {
-            showToast("Registering for automatic fetching...");
             automaticFetcher.registerAutomaticFetcher(new AutomaticFetcher.RegistrationCallback() {
                 @Override
                 public void onSuccess() {
-                    runOnUiThread(() -> {
-                        updateRegistrationStatus(true);
-                        showToast("Automatic fetching registered successfully");
-                    });
+                    runOnUiThread(() -> updateRegistrationStatus(true));
                 }
 
                 @Override
                 public void onError(String error) {
-                    runOnUiThread(() -> {
-                        showToast("Registration failed: " + error);
-                    });
+                    // Toast is shown by AutomaticFetcher
                 }
             });
         });
@@ -304,17 +298,12 @@ public class SettingsActivity extends BaseActivity {
                     automaticFetcher.deregisterFetcher(new AutomaticFetcher.DeregistrationCallback() {
                         @Override
                         public void onSuccess() {
-                            runOnUiThread(() -> {
-                                updateRegistrationStatus(false);
-                                showToast("Deregistered successfully");
-                            });
+                            runOnUiThread(() -> updateRegistrationStatus(false));
                         }
 
                         @Override
                         public void onError(String error) {
-                            runOnUiThread(() -> {
-                                showToast("Deregistration failed: " + error);
-                            });
+                            // Toast is shown by AutomaticFetcher
                         }
                     });
                 })
@@ -367,9 +356,7 @@ public class SettingsActivity extends BaseActivity {
             public void onSuccess(int importedCount) {
                 runOnUiThread(() -> {
                     showFetchProgress(false);
-                    if (importedCount > 0) {
-                        showToast("Imported " + importedCount + " new listens");
-                    }
+                    // Toast is shown by AutomaticFetcher
                     // Update statistics display
                     TextView statisticsText = findViewById(R.id.fetcher_statistics);
                     statisticsText.setText(automaticFetcher.getStatisticsDisplay());
@@ -378,10 +365,8 @@ public class SettingsActivity extends BaseActivity {
 
             @Override
             public void onError(String error) {
-                runOnUiThread(() -> {
-                    showFetchProgress(false);
-                    showToast("Fetch failed: " + error);
-                });
+                runOnUiThread(() -> showFetchProgress(false));
+                // Toast is shown by AutomaticFetcher
             }
         });
     }
@@ -396,9 +381,7 @@ public class SettingsActivity extends BaseActivity {
     private void onFetchCompleted(int importedCount) {
         runOnUiThread(() -> {
             showFetchProgress(false);
-            if (importedCount > 0) {
-                showToast("Imported " + importedCount + " new listens");
-            }
+            // Toast is shown by AutomaticFetcher
             // Update statistics display
             TextView statisticsText = findViewById(R.id.fetcher_statistics);
             if (statisticsText != null && automaticFetcher != null) {
