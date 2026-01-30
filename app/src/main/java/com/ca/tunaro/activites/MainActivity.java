@@ -9,6 +9,7 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.ca.tunaro.managers.PlaybackManager;
+import com.ca.tunaro.services.AutomaticFetcher;
 import com.ca.tunaro.utils.DeviceChecker;
 import com.ca.tunaro.utils.PlaylistSetup;
 import com.ca.tunaro.R;
@@ -17,7 +18,16 @@ import com.spotify.sdk.android.auth.AuthorizationClient;
 import com.spotify.sdk.android.auth.AuthorizationRequest;
 import com.spotify.sdk.android.auth.AuthorizationResponse;
 
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
 import java.net.URI;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -116,9 +126,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private CompletableFuture<Void> authenticateSpotify() {
-        // Start the authentication process
+        // Start the authentication process using Authorization Code Flow
         AuthorizationRequest.Builder builder =
-                new AuthorizationRequest.Builder(CLIENT_ID, AuthorizationResponse.Type.TOKEN, REDIRECT_URI.toString());
+                new AuthorizationRequest.Builder(CLIENT_ID, AuthorizationResponse.Type.CODE, REDIRECT_URI.toString());
         // Set permissions and scope
         builder.setScopes(new String[]{"app-remote-control", "streaming", "playlist-read-private", "playlist-modify-private", "user-read-playback-state", "user-read-recently-played"});
         AuthorizationRequest request = builder.build();
@@ -135,6 +145,7 @@ public class MainActivity extends AppCompatActivity {
         return authFuture.thenCompose(aVoid -> getCurrentUsersProfile_Async()).thenRunAsync(() -> runOnUiThread(() -> {
             connectSpotifyAppRemote();
             performInitialDeviceCheck();
+            performAutomaticFetch();
         }), executor);
     }
 
@@ -171,22 +182,12 @@ public class MainActivity extends AppCompatActivity {
             }
 
             switch (response.getType()) {
-                case TOKEN:
-                    // Authentication successful
-                    String token = response.getAccessToken();
-                    saveAccessToken(token);
+                case CODE:
+                    // Authentication successful - received authorization code
+                    String authCode = response.getCode();
 
-                    spotifyApi = new SpotifyApi.Builder()
-                            .setClientId(CLIENT_ID)
-                            .setClientSecret(CLIENT_SECRET)
-                            .setRedirectUri(REDIRECT_URI)
-                            .setAccessToken(token)
-                            .build();
-
-                    // Complete the future to signal that authentication is done
-                    if (authenticationFuture != null) {
-                        authenticationFuture.complete(null);
-                    }
+                    // Exchange authorization code for tokens
+                    exchangeCodeForTokens(authCode);
                     break;
                 case ERROR:
                     // Authentication failed
@@ -208,6 +209,99 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void exchangeCodeForTokens(String authCode) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                // Prepare POST request to Spotify's token endpoint
+                URL url = new URL("https://accounts.spotify.com/api/token");
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+
+                connection.setRequestMethod("POST");
+                connection.setDoOutput(true);
+                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+
+                // Basic authentication: Base64(client_id:client_secret)
+                String credentials = CLIENT_ID + ":" + CLIENT_SECRET;
+                String encodedCredentials = android.util.Base64.encodeToString(
+                    credentials.getBytes(StandardCharsets.UTF_8),
+                    android.util.Base64.NO_WRAP
+                );
+                connection.setRequestProperty("Authorization", "Basic " + encodedCredentials);
+
+                // Build POST body
+                String postData = "grant_type=authorization_code" +
+                    "&code=" + URLEncoder.encode(authCode, "UTF-8") +
+                    "&redirect_uri=" + URLEncoder.encode(REDIRECT_URI.toString(), "UTF-8");
+
+                // Send request
+                try (OutputStream os = connection.getOutputStream()) {
+                    byte[] input = postData.getBytes(StandardCharsets.UTF_8);
+                    os.write(input, 0, input.length);
+                }
+
+                // Read response
+                int responseCode = connection.getResponseCode();
+                if (responseCode == 200) {
+                    try (BufferedReader br = new BufferedReader(
+                            new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+                        StringBuilder response = new StringBuilder();
+                        String responseLine;
+                        while ((responseLine = br.readLine()) != null) {
+                            response.append(responseLine.trim());
+                        }
+
+                        // Parse JSON response
+                        JSONObject jsonResponse = new JSONObject(response.toString());
+                        String accessToken = jsonResponse.getString("access_token");
+                        String refreshToken = jsonResponse.getString("refresh_token");
+                        int expiresIn = jsonResponse.optInt("expires_in", 3600); // Default to 1 hour
+
+                        // Save both tokens and expiry
+                        saveTokens(accessToken, refreshToken, expiresIn);
+
+                        // Initialize SpotifyApi with access token
+                        runOnUiThread(() -> {
+                            spotifyApi = new SpotifyApi.Builder()
+                                    .setClientId(CLIENT_ID)
+                                    .setClientSecret(CLIENT_SECRET)
+                                    .setRedirectUri(REDIRECT_URI)
+                                    .setAccessToken(accessToken)
+                                    .setRefreshToken(refreshToken)
+                                    .build();
+
+                            // Complete the authentication future
+                            if (authenticationFuture != null) {
+                                authenticationFuture.complete(null);
+                            }
+                        });
+                    }
+                } else {
+                    // Error response
+                    try (BufferedReader br = new BufferedReader(
+                            new InputStreamReader(connection.getErrorStream(), StandardCharsets.UTF_8))) {
+                        StringBuilder errorResponse = new StringBuilder();
+                        String responseLine;
+                        while ((responseLine = br.readLine()) != null) {
+                            errorResponse.append(responseLine.trim());
+                        }
+                        throw new Exception("Token exchange failed: " + errorResponse.toString());
+                    }
+                }
+
+                connection.disconnect();
+
+            } catch (Exception e) {
+                Log.e(TAG, "Error exchanging code for tokens", e);
+                runOnUiThread(() -> {
+                    showToast("Failed to obtain tokens: " + e.getMessage());
+                    if (authenticationFuture != null) {
+                        authenticationFuture.completeExceptionally(e);
+                    }
+                });
+            }
+        }, executor);
+    }
+
     private void performInitialDeviceCheck() {
         DeviceChecker.checkPlaybackDevice(this, spotifyApi, (isCorrectDevice, message) -> runOnUiThread(() -> {
             if (!isCorrectDevice && PlaybackManager.getInstance().isPlaying() && DeviceChecker.isDeviceCheckEnabled(this)) {
@@ -216,10 +310,146 @@ public class MainActivity extends AppCompatActivity {
         }));
     }
 
-    private void saveAccessToken(String token) {
-        // Save token to SharedPreferences or secure storage
+    private void performAutomaticFetch() {
+        AutomaticFetcher fetcher = new AutomaticFetcher(this);
+        fetcher.performFetchOnLaunch(new AutomaticFetcher.FetchCallback() {
+            @Override
+            public void onSuccess(int importedCount) {
+                if (importedCount > 0) {
+                    Log.d(TAG, "Automatic fetch imported " + importedCount + " new listens");
+                }
+            }
+
+            @Override
+            public void onError(String error) {
+                Log.e(TAG, "Automatic fetch failed: " + error);
+            }
+        });
+    }
+
+    public CompletableFuture<String> refreshAccessToken() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                SharedPreferences prefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
+                String refreshToken = prefs.getString("spotify_refresh_token", null);
+
+                if (refreshToken == null) {
+                    throw new Exception("No refresh token available");
+                }
+
+                // Prepare POST request to Spotify's token endpoint
+                URL url = new URL("https://accounts.spotify.com/api/token");
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+
+                connection.setRequestMethod("POST");
+                connection.setDoOutput(true);
+                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+
+                // Basic authentication: Base64(client_id:client_secret)
+                String credentials = CLIENT_ID + ":" + CLIENT_SECRET;
+                String encodedCredentials = android.util.Base64.encodeToString(
+                    credentials.getBytes(StandardCharsets.UTF_8),
+                    android.util.Base64.NO_WRAP
+                );
+                connection.setRequestProperty("Authorization", "Basic " + encodedCredentials);
+
+                // Build POST body for refresh
+                String postData = "grant_type=refresh_token" +
+                    "&refresh_token=" + URLEncoder.encode(refreshToken, "UTF-8");
+
+                // Send request
+                try (OutputStream os = connection.getOutputStream()) {
+                    byte[] input = postData.getBytes(StandardCharsets.UTF_8);
+                    os.write(input, 0, input.length);
+                }
+
+                // Read response
+                int responseCode = connection.getResponseCode();
+                if (responseCode == 200) {
+                    try (BufferedReader br = new BufferedReader(
+                            new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+                        StringBuilder response = new StringBuilder();
+                        String responseLine;
+                        while ((responseLine = br.readLine()) != null) {
+                            response.append(responseLine.trim());
+                        }
+
+                        // Parse JSON response
+                        JSONObject jsonResponse = new JSONObject(response.toString());
+                        String newAccessToken = jsonResponse.getString("access_token");
+                        int expiresIn = jsonResponse.optInt("expires_in", 3600); // Default to 1 hour
+
+                        // Note: Refresh token response may include a new refresh token
+                        if (jsonResponse.has("refresh_token")) {
+                            String newRefreshToken = jsonResponse.getString("refresh_token");
+                            saveTokens(newAccessToken, newRefreshToken, expiresIn);
+                        } else {
+                            // Only update access token, keep existing refresh token
+                            prefs.edit()
+                                .putString("spotify_access_token", newAccessToken)
+                                .putInt("spotify_expires_in", expiresIn)
+                                .apply();
+                        }
+
+                        // Update SpotifyApi with new access token
+                        if (spotifyApi != null) {
+                            spotifyApi.setAccessToken(newAccessToken);
+                        }
+
+                        Log.d(TAG, "Successfully refreshed access token");
+                        return newAccessToken;
+                    }
+                } else {
+                    // Error response
+                    try (BufferedReader br = new BufferedReader(
+                            new InputStreamReader(connection.getErrorStream(), StandardCharsets.UTF_8))) {
+                        StringBuilder errorResponse = new StringBuilder();
+                        String responseLine;
+                        while ((responseLine = br.readLine()) != null) {
+                            errorResponse.append(responseLine.trim());
+                        }
+                        throw new Exception("Token refresh failed: " + errorResponse.toString());
+                    }
+                }
+
+            } catch (Exception e) {
+                Log.e(TAG, "Error refreshing access token", e);
+                throw new RuntimeException(e);
+            }
+        }, executor);
+    }
+
+    public CompletableFuture<String> getValidAccessToken() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                if (spotifyApi != null && spotifyApi.getAccessToken() != null) {
+                    // Try using current token first
+                    return spotifyApi.getAccessToken();
+                } else {
+                    // Need to refresh
+                    return refreshAccessToken().get();
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error getting valid access token", e);
+                throw new RuntimeException(e);
+            }
+        }, executor);
+    }
+
+    private void saveTokens(String accessToken, String refreshToken, int expiresIn) {
         SharedPreferences prefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
-        prefs.edit().putString("spotify_access_token", token).apply();
+        prefs.edit()
+            .putString("spotify_access_token", accessToken)
+            .putString("spotify_refresh_token", refreshToken)
+            .putInt("spotify_expires_in", expiresIn)
+            .apply();
+
+        Log.d(TAG, "Saved access token and refresh token to SharedPreferences (expires in " + expiresIn + " seconds)");
+    }
+
+    // Overload for backward compatibility when expires_in is not provided
+    private void saveTokens(String accessToken, String refreshToken) {
+        saveTokens(accessToken, refreshToken, 3600); // Default to 1 hour
     }
 
     // Getters for important objects
