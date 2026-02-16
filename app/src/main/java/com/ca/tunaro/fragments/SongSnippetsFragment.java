@@ -287,6 +287,7 @@ public class SongSnippetsFragment extends Fragment {
                     newSnippet.setId(id);
                     snippets.add(newSnippet);
                     snippetAdapter.updateSnippets(snippets);
+                    updateSnippetsBadge();
                     showToast("Snippet saved");
                 } else {
                     showToast("Error saving snippet");
@@ -309,6 +310,7 @@ public class SongSnippetsFragment extends Fragment {
                             dbHelper.deleteSnippet(editingSnippet.getId());
                             snippets.removeIf(snippet -> snippet.getId() == editingSnippet.getId());
                             snippetAdapter.updateSnippets(snippets);
+                            updateSnippetsBadge();
                             showToast("Snippet deleted");
                             hideSnippetCreationOverlay();
                         })
@@ -675,6 +677,13 @@ public class SongSnippetsFragment extends Fragment {
     private boolean isCorrectSongPlaying() {
         SongModel currentlyPlaying = playbackManager.getCurrentSong();
         return currentlyPlaying != null && currentlyPlaying.getId().equals(song.getId());
+    }
+
+    private void updateSnippetsBadge() {
+        if (getActivity() instanceof com.ca.tunaro.activites.SongView) {
+            int count = dbHelper.getSongSnippets(song.getId()).size();
+            ((com.ca.tunaro.activites.SongView) getActivity()).updateTabBadge(2, count);
+        }
     }
 
     private void showToast(String message) {
