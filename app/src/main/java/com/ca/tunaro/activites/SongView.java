@@ -260,6 +260,19 @@ public class SongView extends BaseActivity {
         viewPager.setCurrentItem(0);
     }
 
+    public void updateTabBadge(int tabIndex, int count) {
+        TabLayout.Tab tab = tabLayout.getTabAt(tabIndex);
+        if (tab == null || tab.getCustomView() == null) return;
+
+        TextView badgeView = tab.getCustomView().findViewById(R.id.tab_badge);
+        if (count > 0) {
+            badgeView.setVisibility(View.VISIBLE);
+            badgeView.setText(String.valueOf(count));
+        } else {
+            badgeView.setVisibility(View.GONE);
+        }
+    }
+
     private void playSong() {
         if (!playbackManager.isConnected()) {
             showToast("Connecting to Spotify...");
