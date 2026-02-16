@@ -82,6 +82,7 @@ public class SongNotesFragment extends Fragment {
                         SongNote noteToDelete = notesAdapter.getNote(position);
                         dbHelper.deleteNote(noteToDelete.getId());
                         notesAdapter.removeNote(position);
+                        updateNotesBadge();
                         showToast("Note deleted");
                     }
 
@@ -108,6 +109,7 @@ public class SongNotesFragment extends Fragment {
             showToast("Note added successfully");
             noteInput.setText("");
             loadNotes(); // Refresh the notes list
+            updateNotesBadge();
         } else {
             showToast("Error saving note");
         }
@@ -239,6 +241,7 @@ public class SongNotesFragment extends Fragment {
                     if (id != -1) {
                         showToast("Note added successfully");
                         loadNotes(); // Refresh the notes list
+                        updateNotesBadge();
                     } else {
                         showToast("Error saving note");
                     }
@@ -380,6 +383,13 @@ public class SongNotesFragment extends Fragment {
                     }
                 })
                 .show();
+    }
+
+    private void updateNotesBadge() {
+        if (getActivity() instanceof com.ca.tunaro.activites.SongView) {
+            int count = dbHelper.getSongNotes(song.getId()).size();
+            ((com.ca.tunaro.activites.SongView) getActivity()).updateTabBadge(1, count);
+        }
     }
 
     private void showToast(String message) {
