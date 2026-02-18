@@ -1,5 +1,6 @@
 package com.ca.tunaro.activites;
 
+import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
@@ -54,6 +55,7 @@ public class MainActivity extends AppCompatActivity {
 
     ExecutorService executor = Executors.newSingleThreadExecutor();
     private CompletableFuture<Void> authenticationFuture;
+    private ProgressDialog loadingDialog;
 
     public static MainActivity getInstance() {
         return instance;
@@ -91,12 +93,18 @@ public class MainActivity extends AppCompatActivity {
                 .thenRunAsync(() -> {
                     // Launch HomeActivity after authentication
                     runOnUiThread(() -> {
+                        if (loadingDialog != null && loadingDialog.isShowing()) {
+                            loadingDialog.dismiss();
+                        }
                         Intent intent = new Intent(MainActivity.this, HomeActivity.class);
                         startActivity(intent);
                     });
                 }, executor)
                 .exceptionally(throwable -> {
                     runOnUiThread(() -> {
+                        if (loadingDialog != null && loadingDialog.isShowing()) {
+                            loadingDialog.dismiss();
+                        }
                         showToast("Error: " + throwable.getMessage());
                         finish(); // Close app if authentication fails
                     });
@@ -185,6 +193,12 @@ public class MainActivity extends AppCompatActivity {
                 case CODE:
                     // Authentication successful - received authorization code
                     String authCode = response.getCode();
+
+                    // Block interaction while completing authentication
+                    loadingDialog = new ProgressDialog(this);
+                    loadingDialog.setMessage("Connecting to Spotify...");
+                    loadingDialog.setCancelable(false);
+                    loadingDialog.show();
 
                     // Exchange authorization code for tokens
                     exchangeCodeForTokens(authCode);
