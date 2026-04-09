@@ -85,6 +85,17 @@ public class MainActivity extends AppCompatActivity {
                 REDIRECT_URI.toString()
         );
 
+        // Restore session from saved tokens (silent recovery)
+        if (tryRestoreSession()) {
+            Log.d(TAG, "Session restored from saved tokens");
+            connectSpotifyAppRemote();
+            performInitialDeviceCheck();
+            performAutomaticFetch();
+            Intent intent = new Intent(MainActivity.this, HomeActivity.class);
+            startActivity(intent);
+            return;
+        }
+
         // Initialize the CompletableFuture
         authenticationFuture = new CompletableFuture<>();
 
@@ -138,7 +149,7 @@ public class MainActivity extends AppCompatActivity {
         AuthorizationRequest.Builder builder =
                 new AuthorizationRequest.Builder(CLIENT_ID, AuthorizationResponse.Type.CODE, REDIRECT_URI.toString());
         // Set permissions and scope
-        builder.setScopes(new String[]{"app-remote-control", "streaming", "playlist-read-private", "playlist-modify-private", "user-read-playback-state", "user-read-recently-played"});
+        builder.setScopes(new String[]{"app-remote-control", "streaming", "playlist-read-private", "playlist-modify-private", "user-read-playback-state", "user-read-recently-played", "user-read-private"});
         AuthorizationRequest request = builder.build();
 
         AuthorizationClient.openLoginActivity(this, REQUEST_CODE, request);
@@ -157,6 +168,34 @@ public class MainActivity extends AppCompatActivity {
         }), executor);
     }
 
+    private boolean tryRestoreSession() {
+        SharedPreferences spotifyPrefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
+        String accessToken = spotifyPrefs.getString("spotify_access_token", null);
+        String refreshToken = spotifyPrefs.getString("spotify_refresh_token", null);
+
+        SharedPreferences tunaroPrefs = getSharedPreferences("TunaroPrefs", MODE_PRIVATE);
+        String savedUserId = tunaroPrefs.getString("spotify_user_id", null);
+        String savedDisplayName = spotifyPrefs.getString("spotify_display_name", null);
+
+        if (accessToken == null || refreshToken == null || savedUserId == null) {
+            return false;
+        }
+
+        // Restore session state
+        spotifyApi = new SpotifyApi.Builder()
+                .setClientId(CLIENT_ID)
+                .setClientSecret(CLIENT_SECRET)
+                .setRedirectUri(REDIRECT_URI)
+                .setAccessToken(accessToken)
+                .setRefreshToken(refreshToken)
+                .build();
+        userID = savedUserId;
+        userDisplayName = savedDisplayName;
+
+        Log.d(TAG, "Restored session for user: " + userDisplayName);
+        return true;
+    }
+
     public void connectSpotifyAppRemote() {
         PlaybackManager.getInstance().connectSpotify(this, null);
     }
@@ -169,11 +208,49 @@ public class MainActivity extends AppCompatActivity {
                     userID = user.getId();
                     userDisplayName = user.getDisplayName();
 
+                    // Save profile info to SharedPreferences for use by other activities
+                    String imageUrl = user.getImages().length > 0 ? user.getImages()[0].getUrl() : null;
+                    SharedPreferences prefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
+                    prefs.edit()
+                            .putString("spotify_display_name", userDisplayName)
+                            .putString("spotify_profile_image_url", imageUrl)
+                            .apply();
+
+                    // Save userID to SharedPreferences so it survives if this Activity is destroyed
+                    SharedPreferences tunaroPrefs = getSharedPreferences("TunaroPrefs", MODE_PRIVATE);
+                    tunaroPrefs.edit().putString("spotify_user_id", userID).apply();
+
+                    // Check for account mismatch
+                    String originalUserId = tunaroPrefs.getString("original_spotify_user_id", null);
+                    if (originalUserId == null) {
+                        // First-ever login — record this user as the original
+                        tunaroPrefs.edit().putString("original_spotify_user_id", userID).apply();
+                    } else if (!userID.equals(originalUserId)) {
+                        // Different account signed in — show mismatch screen
+                        runOnUiThread(() -> {
+                            if (loadingDialog != null && loadingDialog.isShowing()) {
+                                loadingDialog.dismiss();
+                            }
+                            Intent mismatchIntent = new Intent(MainActivity.this, AccountMismatchActivity.class);
+                            mismatchIntent.putExtra(AccountMismatchActivity.EXTRA_EXPECTED_USER, originalUserId);
+                            mismatchIntent.putExtra(AccountMismatchActivity.EXTRA_ACTUAL_USER, userDisplayName != null ? userDisplayName : userID);
+                            mismatchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                            startActivity(mismatchIntent);
+                            finish();
+                        });
+                        throw new RuntimeException("Account mismatch");
+                    }
+
                     runOnUiThread(() -> showToast("Logged in as " + userDisplayName));
                 })
                 .exceptionally(throwable -> {
-                    runOnUiThread(() -> showToast("Error: " + throwable.getMessage()));
-                    return null;
+                    String message = throwable.getMessage();
+                    // Don't show error toast for account mismatch (already handled)
+                    if (message != null && message.contains("Account mismatch")) {
+                        return null;
+                    }
+                    runOnUiThread(() -> showToast("Failed to load profile: " + message));
+                    throw new RuntimeException("Failed to load profile", throwable);
                 });
     }
 

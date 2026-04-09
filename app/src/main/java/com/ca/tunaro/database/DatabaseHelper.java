@@ -9,7 +9,6 @@ import android.database.sqlite.SQLiteOpenHelper;
 import android.net.Uri;
 import android.util.Log;
 
-import com.ca.tunaro.activites.MainActivity;
 import com.ca.tunaro.models.ListenHistoryEntry;
 import com.ca.tunaro.models.SongNote;
 import com.ca.tunaro.models.SongSnippet;
