@@ -37,6 +37,7 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
     private SwipeRefreshLayout swipeRefreshLayout;
     private ImageView archiveToggleButton;
     private boolean showingArchived = false;
+    private boolean retried = false;
     private PopupMenu activePopupMenu;
 
     @Override
@@ -80,7 +81,24 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
         swipeRefreshLayout.setRefreshing(true);
 
         PlaylistSetup.getPlaylistData(mainActivity.getUserID(), mainActivity.getSpotifyApi())
-                .thenAccept(this::updateUIWithFilteredPlaylists)
+                .thenAccept(playlists -> {
+                    if (playlists.isEmpty() && !retried) {
+                        // Playlists may be empty due to expired token — try refreshing and retrying
+                        retried = true;
+                        mainActivity.refreshAccessToken()
+                                .thenRun(this::loadPlaylists)
+                                .exceptionally(refreshError -> {
+                                    runOnUiThread(() -> {
+                                        showToast("Error loading playlists");
+                                        swipeRefreshLayout.setRefreshing(false);
+                                    });
+                                    return null;
+                                });
+                    } else {
+                        retried = false;
+                        updateUIWithFilteredPlaylists(playlists);
+                    }
+                })
                 .exceptionally(e -> {
                     runOnUiThread(() -> {
                         showToast("Error loading playlists: " + e.getMessage());

@@ -89,8 +89,22 @@ public class MainActivity extends AppCompatActivity {
         if (tryRestoreSession()) {
             Log.d(TAG, "Session restored from saved tokens");
             connectSpotifyAppRemote();
-            performInitialDeviceCheck();
-            performAutomaticFetch();
+
+            // Proactively refresh the access token since the saved one may have expired
+            refreshAccessToken()
+                    .thenRun(() -> {
+                        Log.d(TAG, "Token refreshed after session restore");
+                        performInitialDeviceCheck();
+                        performAutomaticFetch();
+                    })
+                    .exceptionally(e -> {
+                        Log.e(TAG, "Token refresh failed after session restore", e);
+                        // Still perform these even if refresh fails
+                        performInitialDeviceCheck();
+                        performAutomaticFetch();
+                        return null;
+                    });
+
             Intent intent = new Intent(MainActivity.this, HomeActivity.class);
             startActivity(intent);
             return;
