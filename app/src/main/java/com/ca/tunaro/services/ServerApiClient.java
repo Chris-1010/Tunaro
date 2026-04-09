@@ -146,6 +146,7 @@ public class ServerApiClient {
         String response = makeRequest(endpoint, "DELETE", null, jwtToken);
         Log.d(TAG, "API key revoked: " + response);
     }
+
     //#endregion
 
     //#region Spotify Endpoints
@@ -232,7 +233,7 @@ public class ServerApiClient {
             }
 
             if (body != null && !body.isEmpty() &&
-                (method.equals("POST") || method.equals("PUT"))) {
+                (method.equals("POST") || method.equals("PUT") || method.equals("PATCH"))) {
                 connection.setDoOutput(true);
                 try (OutputStream os = connection.getOutputStream()) {
                     byte[] input = body.getBytes(StandardCharsets.UTF_8);

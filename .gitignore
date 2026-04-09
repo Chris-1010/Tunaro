@@ -7,6 +7,9 @@
 # Files for the ART/Dalvik VM
 *.dex
 
+# AI files
+CLAUDE.md
+
 # Java class files
 *.class
 

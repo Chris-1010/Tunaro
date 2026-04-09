@@ -128,14 +128,14 @@ public class AutomaticFetcher {
 
     private void storeCredentials(String username, String password, String jwt, String apiKey) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        prefs.edit()
+        SharedPreferences.Editor editor = prefs.edit()
                 .putString(PREF_USERNAME, username)
                 .putString(PREF_PASSWORD, password)
                 .putString(PREF_JWT_TOKEN, jwt)
                 .putString(PREF_API_KEY, apiKey)
                 .putBoolean(PREF_REGISTERED, true)
-                .putBoolean(PREF_ENABLED, true)
-                .apply();
+                .putBoolean(PREF_ENABLED, true);
+        editor.apply();
     }
 
     public void setEnabled(boolean enabled) {
