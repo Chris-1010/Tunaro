@@ -132,6 +132,22 @@ public class SongView extends BaseActivity {
 
     private void setupAlbumCoverLongPress() {
         ImageView albumCoverImageView = findViewById(R.id.SongView_AlbumCover);
+
+        // Tap: skip to this song in the active queue, or play individually if no queue
+        albumCoverImageView.setOnClickListener(v -> {
+            if (!playbackManager.isConnected()) {
+                showToast("Connecting to Spotify...");
+                playbackManager.connectSpotify(this, () -> {
+                    playbackManager.skipToSong(selectedSong);
+                    showToast("Playing " + selectedSong.getName());
+                });
+            } else {
+                playbackManager.skipToSong(selectedSong);
+                showToast("Playing " + selectedSong.getName());
+            }
+        });
+
+        // Long-press: play individually, leaving queue intact
         albumCoverImageView.setOnLongClickListener(v -> {
             playSong();
             return true;

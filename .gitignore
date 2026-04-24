@@ -63,3 +63,6 @@ secrets.xml
 
 # OS specific
 .DS_Store
+
+# Planning docs
+STATUS.md

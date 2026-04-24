@@ -37,6 +37,7 @@ import com.ca.tunaro.R;
 import com.ca.tunaro.utils.SelectedPlaylistHolder;
 import com.ca.tunaro.utils.SelectedSongHolder;
 import com.ca.tunaro.models.SongModel;
+import com.ca.tunaro.adapters.QueueLineDecoration;
 import com.ca.tunaro.adapters.Song_RecyclerViewAdapter;
 import com.ca.tunaro.interfaces.Song_RecyclerViewInterface;
 import com.google.android.material.appbar.AppBarLayout;
@@ -57,6 +58,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
     private PlaylistModel selectedPlaylist;
     private Song_RecyclerViewAdapter adapter;
+    private QueueLineDecoration queueLineDecoration;
 
     // Searching
     private EditText searchBar;
@@ -109,6 +111,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         // Initialize adapter, empty for now
         adapter = new Song_RecyclerViewAdapter(this, this, new ArrayList<>());
         recyclerView.setAdapter(adapter);
+        queueLineDecoration = new QueueLineDecoration(adapter);
+        recyclerView.addItemDecoration(queueLineDecoration);
 
         // Show loading state while fetching songs
         showShimmerLoading(true);
@@ -193,6 +197,27 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 .error(R.drawable.playlist_placeholder)
                 .transition(DrawableTransitionOptions.withCrossFade())
                 .into(imageView);
+
+        // Tap playlist cover to play from the first listed song
+        imageView.setOnClickListener(v -> {
+            ArrayList<SongModel> currentList = adapter.getSongs();
+            if (currentList == null || currentList.isEmpty()) {
+                showToast("No songs loaded yet");
+                return;
+            }
+            if (!playbackManager.isConnected()) {
+                showToast("Connecting to Spotify...");
+                playbackManager.connectSpotify(this, () -> {
+                    playbackManager.playQueue(currentList, 0);
+                    queueLineDecoration.setQueueMatchesDisplay(true);
+                    showToast("Playing from " + currentList.get(0).getName());
+                });
+            } else {
+                playbackManager.playQueue(currentList, 0);
+                queueLineDecoration.setQueueMatchesDisplay(true);
+                showToast("Playing from " + currentList.get(0).getName());
+            }
+        });
 
         // Set up Collapsible Header
         Toolbar toolbar = findViewById(R.id.toolbar);
@@ -299,6 +324,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         int currentSortOption = sortSpinner.getSelectedItemPosition();
         applySortToList(filteredList, currentSortOption);
         adapter.updateSongs(filteredList);
+        queueLineDecoration.setQueueMatchesDisplay(false);
 
         // Update contextual info display
         adapter.updateSortContext(currentSortOption);
@@ -313,6 +339,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             Map<String, Integer> listenCountMap = listenCountDbHelper.getListenCountsBatch(listenCountSongIds);
             adapter.updateListenCounts(listenCountMap);
         }
+
     }
 
     private void setupSorting() {
@@ -339,8 +366,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
                 // Set layout parameters to ensure text isn't clipped
                 android.view.ViewGroup.LayoutParams params = new android.view.ViewGroup.LayoutParams(
-                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                    android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT
                 );
                 textView.setLayoutParams(params);
 
@@ -355,9 +382,6 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         isAscending = prefs.getBoolean(SORT_DIRECTION_KEY, false); // Default to descending
 
         sortSpinner.setSelection(savedSortOption);
-
-        // Apply initial sort with contextual info
-        sortSongs(savedSortOption);
 
         updateSortDirectionIcon();
 
@@ -436,7 +460,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
         switch (sortOption) {
             case 0: // Date Added
-                comparator = Comparator.comparing(SongModel::getDateAddedToPlaylist);
+                comparator = Comparator.comparing(SongModel::getDateAddedToPlaylist, Comparator.nullsLast(Comparator.naturalOrder()));
                 break;
             case 1: // Last Listened
                 DatabaseHelper dbHelper = new DatabaseHelper(this);
@@ -557,6 +581,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         // Apply sort to the list
         applySortToList(songs, sortOption);
         adapter.updateSongs(songs);
+        queueLineDecoration.setQueueMatchesDisplay(false);
 
         adapter.updateSortContext(sortOption);
 
@@ -570,6 +595,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             Map<String, Integer> listenCountMap = listenCountDbHelper.getListenCountsBatch(listenCountSongIds);
             adapter.updateListenCounts(listenCountMap);
         }
+
     }
 
     private void showShimmerLoading(boolean isLoading) {
@@ -612,11 +638,33 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         startActivity(intent);
     }
 
-    // Quick play functionality
+    @Override
+    public void onPlaybackStateChanged(boolean isPlaying, SongModel currentSong) {
+        super.onPlaybackStateChanged(isPlaying, currentSong);
+        if (adapter != null) adapter.notifyDataSetChanged();
+    }
+
+    // Start queue from this position
+    @Override
+    public void onAlbumCoverClick(int position) {
+        ArrayList<SongModel> currentList = adapter.getSongs();
+        if (!playbackManager.isConnected()) {
+            showToast("Connecting to Spotify...");
+            playbackManager.connectSpotify(this, () -> {
+                playbackManager.playQueue(currentList, position);
+                queueLineDecoration.setQueueMatchesDisplay(true);
+            });
+        } else {
+            playbackManager.playQueue(currentList, position);
+            queueLineDecoration.setQueueMatchesDisplay(true);
+        }
+    }
+
+    // Play song individually (no queue)
+    @Override
     public void onAlbumCoverLongClick(int position) {
         SongModel clickedSong = adapter.getSongs().get(position);
 
-        // Play the song immediately using PlaybackManager
         if (!playbackManager.isConnected()) {
             showToast("Connecting to Spotify...");
             playbackManager.connectSpotify(this, () -> {

@@ -150,6 +150,7 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
                             isrc = externalIds.getOrDefault("isrc", "");
                         }
 
+                        Boolean playable = track.getIsPlayable();
                         SongModel songModel = new SongModel(
                                 track.getId(),
                                 track.getName(),
@@ -159,7 +160,8 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
                                 track.getPopularity(),
                                 album,
                                 isrc,
-                                null
+                                null,
+                                playable == null || playable
                         );
 
                         allSongs.add(songModel);
@@ -235,6 +237,7 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
                         }
 
                         // Create SongModel from Spotify Track
+                        Boolean playable2 = track.getIsPlayable();
                         SongModel songModel = new SongModel(
                                 track.getId(),
                                 track.getName(),
@@ -244,7 +247,8 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
                                 track.getPopularity(),
                                 album,
                                 isrc,
-                                null // Unnecessary for library view
+                                null, // Unnecessary for library view
+                                playable2 == null || playable2
                         );
 
                         // Set the selected song in the singleton

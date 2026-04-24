@@ -177,6 +177,7 @@ public class PlaylistSetup {
 
         final GetPlaylistsItemsRequest getPlaylistsItemsRequest = spotifyApi
                 .getPlaylistsItems(id)
+                .setQueryParameter("market", "from_token")
                 .offset(offset)
                 .limit(MAX_BATCH_SIZE)
                 .build();
@@ -244,6 +245,7 @@ public class PlaylistSetup {
 
                     se.michaelthelin.spotify.requests.data.tracks.GetSeveralTracksRequest getSeveralTracksRequest =
                             spotifyApi.getSeveralTracks(String.join(",", batchIds))
+                                    .setQueryParameter("market", "from_token")
                                     .build();
 
                     Track[] tracks = getSeveralTracksRequest.execute();
@@ -292,6 +294,7 @@ public class PlaylistSetup {
             isrc = externalIds.getOrDefault("isrc", "");
         }
 
+        Boolean playable = track.getIsPlayable();
         return new SongModel(
                 track.getId(),
                 track.getName(),
@@ -301,7 +304,8 @@ public class PlaylistSetup {
                 track.getPopularity(),
                 album,
                 isrc,
-                null // No playlist date for individual tracks
+                null, // No playlist date for individual tracks
+                playable == null || playable
         );
     }
 
@@ -327,6 +331,7 @@ public class PlaylistSetup {
             isrc = externalIds.getOrDefault("isrc", "");
         }
 
+        Boolean playable = track.getIsPlayable();
         return new SongModel(
                 track.getId(),
                 track.getName(),
@@ -336,7 +341,8 @@ public class PlaylistSetup {
                 track.getPopularity(),
                 album,
                 isrc,
-                playlistTrack.getAddedAt()
+                playlistTrack.getAddedAt(),
+                playable == null || playable
         );
     }
 
