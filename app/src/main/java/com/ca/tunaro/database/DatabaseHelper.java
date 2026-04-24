@@ -635,8 +635,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
         db.insert(TABLE_LISTEN_HISTORY, null, values);
         db.close();
-
-        Log.d("ListenHistory", "Added listen record for song ID: " + songId);
     }
 
     public void addListenRecordWithTimestamp(String songId, String utcTimestamp) {

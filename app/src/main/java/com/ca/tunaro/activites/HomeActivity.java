@@ -49,7 +49,6 @@ public class HomeActivity extends BaseActivity {
             Glide.with(this)
                     .load(imageUrl)
                     .circleCrop()
-                    .placeholder(R.drawable.playlist_placeholder)
                     .into(profileImage);
         }
     }
