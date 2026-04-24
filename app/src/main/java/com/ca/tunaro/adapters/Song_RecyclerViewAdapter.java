@@ -65,7 +65,9 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
 
         java.util.List<SongModel> queue = pm.getQueue();
         int queueIndex = pm.getQueueIndex();
-        boolean inQueue = !queue.isEmpty() && queueIndex >= 0
+        boolean currentSongInQueue = !queue.isEmpty() && queueIndex >= 0
+                && currentSong != null && indexInQueueByUri(queue, currentSong) == queueIndex;
+        boolean inQueue = currentSongInQueue
                 && indexInQueueByUri(queue, model) > queueIndex;
         boolean nextAlsoInQueue = inQueue && (position + 1) < songModels.size()
                 && indexInQueueByUri(queue, songModels.get(position + 1)) > queueIndex;
