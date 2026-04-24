@@ -152,7 +152,17 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
                 }
             });
 
-            // Long press on album cover for quick play
+            // Tap on album cover — start queue from this position
+            imageCoverView.setOnClickListener(view -> {
+                if (recyclerViewInterface != null) {
+                    int position = getAdapterPosition();
+                    if (position != RecyclerView.NO_POSITION) {
+                        recyclerViewInterface.onAlbumCoverClick(position);
+                    }
+                }
+            });
+
+            // Long press on album cover — play individually (no queue)
             imageCoverView.setOnLongClickListener(view -> {
                 if (recyclerViewInterface != null) {
                     int position = getAdapterPosition();

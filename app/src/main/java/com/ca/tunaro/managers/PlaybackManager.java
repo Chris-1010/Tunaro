@@ -61,6 +61,15 @@ public class PlaybackManager {
     private final Handler listenHandler = new Handler(Looper.getMainLooper());
     private Runnable listenRunnable;
 
+    // Queue
+    private List<SongModel> queue = new ArrayList<>();
+    private int queueIndex = -1;
+    // Guard: only fire advanceQueue() once per song-end
+    private boolean queueAdvancePending = false;
+    // Timestamp of last advance — suppress end-of-song check for 3s after an advance
+    // to avoid Spotify returning stale position data for the newly-started track.
+    private long lastAdvanceTimeMs = 0;
+
     //#region Snippet Playback Fields
     private boolean isSnippetMode = false;
     private boolean isSnippetPlaying = false;
@@ -81,7 +90,8 @@ public class PlaybackManager {
         void onPlaybackPositionChanged(long positionMs, long durationMs);
     }
 
-    private PlaybackManager() {}
+    private PlaybackManager() {
+    }
 
     public static synchronized PlaybackManager getInstance() {
         if (instance == null) {
@@ -191,8 +201,6 @@ public class PlaybackManager {
 
             boolean trackChanged = false;
             if (currentSong == null || !remoteTrack.uri.equals(currentSong.getUri())) {
-                // Extract ID from URI (format: spotify:track:id)
-
                 // Create a simplified SongModel from track with string artist names
                 currentSong = createSongModelFromRemoteTrack(remoteTrack, trackId, artistNames);
                 trackChanged = true;
@@ -275,7 +283,8 @@ public class PlaybackManager {
                 0, // Don't have popularity from playback
                 album,
                 "", // ISRC not available from remote track
-                null
+                null,
+                true // Assume playable — not available from remote track
         );
     }
 
@@ -285,11 +294,66 @@ public class PlaybackManager {
                     .setResultCallback(empty -> {
                         currentSong = song;
                         isPlaying = true;
+                        queueAdvancePending = false;
                         notifyPlaybackStateChanged();
                         checkPlaybackDevice();
+                        Log.i(TAG, "Now playing: " + song.getName() + " by " + String.join(", ", song.getArtist()));
                     })
-                    .setErrorCallback(throwable -> Log.e(TAG, "Error playing song: " + throwable.getMessage()));
+                    .setErrorCallback(throwable -> {
+                        Log.e(TAG, "Error playing song: " + throwable.getMessage());
+                    });
         }
+    }
+
+    public void playQueue(List<SongModel> songs, int startIndex) {
+        if (songs == null || songs.isEmpty() || startIndex < 0 || startIndex >= songs.size())
+            return;
+        queue = new ArrayList<>(songs);
+
+        // Skip unplayable songs at the start of the queue
+        while (startIndex < queue.size() && !queue.get(startIndex).isPlayable()) {
+            Log.w(TAG, "playQueue: Skipping unplayable song '" + queue.get(startIndex).getName() + "' at index " + startIndex);
+            startIndex++;
+        }
+
+        queueIndex = startIndex;
+        Log.i(TAG, "Created queue with " + songs.size() + " songs. Starting at index " + startIndex + ": " + queue.get(queueIndex).getName());
+        playSong(queue.get(queueIndex));
+    }
+
+    public void skipToSong(SongModel song) {
+        if (queue.isEmpty()) {
+            // No active queue — play individually
+            playSong(song);
+            return;
+        }
+        for (int i = 0; i < queue.size(); i++) {
+            if (queue.get(i).getUri().equals(song.getUri())) {
+                queueIndex = i;
+                playSong(queue.get(queueIndex));
+                return;
+            }
+        }
+        // Song not found in queue — play individually without touching the queue
+        playSong(song);
+    }
+
+    public void clearQueue() {
+        queue.clear();
+        queueIndex = -1;
+        queueAdvancePending = false;
+    }
+
+    public boolean hasActiveQueue() {
+        return !queue.isEmpty();
+    }
+
+    public int getQueueIndex() {
+        return queueIndex;
+    }
+
+    public List<SongModel> getQueue() {
+        return queue;
     }
 
     public void togglePlayPause() {
@@ -333,7 +397,26 @@ public class PlaybackManager {
         }
     }
 
-    // TODO Methods for next/previous track switching
+    private void advanceQueue() {
+        if (queue.isEmpty()) return;
+        int nextIndex = queueIndex + 1;
+        if (nextIndex < queue.size()) {
+            queueIndex = nextIndex;
+            SongModel next = queue.get(queueIndex);
+            if (!next.isPlayable()) {
+                Log.w(TAG, "advanceQueue: Skipping unplayable song '" + next.getName() + "' at index " + queueIndex);
+                advanceQueue();
+                return;
+            }
+            lastAdvanceTimeMs = System.currentTimeMillis();
+            Log.i(TAG, "advanceQueue: Last Song: " + (currentSong != null ? currentSong.getName() : "none") + ", Current Song: " + next.getName() + ", Queue Position: " + (queueIndex + 1) + "/" + queue.size());
+            playSong(next);
+        } else {
+            // End of queue
+            queue.clear();
+            queueIndex = -1;
+        }
+    }
 
     //#region Listeners
 
@@ -473,9 +556,9 @@ public class PlaybackManager {
                     // Add delay to ensure song loads
                     new Handler(Looper.getMainLooper()).postDelayed(() ->
                             spotifyAppRemote.getPlayerApi().pause()
-                            .setResultCallback(pauseResult ->
-                                    new Handler(Looper.getMainLooper()).postDelayed(() ->
-                                            seekToSnippetStart(snippet), 100)), 100);
+                                    .setResultCallback(pauseResult ->
+                                            new Handler(Looper.getMainLooper()).postDelayed(() ->
+                                                    seekToSnippetStart(snippet), 100)), 100);
                 })
                 .setErrorCallback(throwable -> {
                     showToast("Error playing song: " + throwable.getMessage());
@@ -579,6 +662,17 @@ public class PlaybackManager {
 
                             // Notify listeners with updated position
                             notifyPlaybackPositionChanged();
+
+                            // Queue auto-advance: when within 1500ms of the end, wait a bit before advancing so can be closer to the actual finish without cutting it off.
+                            boolean inGracePeriod = (System.currentTimeMillis() - lastAdvanceTimeMs) < 3000;
+                            if (!queue.isEmpty() && !isSnippetMode && !playerState.isPaused
+                                    && durationMs > 0 && !queueAdvancePending && !inGracePeriod
+                                    && queueIndex + 1 < queue.size()
+                                    && (durationMs - currentPositionMs) <= 1500) {
+                                Log.d(TAG, "updatePlaybackPosition: Caught end of song at " + (durationMs - currentPositionMs) + "ms remaining. Queueing advance.");
+                                queueAdvancePending = true;
+                                positionHandler.postDelayed(PlaybackManager.this::advanceQueue, 300);
+                            }
                         }
                     });
         }

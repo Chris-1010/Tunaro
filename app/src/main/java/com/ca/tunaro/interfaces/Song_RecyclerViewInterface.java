@@ -6,5 +6,6 @@ public interface Song_RecyclerViewInterface {
     void onItemClick(int position, View itemView);
 
     // Quick play functionality
+    default void onAlbumCoverClick(int position) {}
     default void onAlbumCoverLongClick(int position) {}
 }

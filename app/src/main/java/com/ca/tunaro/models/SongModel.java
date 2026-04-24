@@ -17,6 +17,7 @@ public class SongModel implements Serializable {
     Album album;
     String isrc;                // International Standard Recording Code
     Date dateAddedToPlaylist;   // added_at (for sorting by date added)
+    boolean isPlayable;         // whether the track is playable in the user's market
 
     //#region Nested class for Album
 
@@ -63,7 +64,7 @@ public class SongModel implements Serializable {
 
     //#region Constructors
 
-    public SongModel(String id, String name, String[] artists, int duration, String uri, int popularity, Album album, String isrc, Date dateAddedToPlaylist) {
+    public SongModel(String id, String name, String[] artists, int duration, String uri, int popularity, Album album, String isrc, Date dateAddedToPlaylist, boolean isPlayable) {
         this.id = id;
         this.name = name;
         this.artists = artists;
@@ -73,10 +74,11 @@ public class SongModel implements Serializable {
         this.album = album;
         this.isrc = isrc;
         this.dateAddedToPlaylist = dateAddedToPlaylist;
+        this.isPlayable = isPlayable;
     }
 
-    public SongModel(String id, String name, ArtistSimplified[] artists, int duration, String uri, int popularity, Album album, String isrc, Date dateAddedToPlaylist) {
-        this(id, name, extractArtistNames(artists), duration, uri, popularity, album, isrc, dateAddedToPlaylist);
+    public SongModel(String id, String name, ArtistSimplified[] artists, int duration, String uri, int popularity, Album album, String isrc, Date dateAddedToPlaylist, boolean isPlayable) {
+        this(id, name, extractArtistNames(artists), duration, uri, popularity, album, isrc, dateAddedToPlaylist, isPlayable);
     }
 
     //#endregion
@@ -185,6 +187,10 @@ public class SongModel implements Serializable {
 
     public String getIsrc() {
         return isrc;
+    }
+
+    public boolean isPlayable() {
+        return isPlayable;
     }
 
     public Date getDateAddedToPlaylist() {

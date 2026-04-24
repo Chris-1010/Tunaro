@@ -194,6 +194,25 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 .transition(DrawableTransitionOptions.withCrossFade())
                 .into(imageView);
 
+        // Tap playlist cover to play from the first listed song
+        imageView.setOnClickListener(v -> {
+            ArrayList<SongModel> currentList = adapter.getSongs();
+            if (currentList == null || currentList.isEmpty()) {
+                showToast("No songs loaded yet");
+                return;
+            }
+            if (!playbackManager.isConnected()) {
+                showToast("Connecting to Spotify...");
+                playbackManager.connectSpotify(this, () -> {
+                    playbackManager.playQueue(currentList, 0);
+                    showToast("Playing from " + currentList.get(0).getName());
+                });
+            } else {
+                playbackManager.playQueue(currentList, 0);
+                showToast("Playing from " + currentList.get(0).getName());
+            }
+        });
+
         // Set up Collapsible Header
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -313,6 +332,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             Map<String, Integer> listenCountMap = listenCountDbHelper.getListenCountsBatch(listenCountSongIds);
             adapter.updateListenCounts(listenCountMap);
         }
+
     }
 
     private void setupSorting() {
@@ -339,8 +359,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
                 // Set layout parameters to ensure text isn't clipped
                 android.view.ViewGroup.LayoutParams params = new android.view.ViewGroup.LayoutParams(
-                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                    android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT
                 );
                 textView.setLayoutParams(params);
 
@@ -433,7 +453,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
         switch (sortOption) {
             case 0: // Date Added
-                comparator = Comparator.comparing(SongModel::getDateAddedToPlaylist);
+                comparator = Comparator.comparing(SongModel::getDateAddedToPlaylist, Comparator.nullsLast(Comparator.naturalOrder()));
                 break;
             case 1: // Last Listened
                 DatabaseHelper dbHelper = new DatabaseHelper(this);
@@ -567,6 +587,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             Map<String, Integer> listenCountMap = listenCountDbHelper.getListenCountsBatch(listenCountSongIds);
             adapter.updateListenCounts(listenCountMap);
         }
+
     }
 
     private void showShimmerLoading(boolean isLoading) {
@@ -609,11 +630,23 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         startActivity(intent);
     }
 
-    // Quick play functionality
+    // Start queue from this position
+    @Override
+    public void onAlbumCoverClick(int position) {
+        ArrayList<SongModel> currentList = adapter.getSongs();
+        if (!playbackManager.isConnected()) {
+            showToast("Connecting to Spotify...");
+            playbackManager.connectSpotify(this, () -> playbackManager.playQueue(currentList, position));
+        } else {
+            playbackManager.playQueue(currentList, position);
+        }
+    }
+
+    // Play song individually (no queue)
+    @Override
     public void onAlbumCoverLongClick(int position) {
         SongModel clickedSong = adapter.getSongs().get(position);
 
-        // Play the song immediately using PlaybackManager
         if (!playbackManager.isConnected()) {
             showToast("Connecting to Spotify...");
             playbackManager.connectSpotify(this, () -> {

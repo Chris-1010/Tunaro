@@ -1,7 +1,6 @@
 package com.ca.tunaro.activites;
 
 import android.app.ProgressDialog;
-import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.Editable;
@@ -169,10 +168,12 @@ public class SettingsActivity extends BaseActivity {
 
         deviceNameInput.addTextChangedListener(new TextWatcher() {
             @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
 
             @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
 
             @Override
             public void afterTextChanged(Editable s) {
@@ -292,23 +293,23 @@ public class SettingsActivity extends BaseActivity {
         // Setup deregistration button
         deregisterButton.setOnClickListener(v -> {
             new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Deregister Automatic Fetcher")
-                .setMessage("This will stop automatic syncing. Your local listening history will be preserved.")
-                .setPositiveButton("Deregister", (dialog, which) -> {
-                    automaticFetcher.deregisterFetcher(new AutomaticFetcher.DeregistrationCallback() {
-                        @Override
-                        public void onSuccess() {
-                            runOnUiThread(() -> updateRegistrationStatus(false));
-                        }
+                    .setTitle("Deregister Automatic Fetcher")
+                    .setMessage("This will stop automatic syncing. Your local listening history will be preserved.")
+                    .setPositiveButton("Deregister", (dialog, which) -> {
+                        automaticFetcher.deregisterFetcher(new AutomaticFetcher.DeregistrationCallback() {
+                            @Override
+                            public void onSuccess() {
+                                runOnUiThread(() -> updateRegistrationStatus(false));
+                            }
 
-                        @Override
-                        public void onError(String error) {
-                            // Toast is shown by AutomaticFetcher
-                        }
-                    });
-                })
-                .setNegativeButton("Cancel", null)
-                .show();
+                            @Override
+                            public void onError(String error) {
+                                // Toast is shown by AutomaticFetcher
+                            }
+                        });
+                    })
+                    .setNegativeButton("Cancel", null)
+                    .show();
         });
     }
 
