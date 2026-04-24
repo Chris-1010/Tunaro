@@ -63,6 +63,9 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         holder.cardView.setForeground(isPlaying
                 ? context.getDrawable(R.drawable.song_active_border)
                 : null);
+        holder.cardView.setCardBackgroundColor(isPlaying
+                ? 0xFF162B1E  // dark green tint over blueBlack
+                : 0xFF111f28);
 
         java.util.List<SongModel> queue = pm.getQueue();
         int queueIndex = pm.getQueueIndex();
