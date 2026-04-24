@@ -316,6 +316,14 @@ public class PlaybackManager {
             startIndex++;
         }
 
+        if (startIndex >= queue.size()) {
+            Log.w(TAG, "playQueue: No playable songs in queue");
+            queue.clear();
+            queueIndex = -1;
+            queueAdvancePending = false;
+            return;
+        }
+
         queueIndex = startIndex;
         Log.i(TAG, "Created queue with " + songs.size() + " songs. Starting at index " + startIndex + ": " + queue.get(queueIndex).getName());
         playSong(queue.get(queueIndex));
@@ -400,14 +408,13 @@ public class PlaybackManager {
     private void advanceQueue() {
         if (queue.isEmpty()) return;
         int nextIndex = queueIndex + 1;
+        while (nextIndex < queue.size() && !queue.get(nextIndex).isPlayable()) {
+            Log.w(TAG, "advanceQueue: Skipping unplayable song '" + queue.get(nextIndex).getName() + "' at index " + nextIndex);
+            nextIndex++;
+        }
         if (nextIndex < queue.size()) {
             queueIndex = nextIndex;
             SongModel next = queue.get(queueIndex);
-            if (!next.isPlayable()) {
-                Log.w(TAG, "advanceQueue: Skipping unplayable song '" + next.getName() + "' at index " + queueIndex);
-                advanceQueue();
-                return;
-            }
             lastAdvanceTimeMs = System.currentTimeMillis();
             Log.i(TAG, "advanceQueue: Last Song: " + (currentSong != null ? currentSong.getName() : "none") + ", Current Song: " + next.getName() + ", Queue Position: " + (queueIndex + 1) + "/" + queue.size());
             playSong(next);
@@ -415,6 +422,7 @@ public class PlaybackManager {
             // End of queue
             queue.clear();
             queueIndex = -1;
+            queueAdvancePending = false;
         }
     }
 
