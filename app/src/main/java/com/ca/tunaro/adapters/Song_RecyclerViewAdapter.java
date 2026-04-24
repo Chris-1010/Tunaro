@@ -33,7 +33,6 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
     private int currentSortOption = -1; // Track current sort option
     private boolean shouldShowContextualInfo = false;
     private Map<String, Integer> listenCountMap = null; // Cached listen counts for performance
-    private boolean queueMatchesDisplay = false;
 
     public Song_RecyclerViewAdapter(Context context, Song_RecyclerViewInterface recyclerViewInterface, ArrayList<SongModel> songModels) {
         this.context = context;
@@ -67,15 +66,6 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
                 ? 0xFF162B1E  // dark green tint over blueBlack
                 : 0xFF111f28);
 
-        java.util.List<SongModel> queue = pm.getQueue();
-        int queueIndex = pm.getQueueIndex();
-        boolean currentSongInQueue = queueMatchesDisplay && !queue.isEmpty() && queueIndex >= 0
-                && currentSong != null && indexInQueueByUri(queue, currentSong) == queueIndex;
-        boolean inQueue = currentSongInQueue
-                && indexInQueueByUri(queue, model) > queueIndex;
-        boolean nextAlsoInQueue = inQueue && (position + 1) < songModels.size()
-                && indexInQueueByUri(queue, songModels.get(position + 1)) > queueIndex;
-        holder.queueConnectorLine.setVisibility(nextAlsoInQueue ? View.VISIBLE : View.GONE);
 
         // Load image using Glide
         Glide.with(context)
@@ -151,7 +141,6 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
 
     public static class ViewHolder extends RecyclerView.ViewHolder {
         CardView cardView;
-        View queueConnectorLine;
         ImageView imageCoverView;
         ImageView hasNotesIcon;
         ImageView hasSnippetsIcon;
@@ -161,7 +150,6 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         public ViewHolder(@NonNull View itemView, Song_RecyclerViewInterface recyclerViewInterface) {
             super(itemView);
             cardView = itemView.findViewById(R.id.cardView);
-            queueConnectorLine = itemView.findViewById(R.id.queueConnectorLine);
             songNameView = itemView.findViewById(R.id.songNameView);
             artistView = itemView.findViewById(R.id.artistView);
             imageCoverView = itemView.findViewById(R.id.albumCoverView);
@@ -206,21 +194,8 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         }
     }
 
-    private int indexInQueueByUri(java.util.List<SongModel> queue, SongModel song) {
-        for (int i = 0; i < queue.size(); i++) {
-            if (queue.get(i).getUri().equals(song.getUri())) return i;
-        }
-        return -1;
-    }
-
     public void updateSongs(ArrayList<SongModel> newSongs) {
         this.songModels = newSongs;
-        queueMatchesDisplay = false;
-        notifyDataSetChanged();
-    }
-
-    public void setQueueMatchesDisplay(boolean matches) {
-        queueMatchesDisplay = matches;
         notifyDataSetChanged();
     }
 

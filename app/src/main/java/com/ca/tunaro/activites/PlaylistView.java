@@ -37,6 +37,7 @@ import com.ca.tunaro.R;
 import com.ca.tunaro.utils.SelectedPlaylistHolder;
 import com.ca.tunaro.utils.SelectedSongHolder;
 import com.ca.tunaro.models.SongModel;
+import com.ca.tunaro.adapters.QueueLineDecoration;
 import com.ca.tunaro.adapters.Song_RecyclerViewAdapter;
 import com.ca.tunaro.interfaces.Song_RecyclerViewInterface;
 import com.google.android.material.appbar.AppBarLayout;
@@ -57,6 +58,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
     private PlaylistModel selectedPlaylist;
     private Song_RecyclerViewAdapter adapter;
+    private QueueLineDecoration queueLineDecoration;
 
     // Searching
     private EditText searchBar;
@@ -109,6 +111,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         // Initialize adapter, empty for now
         adapter = new Song_RecyclerViewAdapter(this, this, new ArrayList<>());
         recyclerView.setAdapter(adapter);
+        queueLineDecoration = new QueueLineDecoration(adapter);
+        recyclerView.addItemDecoration(queueLineDecoration);
 
         // Show loading state while fetching songs
         showShimmerLoading(true);
@@ -205,12 +209,12 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 showToast("Connecting to Spotify...");
                 playbackManager.connectSpotify(this, () -> {
                     playbackManager.playQueue(currentList, 0);
-                    adapter.setQueueMatchesDisplay(true);
+                    queueLineDecoration.setQueueMatchesDisplay(true);
                     showToast("Playing from " + currentList.get(0).getName());
                 });
             } else {
                 playbackManager.playQueue(currentList, 0);
-                adapter.setQueueMatchesDisplay(true);
+                queueLineDecoration.setQueueMatchesDisplay(true);
                 showToast("Playing from " + currentList.get(0).getName());
             }
         });
@@ -320,6 +324,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         int currentSortOption = sortSpinner.getSelectedItemPosition();
         applySortToList(filteredList, currentSortOption);
         adapter.updateSongs(filteredList);
+        queueLineDecoration.setQueueMatchesDisplay(false);
 
         // Update contextual info display
         adapter.updateSortContext(currentSortOption);
@@ -576,6 +581,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         // Apply sort to the list
         applySortToList(songs, sortOption);
         adapter.updateSongs(songs);
+        queueLineDecoration.setQueueMatchesDisplay(false);
 
         adapter.updateSortContext(sortOption);
 
@@ -646,11 +652,11 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             showToast("Connecting to Spotify...");
             playbackManager.connectSpotify(this, () -> {
                 playbackManager.playQueue(currentList, position);
-                adapter.setQueueMatchesDisplay(true);
+                queueLineDecoration.setQueueMatchesDisplay(true);
             });
         } else {
             playbackManager.playQueue(currentList, position);
-            adapter.setQueueMatchesDisplay(true);
+            queueLineDecoration.setQueueMatchesDisplay(true);
         }
     }
 
