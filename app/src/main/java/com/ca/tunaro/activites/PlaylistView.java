@@ -356,9 +356,6 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
         sortSpinner.setSelection(savedSortOption);
 
-        // Apply initial sort with contextual info
-        sortSongs(savedSortOption);
-
         updateSortDirectionIcon();
 
         // Set up click listener for sort direction
