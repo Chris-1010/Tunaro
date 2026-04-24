@@ -630,6 +630,12 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         startActivity(intent);
     }
 
+    @Override
+    public void onPlaybackStateChanged(boolean isPlaying, SongModel currentSong) {
+        super.onPlaybackStateChanged(isPlaying, currentSong);
+        if (adapter != null) adapter.notifyDataSetChanged();
+    }
+
     // Start queue from this position
     @Override
     public void onAlbumCoverClick(int position) {
