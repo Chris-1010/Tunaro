@@ -205,10 +205,12 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 showToast("Connecting to Spotify...");
                 playbackManager.connectSpotify(this, () -> {
                     playbackManager.playQueue(currentList, 0);
+                    adapter.setQueueMatchesDisplay(true);
                     showToast("Playing from " + currentList.get(0).getName());
                 });
             } else {
                 playbackManager.playQueue(currentList, 0);
+                adapter.setQueueMatchesDisplay(true);
                 showToast("Playing from " + currentList.get(0).getName());
             }
         });
@@ -642,9 +644,13 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         ArrayList<SongModel> currentList = adapter.getSongs();
         if (!playbackManager.isConnected()) {
             showToast("Connecting to Spotify...");
-            playbackManager.connectSpotify(this, () -> playbackManager.playQueue(currentList, position));
+            playbackManager.connectSpotify(this, () -> {
+                playbackManager.playQueue(currentList, position);
+                adapter.setQueueMatchesDisplay(true);
+            });
         } else {
             playbackManager.playQueue(currentList, position);
+            adapter.setQueueMatchesDisplay(true);
         }
     }
 

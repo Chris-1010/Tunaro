@@ -33,6 +33,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
     private int currentSortOption = -1; // Track current sort option
     private boolean shouldShowContextualInfo = false;
     private Map<String, Integer> listenCountMap = null; // Cached listen counts for performance
+    private boolean queueMatchesDisplay = false;
 
     public Song_RecyclerViewAdapter(Context context, Song_RecyclerViewInterface recyclerViewInterface, ArrayList<SongModel> songModels) {
         this.context = context;
@@ -65,7 +66,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
 
         java.util.List<SongModel> queue = pm.getQueue();
         int queueIndex = pm.getQueueIndex();
-        boolean currentSongInQueue = !queue.isEmpty() && queueIndex >= 0
+        boolean currentSongInQueue = queueMatchesDisplay && !queue.isEmpty() && queueIndex >= 0
                 && currentSong != null && indexInQueueByUri(queue, currentSong) == queueIndex;
         boolean inQueue = currentSongInQueue
                 && indexInQueueByUri(queue, model) > queueIndex;
@@ -211,6 +212,12 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
 
     public void updateSongs(ArrayList<SongModel> newSongs) {
         this.songModels = newSongs;
+        queueMatchesDisplay = false;
+        notifyDataSetChanged();
+    }
+
+    public void setQueueMatchesDisplay(boolean matches) {
+        queueMatchesDisplay = matches;
         notifyDataSetChanged();
     }
 
