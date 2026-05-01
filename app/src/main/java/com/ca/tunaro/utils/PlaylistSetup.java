@@ -15,6 +15,7 @@ import java.util.concurrent.CompletableFuture;
 
 import se.michaelthelin.spotify.SpotifyApi;
 import se.michaelthelin.spotify.model_objects.specification.AlbumSimplified;
+import se.michaelthelin.spotify.model_objects.specification.ArtistSimplified;
 import se.michaelthelin.spotify.model_objects.specification.Image;
 import se.michaelthelin.spotify.model_objects.specification.PlaylistSimplified;
 import se.michaelthelin.spotify.model_objects.specification.PlaylistTrack;
@@ -295,10 +296,12 @@ public class PlaylistSetup {
         }
 
         Boolean playable = track.getIsPlayable();
+        ArtistSimplified[] artists = track.getArtists();
+        String primaryArtist = (artists != null && artists.length > 0) ? artists[0].getName() : null;
         return new SongModel(
-                track.getId(),
+                SongModel.generateSongId(track.getName(), primaryArtist, track.getDurationMs()),
                 track.getName(),
-                track.getArtists(),
+                artists,
                 track.getDurationMs(),
                 track.getUri(),
                 track.getPopularity(),
@@ -332,10 +335,12 @@ public class PlaylistSetup {
         }
 
         Boolean playable = track.getIsPlayable();
+        ArtistSimplified[] artists = track.getArtists();
+        String primaryArtist = (artists != null && artists.length > 0) ? artists[0].getName() : null;
         return new SongModel(
-                track.getId(),
+                SongModel.generateSongId(track.getName(), primaryArtist, track.getDurationMs()),
                 track.getName(),
-                track.getArtists(),
+                artists,
                 track.getDurationMs(),
                 track.getUri(),
                 track.getPopularity(),

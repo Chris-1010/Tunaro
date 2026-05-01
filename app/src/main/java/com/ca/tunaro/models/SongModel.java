@@ -142,7 +142,12 @@ public class SongModel implements Serializable {
             return;
         }
 
-        mainActivity.getSpotifyApi().getTrack(this.id)
+        String spotifyTrackId = this.uri != null ? this.uri.split(":")[2] : null;
+        if (spotifyTrackId == null) {
+            if (callback != null) callback.onError("No Spotify URI available");
+            return;
+        }
+        mainActivity.getSpotifyApi().getTrack(spotifyTrackId)
                 .build()
                 .executeAsync()
                 .thenAccept(track -> {
@@ -204,6 +209,13 @@ public class SongModel implements Serializable {
     //#endregion
 
     //#region Helper methods
+
+    public static String generateSongId(String name, String primaryArtist, int durationMs) {
+        String normalizedName = name == null ? "" : name.trim().toLowerCase();
+        String normalizedArtist = primaryArtist == null ? "" : primaryArtist.trim().toLowerCase();
+        long durationSeconds = Math.round(durationMs / 1000.0);
+        return normalizedName + "|" + normalizedArtist + "|" + durationSeconds;
+    }
 
     // Extract artists from ArtistSimplified[] to String[]
     private static String[] extractArtistNames(ArtistSimplified[] artists) {

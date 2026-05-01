@@ -192,12 +192,14 @@ public class PlaybackManager {
 
         if (remoteTrack != null) {
             String trackId = remoteTrack.uri.split(":")[2];
-            handleListenTracking(trackId, !playerState.isPaused);
 
             String[] artistNames = new String[remoteTrack.artists.size()];
             for (int i = 0; i < remoteTrack.artists.size(); i++) {
                 artistNames[i] = remoteTrack.artists.get(i).name;
             }
+
+            String songId = SongModel.generateSongId(remoteTrack.name, artistNames.length > 0 ? artistNames[0] : null, (int) remoteTrack.duration);
+            handleListenTracking(songId, !playerState.isPaused);
 
             boolean trackChanged = false;
             if (currentSong == null || !remoteTrack.uri.equals(currentSong.getUri())) {
@@ -249,9 +251,11 @@ public class PlaybackManager {
 
     // Helper method to create SongModel
     private SongModel createSongModelFromRemoteTrack(Track remoteTrack, String id, String[] artistNames) {
+        String songId = SongModel.generateSongId(remoteTrack.name, artistNames.length > 0 ? artistNames[0] : null, (int) remoteTrack.duration);
+
         // Check if song is in cache first
         SongCache songCache = new SongCache(this.applicationContext);
-        SongModel cachedSong = songCache.getCachedSong(id);
+        SongModel cachedSong = songCache.getCachedSong(songId);
         if (cachedSong != null) {
             return cachedSong;
         }
@@ -275,7 +279,7 @@ public class PlaybackManager {
         );
 
         return new SongModel(
-                id,
+                songId,
                 remoteTrack.name,
                 artistNames,
                 (int) remoteTrack.duration,
@@ -558,8 +562,7 @@ public class PlaybackManager {
     }
 
     private void playSongForSnippet(SongSnippet snippet) {
-        // Create a temporary SongModel for the snippet's song
-        spotifyAppRemote.getPlayerApi().play("spotify:track:" + snippet.getSongId())
+        spotifyAppRemote.getPlayerApi().play(snippet.getSongUri())
                 .setResultCallback(empty -> {
                     // Add delay to ensure song loads
                     new Handler(Looper.getMainLooper()).postDelayed(() ->

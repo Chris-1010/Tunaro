@@ -630,7 +630,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
         // Set the selected song in the singleton
         MainActivity mainActivity = MainActivity.getInstance();
-        SelectedSongHolder.getInstance().setSelectedSong(clickedSong, mainActivity);
+        SelectedSongHolder.getInstance().setSelectedSong(clickedSong);
 
         // Start the SongView activity
         Intent intent = new Intent(this, SongView.class);

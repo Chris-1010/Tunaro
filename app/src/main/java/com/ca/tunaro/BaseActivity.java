@@ -176,7 +176,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
                             return;
 
                         // Set the selected song
-                        SelectedSongHolder.getInstance().setSelectedSong(currentSong, mainActivity);
+                        SelectedSongHolder.getInstance().setSelectedSong(currentSong);
 
                         // Open SongView activity
                         Intent intent = new Intent(this, SongView.class);

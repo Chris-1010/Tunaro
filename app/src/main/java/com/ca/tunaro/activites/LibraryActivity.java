@@ -27,6 +27,7 @@ import java.util.List;
 
 import se.michaelthelin.spotify.SpotifyApi;
 import se.michaelthelin.spotify.model_objects.specification.AlbumSimplified;
+import se.michaelthelin.spotify.model_objects.specification.ArtistSimplified;
 import se.michaelthelin.spotify.requests.data.tracks.GetTrackRequest;
 
 public class LibraryActivity extends BaseActivity implements Library_RecyclerViewInterface {
@@ -151,10 +152,12 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
                         }
 
                         Boolean playable = track.getIsPlayable();
+                        ArtistSimplified[] artists = track.getArtists();
+                        String primaryArtist = (artists != null && artists.length > 0) ? artists[0].getName() : null;
                         SongModel songModel = new SongModel(
-                                track.getId(),
+                                SongModel.generateSongId(track.getName(), primaryArtist, track.getDurationMs()),
                                 track.getName(),
-                                track.getArtists(),
+                                artists,
                                 track.getDurationMs(),
                                 track.getUri(),
                                 track.getPopularity(),
@@ -209,7 +212,8 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
         setLoadingState(true);
 
         // Get song details from Spotify API
-        GetTrackRequest getTrackRequest = spotifyApi.getTrack(selectedSong.getId())
+        String spotifyTrackId = selectedSong.getUri().split(":")[2];
+        GetTrackRequest getTrackRequest = spotifyApi.getTrack(spotifyTrackId)
                 .build();
 
         getTrackRequest.executeAsync()
@@ -238,10 +242,12 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
 
                         // Create SongModel from Spotify Track
                         Boolean playable2 = track.getIsPlayable();
+                        ArtistSimplified[] artists2 = track.getArtists();
+                        String primaryArtist2 = (artists2 != null && artists2.length > 0) ? artists2[0].getName() : null;
                         SongModel songModel = new SongModel(
-                                track.getId(),
+                                SongModel.generateSongId(track.getName(), primaryArtist2, track.getDurationMs()),
                                 track.getName(),
-                                track.getArtists(),
+                                artists2,
                                 track.getDurationMs(),
                                 track.getUri(),
                                 track.getPopularity(),
@@ -252,7 +258,7 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
                         );
 
                         // Set the selected song in the singleton
-                        SelectedSongHolder.getInstance().setSelectedSong(songModel, mainActivity);
+                        SelectedSongHolder.getInstance().setSelectedSong(songModel);
 
                         // Navigate to SongView
                         Intent intent = new Intent(this, SongView.class);
