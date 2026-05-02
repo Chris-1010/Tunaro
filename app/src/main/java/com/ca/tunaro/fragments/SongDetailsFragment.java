@@ -2,7 +2,6 @@ package com.ca.tunaro.fragments;
 
 import android.content.Intent;
 import android.graphics.Color;
-import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -19,6 +18,7 @@ import androidx.fragment.app.Fragment;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.ca.tunaro.R;
+import com.ca.tunaro.activites.AlbumView;
 import com.ca.tunaro.activites.SongWebInfoActivity;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.models.Artist;
@@ -94,14 +94,11 @@ public class SongDetailsFragment extends Fragment {
 
         albumNameView.setText(song.getAlbumName());
 
-        // Click to open album on Spotify
         albumRow.setOnClickListener(v -> {
-            String albumId = song.getAlbumId();
-            if (albumId != null && !albumId.isEmpty()) {
-                String url = "https://open.spotify.com/album/" + albumId;
-                Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                startActivity(browserIntent);
-            }
+            Intent intent = new Intent(requireContext(), AlbumView.class);
+            intent.putExtra("album_id", song.getAlbumId());
+            intent.putExtra("album_name", song.getAlbumName());
+            startActivity(intent);
         });
 
         // Release date
