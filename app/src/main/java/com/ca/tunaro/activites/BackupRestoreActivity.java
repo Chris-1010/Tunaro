@@ -137,7 +137,18 @@ public class BackupRestoreActivity extends AppCompatActivity {
             for (JsonElement e : notesArray)    allTrackIds.add(e.getAsJsonObject().get("songId").getAsString());
             for (JsonElement e : snippetsArray) allTrackIds.add(e.getAsJsonObject().get("songId").getAsString());
 
-            int totalTracks = allTrackIds.size();
+            // Pre-map invalid IDs (local files, podcasts, etc.) to placeholders — they'll fail the API call
+            Map<String, String> trackIdToSongId = new HashMap<>();
+            Set<String> validTrackIds = new LinkedHashSet<>();
+            for (String id : allTrackIds) {
+                if (isValidSpotifyTrackId(id)) {
+                    validTrackIds.add(id);
+                } else {
+                    trackIdToSongId.put(id, SongModel.SPOTIFY_TRACK_URI_PREFIX + id);
+                }
+            }
+
+            int totalTracks = validTrackIds.size();
             int totalBatches = (totalTracks + BATCH_SIZE - 1) / BATCH_SIZE;
             status("Resolving " + totalTracks + " unique tracks via Spotify API...");
             details("Tracks to resolve: " + totalTracks + "\nAPI calls needed: " + totalBatches);
@@ -146,10 +157,9 @@ public class BackupRestoreActivity extends AppCompatActivity {
             setProgressIndeterminate(false);
 
             // Batch-resolve trackId → composite song ID via getSeveralTracks
-            Map<String, String> trackIdToSongId = new HashMap<>();
-            List<String> trackIdList = new ArrayList<>(allTrackIds);
+            List<String> trackIdList = new ArrayList<>(validTrackIds);
             int resolved = 0;
-            int unresolvable = 0;
+            int unresolvable = allTrackIds.size() - validTrackIds.size(); // pre-filtered invalid IDs
             int batchsDone = 0;
 
             for (int i = 0; i < trackIdList.size(); i += BATCH_SIZE) {
@@ -315,6 +325,10 @@ public class BackupRestoreActivity extends AppCompatActivity {
                 startButton.setEnabled(true);
             });
         }
+    }
+
+    private static boolean isValidSpotifyTrackId(String id) {
+        return id != null && id.length() == 22 && id.matches("[0-9A-Za-z]+");
     }
 
     private void upsertTrackToDb(Track track, String songId) {
