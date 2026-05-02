@@ -64,10 +64,13 @@ public class SettingsActivity extends BaseActivity {
         Button importButton = findViewById(R.id.import_button);
         Button exportButton = findViewById(R.id.export_button);
         Button clearCacheButton = findViewById(R.id.clear_cache_button);
+        Button restoreBackupButton = findViewById(R.id.restore_backup_button);
         clearCacheButton.setOnClickListener(v -> clearAllCaches());
 
         importButton.setOnClickListener(v -> importData());
         exportButton.setOnClickListener(v -> exportData());
+        restoreBackupButton.setOnClickListener(v -> startActivity(
+                new android.content.Intent(this, BackupRestoreActivity.class)));
     }
 
     // Handle the import button click

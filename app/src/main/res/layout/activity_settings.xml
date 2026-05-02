@@ -156,8 +156,16 @@
                 android:id="@+id/export_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp"
+                android:layout_marginBottom="8dp"
                 android:text="Export Tunaro Data"
+                android:textSize="16sp" />
+
+            <Button
+                android:id="@+id/restore_backup_button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="24dp"
+                android:text="Restore from v7 Backup"
                 android:textSize="16sp" />
 
             <!--#endregion -->

@@ -1295,6 +1295,59 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return exists;
     }
 
+    // Holds state for bulk listen import — one open DB connection, in-memory dedup set, pending rows.
+    public static class ListenImportBatch {
+        final SQLiteDatabase db;
+        final java.util.Set<String> existingKeys; // "songId\0timestamp"
+        final List<ContentValues> pending = new ArrayList<>();
+
+        ListenImportBatch(SQLiteDatabase db, java.util.Set<String> existingKeys) {
+            this.db = db;
+            this.existingKeys = existingKeys;
+        }
+    }
+
+    public ListenImportBatch beginListenImportBatch() {
+        SQLiteDatabase db = this.getWritableDatabase();
+        java.util.Set<String> existingKeys = new java.util.HashSet<>();
+        Cursor cursor = db.rawQuery(
+                "SELECT " + COLUMN_SONG_ID + ", " + COLUMN_LISTEN_TIMESTAMP + " FROM " + TABLE_LISTEN_HISTORY, null);
+        if (cursor.moveToFirst()) {
+            do {
+                existingKeys.add(cursor.getString(0) + "\0" + cursor.getString(1));
+            } while (cursor.moveToNext());
+        }
+        cursor.close();
+        return new ListenImportBatch(db, existingKeys);
+    }
+
+    public boolean hasExactListenInBatch(ListenImportBatch batch, String songId, String utcTimestamp) {
+        return batch.existingKeys.contains(songId + "\0" + utcTimestamp);
+    }
+
+    public void addListenToBatch(ListenImportBatch batch, String uuid, String songId, String utcTimestamp) {
+        batch.existingKeys.add(songId + "\0" + utcTimestamp);
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_UUID, uuid != null ? uuid : java.util.UUID.randomUUID().toString());
+        values.put(COLUMN_SONG_ID, songId);
+        values.put(COLUMN_LISTEN_TIMESTAMP, utcTimestamp);
+        batch.pending.add(values);
+    }
+
+    public void flushListenBatch(ListenImportBatch batch) {
+        if (batch.pending.isEmpty()) return;
+        batch.db.beginTransaction();
+        try {
+            for (ContentValues values : batch.pending) {
+                batch.db.insert(TABLE_LISTEN_HISTORY, null, values);
+            }
+            batch.db.setTransactionSuccessful();
+        } finally {
+            batch.db.endTransaction();
+            batch.pending.clear();
+        }
+    }
+
     //#endregion
 
     //#region ======== SYNC CURSOR ========

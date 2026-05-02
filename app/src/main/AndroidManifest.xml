@@ -66,6 +66,10 @@
             android:exported="false"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".activites.BackupRestoreActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".activites.AlbumView"
             android:exported="false"
             android:screenOrientation="portrait" />
