@@ -23,21 +23,25 @@ import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.ca.tunaro.BaseActivity;
 import com.ca.tunaro.R;
 import com.ca.tunaro.adapters.SongTabAdapter;
+import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.utils.ColorExtractor;
 import com.ca.tunaro.utils.SelectedSongHolder;
 import com.google.android.material.tabs.TabLayout;
 
+import java.util.List;
+
 public class SongView extends BaseActivity {
     private static final String TAG = "SongView";
 
-    // Fields
     private SongModel selectedSong;
     private TabLayout tabLayout;
     private ViewPager2 viewPager;
     private SongTabAdapter tabAdapter;
 
-    // Creation
+    private boolean playlistPanelVisible = false;
+    private static final int PANEL_WIDTH_DP = 56;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -46,11 +50,9 @@ public class SongView extends BaseActivity {
 
         setContentView(R.layout.activity_song_view);
 
-        // Apply window insets properly to avoid content behind system bars
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
 
-            // Apply top inset to header content
             View headerContent = findViewById(R.id.header_content);
             if (headerContent != null) {
                 headerContent.setPadding(
@@ -61,10 +63,7 @@ public class SongView extends BaseActivity {
                 );
             }
 
-            // Apply bottom inset to playback bar
             View playbackBar = findViewById(R.id.playback_bar);
-
-            // Apply bottom margin to playback bar equal to navigation bar height
             if (playbackBar != null) {
                 ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) playbackBar.getLayoutParams();
                 params.bottomMargin = systemBars.bottom;
@@ -74,17 +73,20 @@ public class SongView extends BaseActivity {
             return WindowInsetsCompat.CONSUMED;
         });
 
-        // Retrieve the selected song
         selectedSong = SelectedSongHolder.getInstance().getSelectedSong();
         if (selectedSong == null) {
             finish();
             return;
         }
 
-        // Set up UI components
+        // Upgrade to full model so Details tab has createdAt and variants
+        SongModel fullSong = new DatabaseHelper(this).getFullSong(selectedSong.getId());
+        if (fullSong != null) selectedSong = fullSong;
+
         setupBackButton();
         setupBasicSongInfo();
-        setupAlbumCoverLongPress();
+        setupAlbumCover();
+        setupPlaylistPanel();
         setupDynamicBackground();
         setupTabs();
     }
@@ -93,7 +95,6 @@ public class SongView extends BaseActivity {
         LinearLayout backButton = findViewById(R.id.back_button);
         TextView backButtonText = findViewById(R.id.back_button_text);
 
-        // Get playlist/source name from intent extras if available
         String source = getIntent().getStringExtra("source");
         String playlistName = getIntent().getStringExtra("playlist_name");
 
@@ -108,56 +109,122 @@ public class SongView extends BaseActivity {
         backButton.setOnClickListener(v -> finish());
     }
 
-    // Setup methods
     private void setupBasicSongInfo() {
-        String name = selectedSong.getName();
-        String artist = selectedSong.getArtist();
-        String albumCover = selectedSong.getAlbumCoverUrl();
-
         TextView nameView = findViewById(R.id.SongView_SongName);
         TextView artistView = findViewById(R.id.SongView_ArtistName);
         ImageView albumCoverImageView = findViewById(R.id.SongView_AlbumCover);
 
-        nameView.setText(name);
-        nameView.setSelected(true); // Enable marquee
-        artistView.setText(artist);
+        nameView.setText(selectedSong.getName());
+        nameView.setSelected(true);
+        artistView.setText(selectedSong.getArtist());
 
         Glide.with(this)
-                .load(albumCover)
+                .load(selectedSong.getAlbumCoverUrl())
                 .placeholder(R.drawable.song_placeholder)
                 .error(R.drawable.song_placeholder)
                 .transition(DrawableTransitionOptions.withCrossFade())
                 .into(albumCoverImageView);
     }
 
-    private void setupAlbumCoverLongPress() {
+    private void setupAlbumCover() {
         ImageView albumCoverImageView = findViewById(R.id.SongView_AlbumCover);
 
-        // Tap: skip to this song in the active queue, or play individually if no queue
+        // Tap: toggle playlist panel with a slight scale-down feedback
         albumCoverImageView.setOnClickListener(v -> {
-            if (!playbackManager.isConnected()) {
-                showToast("Connecting to Spotify...");
-                playbackManager.connectSpotify(this, () -> {
-                    playbackManager.skipToSong(selectedSong);
-                    showToast("Playing " + selectedSong.getName());
-                });
-            } else {
-                playbackManager.skipToSong(selectedSong);
-                showToast("Playing " + selectedSong.getName());
-            }
+            v.animate().scaleX(0.98f).scaleY(0.98f).setDuration(80)
+                    .withEndAction(() -> {
+                        v.animate().scaleX(1f).scaleY(1f).setDuration(80).start();
+                        togglePlaylistPanel();
+                    }).start();
         });
 
-        // Long-press: play individually, leaving queue intact
+        // Long-press: play song
         albumCoverImageView.setOnLongClickListener(v -> {
             playSong();
             return true;
         });
     }
 
-    private void setupDynamicBackground() {
-        String albumCover = selectedSong.getAlbumCoverUrl();
+    private void setupPlaylistPanel() {
+        LinearLayout panel = findViewById(R.id.playlist_panel);
+        LinearLayout iconsContainer = findViewById(R.id.playlist_panel_icons);
+        TextView emptyLabel = findViewById(R.id.playlist_panel_empty);
+        View scrollView = findViewById(R.id.playlist_panel_scroll);
 
-        ColorExtractor.extractColors(this, albumCover, new ColorExtractor.ColorExtractionCallback() {
+        DatabaseHelper dbHelper = new DatabaseHelper(this);
+        List<DatabaseHelper.PlaylistLink> playlists = dbHelper.getPlaylistsForSong(selectedSong.getId());
+
+        if (playlists.isEmpty()) {
+            emptyLabel.setVisibility(View.VISIBLE);
+            scrollView.setVisibility(View.GONE);
+        } else {
+            emptyLabel.setVisibility(View.GONE);
+            scrollView.setVisibility(View.VISIBLE);
+
+            int iconSize = dpToPx(40);
+            int iconMargin = dpToPx(4);
+
+            for (DatabaseHelper.PlaylistLink link : playlists) {
+                ImageView icon = new ImageView(this);
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(iconSize, iconSize);
+                params.setMargins(iconMargin, iconMargin, iconMargin, iconMargin);
+                icon.setLayoutParams(params);
+                icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                icon.setClipToOutline(true);
+                icon.setBackgroundResource(R.drawable.rounded_md);
+
+                float alpha = link.isActive() ? 1.0f : 0.4f;
+                icon.setAlpha(alpha);
+
+                Glide.with(this)
+                        .load(link.imageUrl)
+                        .placeholder(R.drawable.playlist_placeholder)
+                        .error(R.drawable.playlist_placeholder)
+                        .transition(DrawableTransitionOptions.withCrossFade())
+                        .into(icon);
+
+                // Hold → show tooltip with playlist name (and removal date if removed)
+                icon.setOnLongClickListener(v -> {
+                    String tooltip = link.name;
+                    if (!link.isActive() && link.removedAt != null) {
+                        tooltip += "\nRemoved " + formatRemovedAt(link.removedAt);
+                    }
+                    showToast(tooltip);
+                    return true;
+                });
+
+                iconsContainer.addView(icon);
+            }
+        }
+    }
+
+    private void togglePlaylistPanel() {
+        LinearLayout panel = findViewById(R.id.playlist_panel);
+        int panelWidthPx = dpToPx(PANEL_WIDTH_DP);
+
+        if (playlistPanelVisible) {
+            panel.animate()
+                    .translationX(-panelWidthPx)
+                    .alpha(0f)
+                    .setDuration(220)
+                    .withEndAction(() -> panel.setVisibility(View.INVISIBLE))
+                    .start();
+            playlistPanelVisible = false;
+        } else {
+            panel.setVisibility(View.VISIBLE);
+            panel.setAlpha(0f);
+            panel.setTranslationX(-panelWidthPx);
+            panel.animate()
+                    .translationX(0f)
+                    .alpha(1f)
+                    .setDuration(220)
+                    .start();
+            playlistPanelVisible = true;
+        }
+    }
+
+    private void setupDynamicBackground() {
+        ColorExtractor.extractColors(this, selectedSong.getAlbumCoverUrl(), new ColorExtractor.ColorExtractionCallback() {
             @Override
             public void onColorExtracted(int dominantColor, int vibrantColor) {
                 if (ColorExtractor.hasSufficientContrast(dominantColor, Color.BLACK, 0)) {
@@ -176,7 +243,6 @@ public class SongView extends BaseActivity {
 
     private void applyGradientBackground(int dominantColor) {
         View mainLayout = findViewById(R.id.main);
-
         if (mainLayout != null) {
             GradientDrawable gradient = new GradientDrawable(
                     GradientDrawable.Orientation.TR_BL,
@@ -190,19 +256,15 @@ public class SongView extends BaseActivity {
         tabLayout = findViewById(R.id.tab_layout);
         viewPager = findViewById(R.id.view_pager);
 
-        // Enable nested scrolling so fragments can trigger collapse
         ViewCompat.setNestedScrollingEnabled(viewPager, true);
 
-        // Configure the TabLayout appearance
         tabLayout.setBackgroundColor(Color.TRANSPARENT);
         tabLayout.setTabRippleColor(null);
         tabLayout.setPadding(16, 8, 16, 8);
 
-        // Create adapter with 3 tabs: Details, Notes, Snippets
         tabAdapter = new SongTabAdapter(this, selectedSong);
         viewPager.setAdapter(tabAdapter);
 
-        // Create custom tab views
         String[] tabTitles = {"Details", "Notes", "Snippets"};
         for (int i = 0; i < tabTitles.length; i++) {
             TabLayout.Tab tab = tabLayout.newTab();
@@ -214,16 +276,11 @@ public class SongView extends BaseActivity {
             tabTitleView.setText(tabTitles[i]);
             tabTitleView.setTextColor(i == 0 ? Color.BLACK : Color.WHITE);
 
-            // Set badge count for Notes and Snippets tabs
             if (i > 0) {
-                com.ca.tunaro.database.DatabaseHelper dbHelper = new com.ca.tunaro.database.DatabaseHelper(this);
-                int count = 0;
-
-                if (i == 1) { // Notes
-                    count = dbHelper.getSongNotes(selectedSong.getId()).size();
-                } else if (i == 2) { // Snippets
-                    count = dbHelper.getSongSnippets(selectedSong.getId()).size();
-                }
+                DatabaseHelper dbHelper = new DatabaseHelper(this);
+                int count = i == 1
+                        ? dbHelper.getSongNotes(selectedSong.getId()).size()
+                        : dbHelper.getSongSnippets(selectedSong.getId()).size();
 
                 if (count > 0) {
                     tabBadgeView.setVisibility(View.VISIBLE);
@@ -239,15 +296,14 @@ public class SongView extends BaseActivity {
             tabLayout.addTab(tab);
         }
 
-        // Connect TabLayout with ViewPager2
         tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
             public void onTabSelected(TabLayout.Tab tab) {
                 viewPager.setCurrentItem(tab.getPosition());
                 View customView = tab.getCustomView();
                 if (customView != null) {
-                    TextView tabTitleView = customView.findViewById(R.id.tab_title);
-                    tabTitleView.setTextColor(Color.BLACK);
+                    customView.findViewById(R.id.tab_title).performClick();
+                    ((TextView) customView.findViewById(R.id.tab_title)).setTextColor(Color.BLACK);
                 }
             }
 
@@ -255,14 +311,12 @@ public class SongView extends BaseActivity {
             public void onTabUnselected(TabLayout.Tab tab) {
                 View customView = tab.getCustomView();
                 if (customView != null) {
-                    TextView tabTitleView = customView.findViewById(R.id.tab_title);
-                    tabTitleView.setTextColor(Color.WHITE);
+                    ((TextView) customView.findViewById(R.id.tab_title)).setTextColor(Color.WHITE);
                 }
             }
 
             @Override
-            public void onTabReselected(TabLayout.Tab tab) {
-            }
+            public void onTabReselected(TabLayout.Tab tab) {}
         });
 
         viewPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
@@ -272,7 +326,6 @@ public class SongView extends BaseActivity {
             }
         });
 
-        // Select Details tab by default
         viewPager.setCurrentItem(0);
     }
 
@@ -304,7 +357,22 @@ public class SongView extends BaseActivity {
         }
     }
 
-    // Destroy
+    private int dpToPx(int dp) {
+        return Math.round(dp * getResources().getDisplayMetrics().density);
+    }
+
+    private String formatRemovedAt(String utcTimestamp) {
+        try {
+            java.text.SimpleDateFormat inFmt = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US);
+            inFmt.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+            java.util.Date date = inFmt.parse(utcTimestamp);
+            java.text.SimpleDateFormat outFmt = new java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.US);
+            return outFmt.format(date);
+        } catch (Exception e) {
+            return utcTimestamp;
+        }
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();

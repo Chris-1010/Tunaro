@@ -26,9 +26,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import se.michaelthelin.spotify.SpotifyApi;
-import se.michaelthelin.spotify.model_objects.specification.AlbumSimplified;
-import se.michaelthelin.spotify.model_objects.specification.ArtistSimplified;
-import se.michaelthelin.spotify.requests.data.tracks.GetTrackRequest;
 
 public class LibraryActivity extends BaseActivity implements Library_RecyclerViewInterface {
     private static final String TAG = "LibraryActivity";
@@ -59,129 +56,69 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
             return;
         }
 
-        // Initialize DatabaseHelper
         dbHelper = new DatabaseHelper(this);
 
-        // Initialize RecyclerView
         RecyclerView recyclerView = findViewById(R.id.library_recycler_view);
         adapter = new LibrarySongAdapter(this, this);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         recyclerView.setAdapter(adapter);
 
-        // Initialize SearchBar
         searchBar = findViewById(R.id.search_bar);
         setupSearchBar();
 
-        // Load songs with notes
         loadSongsWithNotes();
     }
 
     private void setupSearchBar() {
         searchBar.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
                 filterSongs(s.toString());
             }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-            }
+            @Override public void afterTextChanged(Editable s) {}
         });
     }
 
     private void loadSongsWithNotes() {
-        if (spotifyApi == null) {
-            showToast("Spotify API not available yet. Please try again later.");
-            return;
-        }
-
-        // Get all song IDs that have notes
         List<String> songIds = dbHelper.getSongIdsWithNotes();
 
-        // Show loading state
         setLoadingState(true);
-
-        // Clear existing songs
         allSongs.clear();
         adapter.clearSongs();
 
-        // Load songs one at a time sequentially
+        // Load from DB first, fall back to Spotify API for any unknown songs
         loadSongsSequentially(songIds, 0);
     }
 
     private void loadSongsSequentially(List<String> songIds, int index) {
-        loadSongsSequentially(songIds, index, null);
-    }
-
-    private void loadSongsSequentially(List<String> songIds, int index, Runnable onComplete) {
         if (index >= songIds.size()) {
             setLoadingState(false);
-            if (onComplete != null) {
-                onComplete.run();
-            }
             return;
         }
 
         String songId = songIds.get(index);
-        GetTrackRequest getTrackRequest = spotifyApi.getTrack(songId).build();
 
-        getTrackRequest.executeAsync()
-                .thenAccept(track -> {
-                    runOnUiThread(() -> {
-                        AlbumSimplified trackAlbum = track.getAlbum();
-                        String imageUrl = trackAlbum.getImages()[0].getUrl();
+        // Try DB first
+        SongModel dbSong = dbHelper.getLeanSong(songId);
+        if (dbSong != null) {
+            runOnUiThread(() -> {
+                allSongs.add(dbSong);
+                adapter.addSong(dbSong);
+                loadSongsSequentially(songIds, index + 1);
+            });
+            return;
+        }
 
-                        // Create Album object
-                        SongModel.Album album = new SongModel.Album(
-                                trackAlbum.getId(),
-                                trackAlbum.getName(),
-                                trackAlbum.getAlbumType().getType(),
-                                trackAlbum.getReleaseDate(),
-                                imageUrl
-                        );
+        // Not in DB — should not happen in normal flow, but fall back to Spotify API
+        if (spotifyApi == null) {
+            loadSongsSequentially(songIds, index + 1);
+            return;
+        }
 
-                        // Extract ISRC from external IDs
-                        String isrc = "";
-                        if (track.getExternalIds() != null && track.getExternalIds().getExternalIds() != null) {
-                            java.util.Map<String, String> externalIds = track.getExternalIds().getExternalIds();
-                            isrc = externalIds.getOrDefault("isrc", "");
-                        }
-
-                        Boolean playable = track.getIsPlayable();
-                        ArtistSimplified[] artists = track.getArtists();
-                        String primaryArtist = (artists != null && artists.length > 0) ? artists[0].getName() : null;
-                        SongModel songModel = new SongModel(
-                                SongModel.generateSongId(track.getName(), primaryArtist, track.getDurationMs()),
-                                track.getName(),
-                                artists,
-                                track.getDurationMs(),
-                                track.getUri(),
-                                track.getPopularity(),
-                                album,
-                                isrc,
-                                null,
-                                playable == null || playable
-                        );
-
-                        allSongs.add(songModel);
-                        adapter.addSong(songModel);
-
-                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                            loadSongsSequentially(songIds, index + 1, onComplete);
-                        }, 100);
-                    });
-                })
-                .exceptionally(throwable -> {
-                    runOnUiThread(() -> {
-                        showToast("Error loading song: " + throwable.getMessage());
-                        loadSongsSequentially(songIds, index + 1, onComplete);
-                    });
-                    return null;
-                });
+        // songId is a composite key and can't be passed to Spotify API directly
+        // Log a warning and skip; song data will be populated on next playlist sync
+        Log.w(TAG, "Song not in DB, skipping library entry: " + songId);
+        new Handler(Looper.getMainLooper()).post(() -> loadSongsSequentially(songIds, index + 1));
     }
 
     private void filterSongs(String query) {
@@ -207,76 +144,13 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
     @Override
     public void onItemClick(int position) {
         SongModel selectedSong = adapter.getSongs().get(position);
-
-        // Show loading state if needed
-        setLoadingState(true);
-
-        // Get song details from Spotify API
-        String spotifyTrackId = selectedSong.getUri().split(":")[2];
-        GetTrackRequest getTrackRequest = spotifyApi.getTrack(spotifyTrackId)
-                .build();
-
-        getTrackRequest.executeAsync()
-                .thenAccept(track -> {
-                    runOnUiThread(() -> {
-                        setLoadingState(false);
-
-                        AlbumSimplified trackAlbum = track.getAlbum();
-                        String imageUrl = trackAlbum.getImages()[0].getUrl();
-
-                        // Create Album object
-                        SongModel.Album album = new SongModel.Album(
-                                trackAlbum.getId(),
-                                trackAlbum.getName(),
-                                trackAlbum.getAlbumType().getType(),
-                                trackAlbum.getReleaseDate(),
-                                imageUrl
-                        );
-
-                        // Extract ISRC from external IDs
-                        String isrc = "";
-                        if (track.getExternalIds() != null && track.getExternalIds().getExternalIds() != null) {
-                            java.util.Map<String, String> externalIds = track.getExternalIds().getExternalIds();
-                            isrc = externalIds.getOrDefault("isrc", "");
-                        }
-
-                        // Create SongModel from Spotify Track
-                        Boolean playable2 = track.getIsPlayable();
-                        ArtistSimplified[] artists2 = track.getArtists();
-                        String primaryArtist2 = (artists2 != null && artists2.length > 0) ? artists2[0].getName() : null;
-                        SongModel songModel = new SongModel(
-                                SongModel.generateSongId(track.getName(), primaryArtist2, track.getDurationMs()),
-                                track.getName(),
-                                artists2,
-                                track.getDurationMs(),
-                                track.getUri(),
-                                track.getPopularity(),
-                                album,
-                                isrc,
-                                null, // Unnecessary for library view
-                                playable2 == null || playable2
-                        );
-
-                        // Set the selected song in the singleton
-                        SelectedSongHolder.getInstance().setSelectedSong(songModel);
-
-                        // Navigate to SongView
-                        Intent intent = new Intent(this, SongView.class);
-                        intent.putExtra("source", "library");
-                        startActivity(intent);
-                    });
-                })
-                .exceptionally(throwable -> {
-                    runOnUiThread(() -> {
-                        setLoadingState(false);
-                        showToast("Error loading song details: " + throwable.getMessage());
-                    });
-                    return null;
-                });
+        SelectedSongHolder.getInstance().setSelectedSong(selectedSong);
+        Intent intent = new Intent(this, SongView.class);
+        intent.putExtra("source", "library");
+        startActivity(intent);
     }
 
     private void setLoadingState(boolean isLoading) {
-        // Implement loading state UI changes here
         View loadingView = findViewById(R.id.loading_view);
         if (loadingView != null) {
             loadingView.setVisibility(isLoading ? View.VISIBLE : View.GONE);

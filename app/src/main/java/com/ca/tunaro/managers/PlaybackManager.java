@@ -191,25 +191,23 @@ public class PlaybackManager {
         Track remoteTrack = playerState.track;
 
         if (remoteTrack != null) {
-            String trackId = remoteTrack.uri.split(":")[2];
-
             String[] artistNames = new String[remoteTrack.artists.size()];
             for (int i = 0; i < remoteTrack.artists.size(); i++) {
                 artistNames[i] = remoteTrack.artists.get(i).name;
             }
 
-            String songId = SongModel.generateSongId(remoteTrack.name, artistNames.length > 0 ? artistNames[0] : null, (int) remoteTrack.duration);
-            handleListenTracking(songId, !playerState.isPaused);
-
             boolean trackChanged = false;
             if (currentSong == null || !remoteTrack.uri.equals(currentSong.getUri())) {
-                // Create a simplified SongModel from track with string artist names
-                currentSong = createSongModelFromRemoteTrack(remoteTrack, trackId, artistNames);
+                String songId = SongModel.generateSongId(remoteTrack.name, artistNames.length > 0 ? artistNames[0] : null, (int) remoteTrack.duration);
+                currentSong = createSongModelFromRemoteTrack(remoteTrack, songId, artistNames);
                 trackChanged = true;
-
-                // Check device when track changes
                 checkPlaybackDevice();
+                if (applicationContext != null) {
+                    new DatabaseHelper(applicationContext).upsertSong(currentSong);
+                }
             }
+
+            handleListenTracking(currentSong.getId(), !playerState.isPaused);
 
             // Update playing state
             boolean wasPlaying = isPlaying;
@@ -250,10 +248,7 @@ public class PlaybackManager {
     }
 
     // Helper method to create SongModel
-    private SongModel createSongModelFromRemoteTrack(Track remoteTrack, String id, String[] artistNames) {
-        String songId = SongModel.generateSongId(remoteTrack.name, artistNames.length > 0 ? artistNames[0] : null, (int) remoteTrack.duration);
-
-        // Check if song is in cache first
+    private SongModel createSongModelFromRemoteTrack(Track remoteTrack, String songId, String[] artistNames) {
         SongCache songCache = new SongCache(this.applicationContext);
         SongModel cachedSong = songCache.getCachedSong(songId);
         if (cachedSong != null) {
@@ -269,26 +264,13 @@ public class PlaybackManager {
             imageUrl = "https://i.scdn.co/image/" + imageId;
         }
 
-        // Create Album object - using limited data from remote track
-        SongModel.Album album = new SongModel.Album(
-                null, // Album ID not available from remote track
-                remoteTrack.album.name,
-                null, // Album type not available from remote track
-                null, // Release date not available from remote track
-                imageUrl
-        );
-
         return new SongModel(
                 songId,
                 remoteTrack.name,
                 artistNames,
                 (int) remoteTrack.duration,
                 remoteTrack.uri,
-                0, // Don't have popularity from playback
-                album,
-                "", // ISRC not available from remote track
-                null,
-                true // Assume playable — not available from remote track
+                imageUrl
         );
     }
 
@@ -562,7 +544,15 @@ public class PlaybackManager {
     }
 
     private void playSongForSnippet(SongSnippet snippet) {
-        spotifyAppRemote.getPlayerApi().play(snippet.getSongUri())
+        DatabaseHelper dbHelper = new DatabaseHelper(applicationContext);
+        SongModel song = dbHelper.getLeanSong(snippet.getSongId());
+        String uri = song != null ? song.getUri() : null;
+        if (uri == null) {
+            showToast("Song URI not found");
+            stopSnippetPlayback();
+            return;
+        }
+        spotifyAppRemote.getPlayerApi().play(uri)
                 .setResultCallback(empty -> {
                     // Add delay to ensure song loads
                     new Handler(Looper.getMainLooper()).postDelayed(() ->

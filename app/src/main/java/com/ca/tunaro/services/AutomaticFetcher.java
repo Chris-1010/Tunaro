@@ -9,12 +9,14 @@ import android.widget.Toast;
 
 import com.ca.tunaro.activites.MainActivity;
 import com.ca.tunaro.database.DatabaseHelper;
+import com.ca.tunaro.models.SongModel;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.UUID;
@@ -492,35 +494,32 @@ public class AutomaticFetcher {
         int successCount = 0;
         int failedCount = 0;
 
+        // Resolve all Spotify track IDs → composite song IDs in one query
+        List<String> trackIds = new ArrayList<>(listens.size());
+        for (ServerApiClient.Listen listen : listens) trackIds.add(listen.getTrackId());
+        Map<String, String> songIdMap = dbHelper.getSongIdsBySpotifyTrackIds(trackIds);
+
         for (ServerApiClient.Listen listen : listens) {
             try {
-                // Use track duration from server response (no need to fetch from Spotify!)
                 int trackDuration = listen.getTrackDuration();
-
-                // Parse timestamp to milliseconds
                 long playedAtMs = parseTimestampToMillis(listen.getPlayedAt());
 
-                // Use existing duplicate detection logic
-                if (!dbHelper.hasListenWithinDuration(
-                        listen.getTrackId(),
-                        playedAtMs,
-                        trackDuration)) {
+                String songId = songIdMap.get(listen.getTrackId());
+                if (songId == null) {
+                    // Song not yet in DB — placeholder until next playlist sync
+                    songId = SongModel.SPOTIFY_TRACK_URI_PREFIX + listen.getTrackId();
+                }
 
-                    dbHelper.addListenRecordWithTimestamp(
-                            listen.getTrackId(),
-                            listen.getPlayedAt()
-                    );
-
+                if (!dbHelper.hasListenWithinDuration(songId, playedAtMs, trackDuration)) {
+                    dbHelper.addListenRecordWithTimestamp(songId, listen.getPlayedAt());
                     successfulIds.add(listen.getTrackId());
                     successCount++;
-
                     Log.d(TAG, "Imported listen: " +
                             (listen.getTrackName() != null ? listen.getTrackName() : listen.getTrackId()));
                 } else {
                     Log.d(TAG, "Duplicate listen detected for " +
                             (listen.getTrackName() != null ? listen.getTrackName() : listen.getTrackId()) +
                             ", skipping");
-                    // Still counts as success (handled gracefully)
                     successfulIds.add(listen.getTrackId());
                     successCount++;
                 }
@@ -530,12 +529,7 @@ public class AutomaticFetcher {
             }
         }
 
-        return new ImportResults(
-                successCount,
-                failedCount,
-                successfulIds,
-                failedCount == 0
-        );
+        return new ImportResults(successCount, failedCount, successfulIds, failedCount == 0);
     }
 
     private long parseTimestampToMillis(String utcTimestamp) throws ParseException {

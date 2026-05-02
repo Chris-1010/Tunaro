@@ -5,10 +5,12 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
+import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.models.PlaylistModel;
 import com.ca.tunaro.models.SongModel;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -26,6 +28,7 @@ import se.michaelthelin.spotify.requests.data.playlists.GetPlaylistsItemsRequest
 public class PlaylistSetup {
     private static PlaylistCache playlistCache;
     private static SongCache songCache;
+    private static Context appContext;
     private static final int MAX_BATCH_SIZE = 50;    // Spotify API maximum limit per request
     private static final Object lock = new Object();
 
@@ -44,8 +47,9 @@ public class PlaylistSetup {
     }
 
     public static void initialize(Context context) {
-        playlistCache = new PlaylistCache(context);
-        songCache = new SongCache(context);
+        appContext = context.getApplicationContext();
+        playlistCache = new PlaylistCache(appContext);
+        songCache = new SongCache(appContext);
 
         // Clean up expired song cache entries on initialization
         songCache.clearExpiredEntries();
@@ -91,15 +95,31 @@ public class PlaylistSetup {
                 .thenCompose(playlistSimplifiedPaging -> {
                     try {
                         if (playlistSimplifiedPaging != null) {
+                            DatabaseHelper dbHelper = appContext != null ? new DatabaseHelper(appContext) : null;
                             for (PlaylistSimplified playlist : playlistSimplifiedPaging.getItems()) {
                                 if (playlist.getTracks().getTotal() > 0) {
+                                    Image[] images = playlist.getImages();
+                                    String imageUrl = images != null && images.length > 0 ? images[0].getUrl() : null;
+                                    String owner = playlist.getOwner() != null ? playlist.getOwner().getId() : null;
+
                                     accumulatedPlaylists.add(new PlaylistModel(
                                             playlist.getId(),
                                             playlist.getName(),
                                             playlist.getTracks().getTotal(),
-                                            playlist.getImages(),
+                                            images,
                                             new ArrayList<>()
                                     ));
+
+                                    if (dbHelper != null) {
+                                        dbHelper.upsertPlaylist(
+                                                playlist.getId(),
+                                                playlist.getName(),
+                                                null,
+                                                imageUrl,
+                                                playlist.getTracks().getTotal(),
+                                                owner
+                                        );
+                                    }
                                 }
                             }
                             if (playlistSimplifiedPaging.getNext() != null) {
@@ -170,14 +190,14 @@ public class PlaylistSetup {
     }
 
     private static CompletableFuture<ArrayList<SongModel>> getAllSongs(
-            String id,
+            String playlistId,
             SpotifyApi spotifyApi,
             int offset,
             ArrayList<SongModel> accumulatedSongs,
             SongLoadProgressListener progressListener, int totalCount) {
 
         final GetPlaylistsItemsRequest getPlaylistsItemsRequest = spotifyApi
-                .getPlaylistsItems(id)
+                .getPlaylistsItems(playlistId)
                 .setQueryParameter("market", "from_token")
                 .offset(offset)
                 .limit(MAX_BATCH_SIZE)
@@ -186,14 +206,24 @@ public class PlaylistSetup {
         return getPlaylistsItemsRequest.executeAsync()
                 .thenCompose(playlistTrackPaging -> {
                     try {
+                        DatabaseHelper dbHelper = appContext != null ? new DatabaseHelper(appContext) : null;
+                        List<String> batchSongIds = new ArrayList<>();
+
                         for (PlaylistTrack playlistTrack : playlistTrackPaging.getItems()) {
                             if (playlistTrack.getTrack() instanceof Track) {
                                 SongModel songModel = getSongModel(playlistTrack);
                                 accumulatedSongs.add(songModel);
+                                batchSongIds.add(songModel.getId());
+
+                                if (dbHelper != null) {
+                                    upsertTrackToDb(dbHelper, (Track) playlistTrack.getTrack(), songModel);
+                                    String addedAtStr = formatDate(playlistTrack.getAddedAt());
+                                    dbHelper.upsertSongPlaylistLink(songModel.getId(), playlistId, addedAtStr);
+                                }
                             }
                         }
 
-                        // Get total count on first request
+                        // Reconcile removed songs once per batch (only on last page)
                         int total = totalCount == -1 ? playlistTrackPaging.getTotal() : totalCount;
 
                         // Report progress for this batch
@@ -204,8 +234,15 @@ public class PlaylistSetup {
 
                         // Continue loading if there are more songs
                         if (playlistTrackPaging.getNext() != null) {
-                            return getAllSongs(id, spotifyApi, offset + MAX_BATCH_SIZE,
+                            return getAllSongs(playlistId, spotifyApi, offset + MAX_BATCH_SIZE,
                                     accumulatedSongs, progressListener, total);
+                        }
+
+                        // All pages fetched — reconcile removals
+                        if (dbHelper != null) {
+                            List<String> allSongIds = new ArrayList<>();
+                            for (SongModel s : accumulatedSongs) allSongIds.add(s.getId());
+                            dbHelper.reconcilePlaylistSongs(playlistId, allSongIds);
                         }
 
                         return CompletableFuture.completedFuture(accumulatedSongs);
@@ -241,6 +278,8 @@ public class PlaylistSetup {
             ArrayList<SongModel> allSongs = new ArrayList<>(existingSongs);
 
             try {
+                DatabaseHelper dbHelper = appContext != null ? new DatabaseHelper(appContext) : null;
+
                 for (int i = 0; i < missingSongIds.size(); i += MAX_BATCH_SIZE) {
                     List<String> batchIds = missingSongIds.subList(i, Math.min(i + MAX_BATCH_SIZE, missingSongIds.size()));
 
@@ -255,6 +294,9 @@ public class PlaylistSetup {
                         if (tracks[trackIndex] != null) {
                             SongModel songModel = createSongModelFromTrack(tracks[trackIndex]);
                             allSongs.add(songModel);
+                            if (dbHelper != null) {
+                                upsertTrackToDb(dbHelper, tracks[trackIndex], songModel);
+                            }
                         } else {
                             Log.w("PlaylistSetup", "Track " + trackIndex + " was not found");
                         }
@@ -274,32 +316,49 @@ public class PlaylistSetup {
         });
     }
 
-    private static SongModel createSongModelFromTrack(Track track) {
+    private static void upsertTrackToDb(DatabaseHelper dbHelper, Track track, SongModel songModel) {
         AlbumSimplified trackAlbum = track.getAlbum();
-        Image[] images = trackAlbum.getImages();
-        String imageUrl = images.length > 0 ? images[0].getUrl() : "";
-
-        // Create Album object
-        SongModel.Album album = new SongModel.Album(
-                trackAlbum.getId(),
-                trackAlbum.getName(),
-                trackAlbum.getAlbumType().getType(),
-                trackAlbum.getReleaseDate(),
-                imageUrl
-        );
-
-        // Extract ISRC from external IDs
-        String isrc = "";
-        if (track.getExternalIds() != null && track.getExternalIds().getExternalIds() != null) {
-            Map<String, String> externalIds = track.getExternalIds().getExternalIds();
-            isrc = externalIds.getOrDefault("isrc", "");
+        if (trackAlbum != null && trackAlbum.getId() != null) {
+            Image[] images = trackAlbum.getImages();
+            String imageUrl = images != null && images.length > 0 ? images[0].getUrl() : null;
+            dbHelper.upsertAlbum(
+                    trackAlbum.getId(),
+                    trackAlbum.getName(),
+                    trackAlbum.getAlbumType() != null ? trackAlbum.getAlbumType().getType() : null,
+                    trackAlbum.getReleaseDate(),
+                    imageUrl
+            );
         }
 
+        dbHelper.upsertSong(songModel);
+
+        ArtistSimplified[] artists = track.getArtists();
+        if (artists != null) {
+            for (int i = 0; i < artists.length; i++) {
+                dbHelper.upsertArtist(artists[i].getId(), artists[i].getName());
+                dbHelper.upsertSongArtistLink(songModel.getId(), artists[i].getId(), i);
+            }
+        }
+    }
+
+    private static SongModel createSongModelFromTrack(Track track) {
+        AlbumSimplified trackAlbum = track.getAlbum();
+        Image[] images = trackAlbum != null ? trackAlbum.getImages() : null;
+        String imageUrl = images != null && images.length > 0 ? images[0].getUrl() : "";
+
+        SongModel.Album album = trackAlbum != null ? new SongModel.Album(
+                trackAlbum.getId(),
+                trackAlbum.getName(),
+                trackAlbum.getAlbumType() != null ? trackAlbum.getAlbumType().getType() : null,
+                trackAlbum.getReleaseDate(),
+                imageUrl
+        ) : null;
+
+        String isrc = extractIsrc(track);
         Boolean playable = track.getIsPlayable();
         ArtistSimplified[] artists = track.getArtists();
-        String primaryArtist = (artists != null && artists.length > 0) ? artists[0].getName() : null;
         return new SongModel(
-                SongModel.generateSongId(track.getName(), primaryArtist, track.getDurationMs()),
+                SongModel.generateSongId(track.getName(), SongModel.getPrimaryArtistName(artists), track.getDurationMs()),
                 track.getName(),
                 artists,
                 track.getDurationMs(),
@@ -307,48 +366,29 @@ public class PlaylistSetup {
                 track.getPopularity(),
                 album,
                 isrc,
-                null, // No playlist date for individual tracks
+                null,
                 playable == null || playable
         );
     }
 
     private static @NonNull SongModel getSongModel(PlaylistTrack playlistTrack) {
-        Track track = (Track) playlistTrack.getTrack();
-        AlbumSimplified trackAlbum = track.getAlbum();
-        Image[] images = trackAlbum.getImages();
-        String imageUrl = images.length > 0 ? images[0].getUrl() : "";
+        SongModel song = createSongModelFromTrack((Track) playlistTrack.getTrack());
+        song.setDateAddedToPlaylist(playlistTrack.getAddedAt());
+        return song;
+    }
 
-        // Create Album object
-        SongModel.Album album = new SongModel.Album(
-                trackAlbum.getId(),
-                trackAlbum.getName(),
-                trackAlbum.getAlbumType().getType(),
-                trackAlbum.getReleaseDate(),
-                imageUrl
-        );
-
-        // Extract ISRC from external IDs
-        String isrc = "";
+    private static String extractIsrc(Track track) {
         if (track.getExternalIds() != null && track.getExternalIds().getExternalIds() != null) {
             Map<String, String> externalIds = track.getExternalIds().getExternalIds();
-            isrc = externalIds.getOrDefault("isrc", "");
+            return externalIds.getOrDefault("isrc", "");
         }
+        return "";
+    }
 
-        Boolean playable = track.getIsPlayable();
-        ArtistSimplified[] artists = track.getArtists();
-        String primaryArtist = (artists != null && artists.length > 0) ? artists[0].getName() : null;
-        return new SongModel(
-                SongModel.generateSongId(track.getName(), primaryArtist, track.getDurationMs()),
-                track.getName(),
-                artists,
-                track.getDurationMs(),
-                track.getUri(),
-                track.getPopularity(),
-                album,
-                isrc,
-                playlistTrack.getAddedAt(),
-                playable == null || playable
-        );
+    private static String formatDate(Date date) {
+        if (date == null) return null;
+        return new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
+                .format(date);
     }
 
     public static CompletableFuture<ArrayList<PlaylistModel>> refreshPlaylists(String userID, SpotifyApi spotifyApi) {

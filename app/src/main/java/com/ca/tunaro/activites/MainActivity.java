@@ -11,6 +11,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.services.AutomaticFetcher;
+import com.ca.tunaro.services.SongRefreshService;
 import com.ca.tunaro.utils.DeviceChecker;
 import com.ca.tunaro.utils.PlaylistSetup;
 import com.ca.tunaro.R;
@@ -96,12 +97,14 @@ public class MainActivity extends AppCompatActivity {
                         Log.d(TAG, "Token refreshed after session restore");
                         performInitialDeviceCheck();
                         performAutomaticFetch();
+                        performBackgroundRefresh();
                     })
                     .exceptionally(e -> {
                         Log.e(TAG, "Token refresh failed after session restore", e);
                         // Still perform these even if refresh fails
                         performInitialDeviceCheck();
                         performAutomaticFetch();
+                        performBackgroundRefresh();
                         return null;
                     });
 
@@ -179,6 +182,7 @@ public class MainActivity extends AppCompatActivity {
             connectSpotifyAppRemote();
             performInitialDeviceCheck();
             performAutomaticFetch();
+            performBackgroundRefresh();
         }), executor);
     }
 
@@ -430,6 +434,15 @@ public class MainActivity extends AppCompatActivity {
                 Log.e(TAG, "Automatic fetch failed: " + error);
             }
         });
+    }
+
+    private void performBackgroundRefresh() {
+        if (spotifyApi == null) return;
+        new SongRefreshService(this, spotifyApi).refreshStaleSongs()
+                .exceptionally(e -> {
+                    Log.e(TAG, "Background song refresh failed", e);
+                    return null;
+                });
     }
 
     public CompletableFuture<String> refreshAccessToken() {
