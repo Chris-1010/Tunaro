@@ -16,10 +16,15 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.ca.tunaro.R;
 import com.ca.tunaro.activites.SongWebInfoActivity;
 import com.ca.tunaro.database.DatabaseHelper;
+import com.ca.tunaro.models.Artist;
 import com.ca.tunaro.models.SongModel;
+import com.ca.tunaro.models.SongVariant;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.button.MaterialButton;
 
 import java.util.LinkedHashMap;
@@ -115,6 +120,101 @@ public class SongDetailsFragment extends Fragment {
             popularityRow.setVisibility(View.VISIBLE);
             popularityView.setText(getString(R.string.popularity_value, popularity));
         }
+
+        // First seen
+        TextView firstSeenView = rootView.findViewById(R.id.first_seen_value);
+        firstSeenView.setText(formatAbsoluteDate(song.getCreatedAt()));
+
+        // Variants
+        List<SongVariant> variants = song.getVariants();
+        if (variants != null && variants.size() > 1) {
+            LinearLayout variantsRow = rootView.findViewById(R.id.variants_row);
+            TextView variantsValue = rootView.findViewById(R.id.variants_value);
+            variantsRow.setVisibility(View.VISIBLE);
+            variantsValue.setText(variants.size() + " encountered");
+            variantsRow.setOnClickListener(v -> showVariantsBottomSheet(variants));
+        }
+    }
+
+    private void showVariantsBottomSheet(List<SongVariant> variants) {
+        BottomSheetDialog dialog = new BottomSheetDialog(requireContext());
+        LinearLayout container = new LinearLayout(requireContext());
+        container.setOrientation(LinearLayout.VERTICAL);
+        int padding = dpToPx(16);
+        container.setPadding(padding, padding, padding, padding);
+
+        TextView title = new TextView(requireContext());
+        title.setText("Song Variants");
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(18f);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setPadding(0, 0, 0, dpToPx(12));
+        container.addView(title);
+
+        for (SongVariant variant : variants) {
+            LinearLayout row = new LinearLayout(requireContext());
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setPadding(0, dpToPx(8), 0, dpToPx(8));
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+
+            ImageView cover = new ImageView(requireContext());
+            int size = dpToPx(48);
+            LinearLayout.LayoutParams coverParams = new LinearLayout.LayoutParams(size, size);
+            coverParams.setMarginEnd(dpToPx(12));
+            cover.setLayoutParams(coverParams);
+            cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            cover.setClipToOutline(true);
+            cover.setBackgroundResource(R.drawable.rounded_md);
+            Glide.with(this)
+                    .load(variant.getAlbumCoverUrl())
+                    .placeholder(R.drawable.song_placeholder)
+                    .error(R.drawable.song_placeholder)
+                    .transition(DrawableTransitionOptions.withCrossFade())
+                    .into(cover);
+            row.addView(cover);
+
+            LinearLayout textBlock = new LinearLayout(requireContext());
+            textBlock.setOrientation(LinearLayout.VERTICAL);
+            textBlock.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+            TextView albumText = new TextView(requireContext());
+            albumText.setText(variant.getAlbumName() != null ? variant.getAlbumName() : "Unknown album");
+            albumText.setTextColor(Color.WHITE);
+            albumText.setTextSize(14f);
+            textBlock.addView(albumText);
+
+            List<Artist> artists = variant.getArtists();
+            if (artists != null && !artists.isEmpty()) {
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < artists.size(); i++) {
+                    if (i > 0) sb.append(", ");
+                    sb.append(artists.get(i).getName());
+                }
+                TextView artistText = new TextView(requireContext());
+                artistText.setText(sb.toString());
+                artistText.setTextColor(0xFFAAAAAA);
+                artistText.setTextSize(12f);
+                textBlock.addView(artistText);
+            }
+
+            if (variant.getPopularity() > 0) {
+                TextView popText = new TextView(requireContext());
+                popText.setText("Popularity: " + variant.getPopularity() + "%");
+                popText.setTextColor(0xFFAAAAAA);
+                popText.setTextSize(12f);
+                textBlock.addView(popText);
+            }
+
+            row.addView(textBlock);
+            container.addView(row);
+        }
+
+        dialog.setContentView(container);
+        dialog.show();
+    }
+
+    private int dpToPx(int dp) {
+        return Math.round(dp * getResources().getDisplayMetrics().density);
     }
 
     private void setupListeningHistory() {
@@ -241,6 +341,19 @@ public class SongDetailsFragment extends Fragment {
         }
 
         return releaseDate;
+    }
+
+    private String formatAbsoluteDate(String utcTimestamp) {
+        if (utcTimestamp == null || utcTimestamp.isEmpty()) return "Unknown";
+        try {
+            java.text.SimpleDateFormat inFmt = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US);
+            inFmt.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+            java.util.Date date = inFmt.parse(utcTimestamp);
+            java.text.SimpleDateFormat outFmt = new java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.US);
+            return outFmt.format(date);
+        } catch (Exception e) {
+            return utcTimestamp;
+        }
     }
 
     private String capitalise(String text) {
