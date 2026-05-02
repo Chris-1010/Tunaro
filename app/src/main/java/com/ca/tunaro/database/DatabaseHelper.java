@@ -1295,30 +1295,36 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return exists;
     }
 
-    // Holds state for bulk listen import — one open DB connection, in-memory dedup set, pending rows.
+    // Holds state for bulk listen import — one open DB connection, in-memory dedup sets, pending rows.
     public static class ListenImportBatch {
         final SQLiteDatabase db;
         final java.util.Set<String> existingKeys; // "songId\0timestamp"
+        final java.util.Set<String> existingUuids;
         final List<ContentValues> pending = new ArrayList<>();
 
-        ListenImportBatch(SQLiteDatabase db, java.util.Set<String> existingKeys) {
+        ListenImportBatch(SQLiteDatabase db, java.util.Set<String> existingKeys, java.util.Set<String> existingUuids) {
             this.db = db;
             this.existingKeys = existingKeys;
+            this.existingUuids = existingUuids;
         }
     }
 
     public ListenImportBatch beginListenImportBatch() {
         SQLiteDatabase db = this.getWritableDatabase();
         java.util.Set<String> existingKeys = new java.util.HashSet<>();
+        java.util.Set<String> existingUuids = new java.util.HashSet<>();
         Cursor cursor = db.rawQuery(
-                "SELECT " + COLUMN_SONG_ID + ", " + COLUMN_LISTEN_TIMESTAMP + " FROM " + TABLE_LISTEN_HISTORY, null);
+                "SELECT " + COLUMN_UUID + ", " + COLUMN_SONG_ID + ", " + COLUMN_LISTEN_TIMESTAMP
+                        + " FROM " + TABLE_LISTEN_HISTORY, null);
         if (cursor.moveToFirst()) {
             do {
-                existingKeys.add(cursor.getString(0) + "\0" + cursor.getString(1));
+                String uuid = cursor.getString(0);
+                if (uuid != null) existingUuids.add(uuid);
+                existingKeys.add(cursor.getString(1) + "\0" + cursor.getString(2));
             } while (cursor.moveToNext());
         }
         cursor.close();
-        return new ListenImportBatch(db, existingKeys);
+        return new ListenImportBatch(db, existingKeys, existingUuids);
     }
 
     public boolean hasExactListenInBatch(ListenImportBatch batch, String songId, String utcTimestamp) {
@@ -1326,7 +1332,10 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     public void addListenToBatch(ListenImportBatch batch, String uuid, String songId, String utcTimestamp) {
+        // Skip if this UUID is already in the DB (e.g. from a previous partial import run)
+        if (uuid != null && batch.existingUuids.contains(uuid)) return;
         batch.existingKeys.add(songId + "\0" + utcTimestamp);
+        if (uuid != null) batch.existingUuids.add(uuid);
         ContentValues values = new ContentValues();
         values.put(COLUMN_UUID, uuid != null ? uuid : java.util.UUID.randomUUID().toString());
         values.put(COLUMN_SONG_ID, songId);
