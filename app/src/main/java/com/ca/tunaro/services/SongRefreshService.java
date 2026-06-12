@@ -70,6 +70,7 @@ public class SongRefreshService {
                     if (validTrackIds.isEmpty()) continue;
 
                     try {
+                        Log.d(TAG, "API: getSeveralTracks count=" + validTrackIds.size() + " batchOffset=" + i);
                         Track[] tracks = spotifyApi
                                 .getSeveralTracks(String.join(",", validTrackIds))
                                 .setQueryParameter("market", "from_token")

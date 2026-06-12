@@ -57,6 +57,7 @@ public class DeviceChecker {
     }
 
     private static void doDeviceCheck(SpotifyApi spotifyApi, String expectedDeviceName, DeviceCheckCallback callback) {
+        Log.d(TAG, "API: getUsersAvailableDevices");
         spotifyApi.getUsersAvailableDevices()
                 .build()
                 .executeAsync()
