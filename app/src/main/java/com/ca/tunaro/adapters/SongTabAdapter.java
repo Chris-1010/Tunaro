@@ -10,13 +10,20 @@ import com.ca.tunaro.fragments.SongDetailsFragment;
 import com.ca.tunaro.fragments.SongNotesFragment;
 import com.ca.tunaro.fragments.SongSnippetsFragment;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class SongTabAdapter extends FragmentStateAdapter {
     private final SongModel song;
+    private final boolean isLoading;
+    private final ArrayList<String> variantUris;
     private final Fragment[] fragments = new Fragment[3];
 
-    public SongTabAdapter(@NonNull FragmentActivity fragmentActivity, SongModel song) {
+    public SongTabAdapter(@NonNull FragmentActivity fragmentActivity, SongModel song, boolean isLoading, List<String> variantUris) {
         super(fragmentActivity);
         this.song = song;
+        this.isLoading = isLoading;
+        this.variantUris = new ArrayList<>(variantUris);
     }
 
     @NonNull
@@ -24,13 +31,13 @@ public class SongTabAdapter extends FragmentStateAdapter {
     public Fragment createFragment(int position) {
         switch (position) {
             case 1:
-                fragments[1] = SongNotesFragment.newInstance(song);
+                fragments[1] = SongNotesFragment.newInstance(song, variantUris);
                 break;
             case 2:
-                fragments[2] = SongSnippetsFragment.newInstance(song);
+                fragments[2] = SongSnippetsFragment.newInstance(song, variantUris);
                 break;
             default:
-                fragments[0] = SongDetailsFragment.newInstance(song);
+                fragments[0] = SongDetailsFragment.newInstance(song, isLoading, variantUris);
         }
 
         return fragments[position];

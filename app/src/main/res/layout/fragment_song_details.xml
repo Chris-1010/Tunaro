@@ -13,8 +13,58 @@
         android:orientation="vertical"
         android:padding="16dp">
 
+        <!-- Shimmer placeholder shown while metadata is being fetched from API -->
+        <com.facebook.shimmer.ShimmerFrameLayout
+            android:id="@+id/details_shimmer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <View
+                    android:layout_width="200dp"
+                    android:layout_height="16dp"
+                    android:layout_marginHorizontal="12dp"
+                    android:layout_marginVertical="14dp"
+                    android:background="@color/shimmer_placeholder"
+                    app:shapeAppearanceOverlay="@style/roundedImageView" />
+
+                <View
+                    android:layout_width="130dp"
+                    android:layout_height="14dp"
+                    android:layout_marginHorizontal="12dp"
+                    android:layout_marginVertical="14dp"
+                    android:background="@color/shimmer_placeholder"
+                    app:shapeAppearanceOverlay="@style/roundedImageView" />
+
+                <View
+                    android:layout_width="100dp"
+                    android:layout_height="14dp"
+                    android:layout_marginHorizontal="12dp"
+                    android:layout_marginVertical="14dp"
+                    android:background="@color/shimmer_placeholder"
+                    app:shapeAppearanceOverlay="@style/roundedImageView" />
+
+                <View
+                    android:layout_width="120dp"
+                    android:layout_height="14dp"
+                    android:layout_marginHorizontal="12dp"
+                    android:layout_marginVertical="14dp"
+                    android:background="@color/shimmer_placeholder"
+                    app:shapeAppearanceOverlay="@style/roundedImageView" />
+
+            </LinearLayout>
+        </com.facebook.shimmer.ShimmerFrameLayout>
+
         <!-- Song Details -->
         <LinearLayout
+            android:id="@+id/details_content"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="24dp"
@@ -161,30 +211,6 @@
                     tools:text="75%" />
             </LinearLayout>
 
-            <!-- First Seen Row -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:padding="12dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="First seen"
-                    android:textColor="@android:color/white"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:id="@+id/first_seen_value"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textColor="@android:color/white"
-                    android:textSize="14sp"
-                    tools:text="2 Jan 2025" />
-            </LinearLayout>
-
             <!-- Variants Row -->
             <LinearLayout
                 android:id="@+id/variants_row"
@@ -304,6 +330,30 @@
             app:backgroundTint="@color/purple_700"
             app:cornerRadius="12dp"
             style="@style/Widget.MaterialComponents.Button" />
+
+        <TextView
+            android:id="@+id/first_seen_value"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:alpha="0.45"
+            android:gravity="center"
+            android:textColor="@android:color/white"
+            android:textSize="11sp"
+            tools:text="First seen 2 Jan 2025" />
+
+        <TextView
+            android:id="@+id/song_id_value"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="16dp"
+            android:alpha="0.35"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:textColor="@android:color/white"
+            android:textSize="10sp"
+            tools:text="song composite id" />
 
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>
