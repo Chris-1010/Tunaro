@@ -11,10 +11,10 @@ import android.util.Log;
 
 import com.ca.tunaro.models.Artist;
 import com.ca.tunaro.models.ListenHistoryEntry;
+import com.ca.tunaro.models.PlaylistModel;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.models.SongNote;
 import com.ca.tunaro.models.SongSnippet;
-import com.ca.tunaro.models.SongVariant;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
@@ -36,15 +36,14 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     private static final String TAG = "DatabaseHelper";
     private static final String DATABASE_NAME = "TunaroDB";
-    private static final int DATABASE_VERSION = 9;
+    private static final int DATABASE_VERSION = 13;
 
     // Table names
     private static final String TABLE_ARTISTS = "artists";
     private static final String TABLE_ALBUMS = "albums";
     private static final String TABLE_SONGS = "songs";
     private static final String TABLE_SONG_ARTISTS = "song_artists";
-    private static final String TABLE_SONG_VARIANTS = "song_variants";
-    private static final String TABLE_SONG_VARIANT_ARTISTS = "song_variant_artists";
+    private static final String TABLE_SONG_ISRC_LINKS = "song_isrc_links";
     private static final String TABLE_PLAYLISTS = "playlists";
     private static final String TABLE_SONG_PLAYLISTS = "song_playlists";
     private static final String TABLE_SONG_NOTES = "song_notes";
@@ -67,7 +66,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String COLUMN_COVER_IMAGE_URL = "cover_image_url";
 
     // Songs columns
-    private static final String COLUMN_SONG_ID = "song_id";
     private static final String COLUMN_SONG_NAME = "name";
     private static final String COLUMN_DURATION_MS = "duration_ms";
     private static final String COLUMN_SPOTIFY_URI = "spotify_uri";
@@ -76,14 +74,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String COLUMN_IS_PLAYABLE = "is_playable";
     private static final String COLUMN_CREATED_AT = "created_at";
     private static final String COLUMN_LAST_REFRESHED_AT = "last_refreshed_at";
-    private static final String COLUMN_USER_CANONICAL_VARIANT_ID = "user_canonical_variant_id";
 
     // Song artists columns
     private static final String COLUMN_POSITION = "position";
 
     // Song variants columns
-    private static final String COLUMN_VARIANT_ID = "variant_id";
-    private static final String COLUMN_FIRST_SEEN_AT = "first_seen_at";
 
     // Playlists columns
     private static final String COLUMN_PLAYLIST_ID = "playlist_id";
@@ -91,6 +86,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String COLUMN_DESCRIPTION = "description";
     private static final String COLUMN_IMAGE_URL = "image_url";
     private static final String COLUMN_TRACK_COUNT = "track_count";
+    private static final String COLUMN_REMOTE_TRACK_COUNT = "remote_track_count";
     private static final String COLUMN_OWNER = "owner";
     private static final String COLUMN_IS_FAVOURITE = "is_favourite";
     private static final String COLUMN_IS_ARCHIVED = "is_archived";
@@ -134,43 +130,30 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     private static final String CREATE_TABLE_SONGS =
             "CREATE TABLE " + TABLE_SONGS + "("
-                    + COLUMN_SONG_ID + " TEXT PRIMARY KEY,"
+                    + COLUMN_SPOTIFY_URI + " TEXT PRIMARY KEY,"
                     + COLUMN_SONG_NAME + " TEXT NOT NULL,"
                     + COLUMN_DURATION_MS + " INTEGER NOT NULL,"
-                    + COLUMN_SPOTIFY_URI + " TEXT NOT NULL,"
                     + COLUMN_ISRC + " TEXT,"
                     + COLUMN_POPULARITY + " INTEGER DEFAULT 0,"
                     + COLUMN_IS_PLAYABLE + " INTEGER DEFAULT 1,"
                     + COLUMN_ALBUM_ID + " TEXT,"
-                    + COLUMN_USER_CANONICAL_VARIANT_ID + " INTEGER,"
                     + COLUMN_CREATED_AT + " TEXT NOT NULL,"
                     + COLUMN_LAST_REFRESHED_AT + " TEXT"
                     + ")";
 
     private static final String CREATE_TABLE_SONG_ARTISTS =
             "CREATE TABLE " + TABLE_SONG_ARTISTS + "("
-                    + COLUMN_SONG_ID + " TEXT NOT NULL,"
-                    + COLUMN_ARTIST_ID + " TEXT NOT NULL,"
-                    + COLUMN_POSITION + " INTEGER NOT NULL,"
-                    + "PRIMARY KEY (" + COLUMN_SONG_ID + ", " + COLUMN_ARTIST_ID + ")"
-                    + ")";
-
-    private static final String CREATE_TABLE_SONG_VARIANTS =
-            "CREATE TABLE " + TABLE_SONG_VARIANTS + "("
-                    + COLUMN_VARIANT_ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    + COLUMN_SONG_ID + " TEXT NOT NULL,"
                     + COLUMN_SPOTIFY_URI + " TEXT NOT NULL,"
-                    + COLUMN_ALBUM_ID + " TEXT,"
-                    + COLUMN_POPULARITY + " INTEGER DEFAULT 0,"
-                    + COLUMN_FIRST_SEEN_AT + " TEXT NOT NULL"
-                    + ")";
-
-    private static final String CREATE_TABLE_SONG_VARIANT_ARTISTS =
-            "CREATE TABLE " + TABLE_SONG_VARIANT_ARTISTS + "("
-                    + COLUMN_VARIANT_ID + " INTEGER NOT NULL,"
                     + COLUMN_ARTIST_ID + " TEXT NOT NULL,"
                     + COLUMN_POSITION + " INTEGER NOT NULL,"
-                    + "PRIMARY KEY (" + COLUMN_VARIANT_ID + ", " + COLUMN_ARTIST_ID + ")"
+                    + "PRIMARY KEY (" + COLUMN_SPOTIFY_URI + ", " + COLUMN_ARTIST_ID + ")"
+                    + ")";
+
+    private static final String CREATE_TABLE_SONG_ISRC_LINKS =
+            "CREATE TABLE " + TABLE_SONG_ISRC_LINKS + "("
+                    + COLUMN_ISRC + " TEXT NOT NULL,"
+                    + COLUMN_SPOTIFY_URI + " TEXT NOT NULL,"
+                    + "PRIMARY KEY (" + COLUMN_ISRC + ", " + COLUMN_SPOTIFY_URI + ")"
                     + ")";
 
     private static final String CREATE_TABLE_PLAYLISTS =
@@ -180,6 +163,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     + COLUMN_DESCRIPTION + " TEXT,"
                     + COLUMN_IMAGE_URL + " TEXT,"
                     + COLUMN_TRACK_COUNT + " INTEGER DEFAULT 0,"
+                    + COLUMN_REMOTE_TRACK_COUNT + " INTEGER DEFAULT 0,"
                     + COLUMN_OWNER + " TEXT,"
                     + COLUMN_IS_FAVOURITE + " INTEGER DEFAULT 0,"
                     + COLUMN_IS_ARCHIVED + " INTEGER DEFAULT 0"
@@ -187,18 +171,18 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     private static final String CREATE_TABLE_SONG_PLAYLISTS =
             "CREATE TABLE " + TABLE_SONG_PLAYLISTS + "("
-                    + COLUMN_SONG_ID + " TEXT NOT NULL,"
+                    + COLUMN_SPOTIFY_URI + " TEXT NOT NULL,"
                     + COLUMN_PLAYLIST_ID + " TEXT NOT NULL,"
                     + COLUMN_ADDED_AT + " TEXT,"
                     + COLUMN_REMOVED_AT + " TEXT,"
-                    + "PRIMARY KEY (" + COLUMN_SONG_ID + ", " + COLUMN_PLAYLIST_ID + ")"
+                    + "PRIMARY KEY (" + COLUMN_SPOTIFY_URI + ", " + COLUMN_PLAYLIST_ID + ")"
                     + ")";
 
     private static final String CREATE_TABLE_SONG_NOTES =
             "CREATE TABLE " + TABLE_SONG_NOTES + "("
                     + COLUMN_UUID + " TEXT UNIQUE NOT NULL,"
                     + COLUMN_ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    + COLUMN_SONG_ID + " TEXT NOT NULL,"
+                    + COLUMN_SPOTIFY_URI + " TEXT NOT NULL,"
                     + COLUMN_NOTE_TYPE + " TEXT NOT NULL,"
                     + COLUMN_CONTENT + " TEXT NOT NULL,"
                     + COLUMN_TIMESTAMP + " TEXT DEFAULT (strftime('%d-%m-%Y %H:%M', 'now', 'localtime'))"
@@ -208,7 +192,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             "CREATE TABLE " + TABLE_SONG_SNIPPETS + "("
                     + COLUMN_UUID + " TEXT UNIQUE NOT NULL,"
                     + COLUMN_ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    + COLUMN_SONG_ID + " TEXT NOT NULL,"
+                    + COLUMN_SPOTIFY_URI + " TEXT NOT NULL,"
                     + COLUMN_SNIPPET_NO + " INTEGER NOT NULL,"
                     + COLUMN_TITLE + " TEXT,"
                     + COLUMN_START_TIME + " INTEGER NOT NULL,"
@@ -220,7 +204,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             "CREATE TABLE " + TABLE_LISTEN_HISTORY + "("
                     + COLUMN_UUID + " TEXT UNIQUE NOT NULL,"
                     + COLUMN_ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    + COLUMN_SONG_ID + " TEXT NOT NULL,"
+                    + COLUMN_SPOTIFY_URI + " TEXT NOT NULL,"
                     + COLUMN_LISTEN_TIMESTAMP + " TEXT NOT NULL"
                     + ")";
 
@@ -236,8 +220,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.execSQL(CREATE_TABLE_ALBUMS);
         db.execSQL(CREATE_TABLE_SONGS);
         db.execSQL(CREATE_TABLE_SONG_ARTISTS);
-        db.execSQL(CREATE_TABLE_SONG_VARIANTS);
-        db.execSQL(CREATE_TABLE_SONG_VARIANT_ARTISTS);
+        db.execSQL(CREATE_TABLE_SONG_ISRC_LINKS);
         db.execSQL(CREATE_TABLE_PLAYLISTS);
         db.execSQL(CREATE_TABLE_SONG_PLAYLISTS);
         db.execSQL(CREATE_TABLE_SONG_NOTES);
@@ -247,21 +230,172 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        // Fresh schema — drop everything and recreate
-        db.execSQL("DROP TABLE IF EXISTS favourite_playlists");
-        db.execSQL("DROP TABLE IF EXISTS archived_playlists");
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_ARTISTS);
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_ALBUMS);
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONG_ARTISTS);
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONG_VARIANT_ARTISTS);
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONG_VARIANTS);
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONG_PLAYLISTS);
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_PLAYLISTS);
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONGS);
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONG_NOTES);
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONG_SNIPPETS);
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_LISTEN_HISTORY);
-        onCreate(db);
+        if (oldVersion == 11) {
+            // v11→v12: Migrate primary key from composite name|artist|duration to spotify_uri.
+            // Only runs from v11 — earlier versions lack the spotify_uri column on songs and fall
+            // through to the drop-and-recreate path below.
+            //
+            // Ordering is critical: listen_history rows use the old composite song_id, so we
+            // need the songs table (which maps song_id → spotify_uri) available during that step.
+            // All child tables are kept as _old until we have everything we need, then swapped.
+            //
+            // Steps:
+            //  1. Merge duplicate songs that share a spotify_uri into the oldest row
+            //  2. Rename all old tables to _old
+            //  3. Create all new tables
+            //  4. Copy data, resolving song_id → spotify_uri via songs_old where needed
+            //  5. Drop _old tables, create song_isrc_links, populate from songs data
+
+            // Step 1 — merge duplicate songs sharing the same spotify_uri
+            android.database.Cursor dupes = db.rawQuery(
+                "SELECT spotify_uri FROM songs GROUP BY spotify_uri HAVING COUNT(*) > 1", null);
+            java.util.List<String> dupeUris = new java.util.ArrayList<>();
+            try { while (dupes.moveToNext()) dupeUris.add(dupes.getString(0)); } finally { dupes.close(); }
+
+            for (String uri : dupeUris) {
+                android.database.Cursor wc = db.rawQuery(
+                    "SELECT song_id FROM songs WHERE spotify_uri=? ORDER BY created_at ASC, rowid ASC LIMIT 1",
+                    new String[]{uri});
+                String winner = null;
+                try { if (wc.moveToFirst()) winner = wc.getString(0); } finally { wc.close(); }
+                if (winner == null) continue;
+
+                android.database.Cursor lc = db.rawQuery(
+                    "SELECT song_id FROM songs WHERE spotify_uri=? AND song_id!=?",
+                    new String[]{uri, winner});
+                java.util.List<String> losers = new java.util.ArrayList<>();
+                try { while (lc.moveToNext()) losers.add(lc.getString(0)); } finally { lc.close(); }
+
+                for (String loser : losers) {
+                    db.execSQL("UPDATE song_notes SET song_id=? WHERE song_id=?", new String[]{winner, loser});
+                    db.execSQL("UPDATE song_snippets SET song_id=? WHERE song_id=?", new String[]{winner, loser});
+                    db.execSQL("UPDATE listen_history SET song_id=? WHERE song_id=?", new String[]{winner, loser});
+                    db.execSQL(
+                        "UPDATE song_playlists SET song_id=? WHERE song_id=? " +
+                        "AND NOT EXISTS (SELECT 1 FROM song_playlists sp2 WHERE sp2.song_id=? AND sp2.playlist_id=song_playlists.playlist_id)",
+                        new String[]{winner, loser, winner});
+                    db.execSQL("DELETE FROM song_playlists WHERE song_id=?", new String[]{loser});
+                    db.execSQL("DELETE FROM song_artists WHERE song_id=?", new String[]{loser});
+                    db.execSQL("DELETE FROM songs WHERE song_id=?", new String[]{loser});
+                }
+            }
+            Log.i(TAG, "DB v12: merged " + dupeUris.size() + " duplicate URI groups");
+
+            // Step 2 — rename all tables to _old (keep them available for data copy)
+            db.execSQL("ALTER TABLE songs RENAME TO songs_old");
+            db.execSQL("ALTER TABLE song_artists RENAME TO song_artists_old");
+            db.execSQL("ALTER TABLE song_playlists RENAME TO song_playlists_old");
+            db.execSQL("ALTER TABLE song_notes RENAME TO song_notes_old");
+            db.execSQL("ALTER TABLE song_snippets RENAME TO song_snippets_old");
+            db.execSQL("ALTER TABLE listen_history RENAME TO listen_history_old");
+
+            // Step 3 — create new tables
+            db.execSQL(CREATE_TABLE_SONGS);
+            db.execSQL(CREATE_TABLE_SONG_ARTISTS);
+            db.execSQL(CREATE_TABLE_SONG_PLAYLISTS);
+            db.execSQL(CREATE_TABLE_SONG_NOTES);
+            db.execSQL(CREATE_TABLE_SONG_SNIPPETS);
+            db.execSQL(CREATE_TABLE_LISTEN_HISTORY);
+            db.execSQL(CREATE_TABLE_SONG_ISRC_LINKS);
+
+            // Step 4 — copy data
+
+            // songs: spotify_uri becomes PK, drop song_id and user_canonical_variant_id
+            db.execSQL(
+                "INSERT INTO songs (spotify_uri, name, duration_ms, isrc, popularity, is_playable, album_id, created_at, last_refreshed_at) " +
+                "SELECT spotify_uri, name, duration_ms, isrc, popularity, is_playable, album_id, created_at, last_refreshed_at FROM songs_old");
+
+            // song_artists: song_id → spotify_uri via songs_old
+            db.execSQL(
+                "INSERT OR IGNORE INTO song_artists (spotify_uri, artist_id, position) " +
+                "SELECT so.spotify_uri, sa.artist_id, sa.position " +
+                "FROM song_artists_old sa JOIN songs_old so ON so.song_id = sa.song_id");
+
+            // song_playlists: song_id → spotify_uri via songs_old
+            db.execSQL(
+                "INSERT OR IGNORE INTO song_playlists (spotify_uri, playlist_id, added_at, removed_at) " +
+                "SELECT so.spotify_uri, sp.playlist_id, sp.added_at, sp.removed_at " +
+                "FROM song_playlists_old sp JOIN songs_old so ON so.song_id = sp.song_id");
+
+            // song_notes: song_id → spotify_uri via songs_old; keep URI-format placeholders as-is
+            db.execSQL(
+                "INSERT OR IGNORE INTO song_notes (uuid, id, spotify_uri, note_type, content, timestamp) " +
+                "SELECT sn.uuid, sn.id, so.spotify_uri, sn.note_type, sn.content, sn.timestamp " +
+                "FROM song_notes_old sn JOIN songs_old so ON so.song_id = sn.song_id");
+            db.execSQL(
+                "INSERT OR IGNORE INTO song_notes (uuid, id, spotify_uri, note_type, content, timestamp) " +
+                "SELECT sn.uuid, sn.id, sn.song_id, sn.note_type, sn.content, sn.timestamp " +
+                "FROM song_notes_old sn WHERE sn.song_id LIKE 'spotify:track:%' " +
+                "AND NOT EXISTS (SELECT 1 FROM song_notes WHERE uuid = sn.uuid)");
+
+            // song_snippets: same pattern
+            db.execSQL(
+                "INSERT OR IGNORE INTO song_snippets (uuid, id, spotify_uri, snippet_no, title, start_time, end_time, include_in_rankings) " +
+                "SELECT ss.uuid, ss.id, so.spotify_uri, ss.snippet_no, ss.title, ss.start_time, ss.end_time, ss.include_in_rankings " +
+                "FROM song_snippets_old ss JOIN songs_old so ON so.song_id = ss.song_id");
+            db.execSQL(
+                "INSERT OR IGNORE INTO song_snippets (uuid, id, spotify_uri, snippet_no, title, start_time, end_time, include_in_rankings) " +
+                "SELECT ss.uuid, ss.id, ss.song_id, ss.snippet_no, ss.title, ss.start_time, ss.end_time, ss.include_in_rankings " +
+                "FROM song_snippets_old ss WHERE ss.song_id LIKE 'spotify:track:%' " +
+                "AND NOT EXISTS (SELECT 1 FROM song_snippets WHERE uuid = ss.uuid)");
+
+            // listen_history: song_id is either the old composite key or already spotify:track: format
+            // Composite key rows: join via songs_old to get the spotify_uri
+            db.execSQL(
+                "INSERT OR IGNORE INTO listen_history (uuid, id, spotify_uri, listen_timestamp) " +
+                "SELECT lh.uuid, lh.id, so.spotify_uri, lh.listen_timestamp " +
+                "FROM listen_history_old lh JOIN songs_old so ON so.song_id = lh.song_id " +
+                "WHERE lh.song_id NOT LIKE 'spotify:track:%'");
+            // URI-format rows: pass through directly
+            db.execSQL(
+                "INSERT OR IGNORE INTO listen_history (uuid, id, spotify_uri, listen_timestamp) " +
+                "SELECT lh.uuid, lh.id, lh.song_id, lh.listen_timestamp " +
+                "FROM listen_history_old lh WHERE lh.song_id LIKE 'spotify:track:%'");
+
+            // song_isrc_links: populate from songs that have an ISRC
+            db.execSQL(
+                "INSERT OR IGNORE INTO song_isrc_links (isrc, spotify_uri) " +
+                "SELECT isrc, spotify_uri FROM songs WHERE isrc IS NOT NULL AND isrc != ''");
+
+            // Step 5 — drop old tables and legacy variant tables
+            db.execSQL("DROP TABLE songs_old");
+            db.execSQL("DROP TABLE song_artists_old");
+            db.execSQL("DROP TABLE song_playlists_old");
+            db.execSQL("DROP TABLE song_notes_old");
+            db.execSQL("DROP TABLE song_snippets_old");
+            db.execSQL("DROP TABLE listen_history_old");
+            db.execSQL("DROP TABLE IF EXISTS song_variants");
+            db.execSQL("DROP TABLE IF EXISTS song_variant_artists");
+            db.execSQL("DROP TABLE IF EXISTS favourite_playlists");
+            db.execSQL("DROP TABLE IF EXISTS archived_playlists");
+
+            Log.i(TAG, "DB v12 migration complete");
+            oldVersion = 12;
+        }
+
+        if (oldVersion == 12) {
+            db.execSQL("ALTER TABLE " + TABLE_PLAYLISTS + " ADD COLUMN " + COLUMN_REMOTE_TRACK_COUNT + " INTEGER DEFAULT 0");
+            Log.i(TAG, "DB v13 migration complete");
+            oldVersion = 13;
+        }
+
+        if (oldVersion < newVersion) {
+            db.execSQL("DROP TABLE IF EXISTS favourite_playlists");
+            db.execSQL("DROP TABLE IF EXISTS archived_playlists");
+            db.execSQL("DROP TABLE IF EXISTS song_variant_artists");
+            db.execSQL("DROP TABLE IF EXISTS song_variants");
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_ARTISTS);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_ALBUMS);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONG_ARTISTS);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONG_ISRC_LINKS);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONG_PLAYLISTS);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_PLAYLISTS);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONGS);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONG_NOTES);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONG_SNIPPETS);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_LISTEN_HISTORY);
+            onCreate(db);
+        }
     }
 
     //#endregion
@@ -302,123 +436,93 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         String now = utcNow();
 
         ContentValues values = new ContentValues();
-        values.put(COLUMN_SONG_ID, song.getId());
+        values.put(COLUMN_SPOTIFY_URI, song.getId());
         values.put(COLUMN_SONG_NAME, song.getName());
         values.put(COLUMN_DURATION_MS, song.getDuration());
-        values.put(COLUMN_SPOTIFY_URI, song.getUri());
         values.put(COLUMN_ISRC, song.getIsrc());
         values.put(COLUMN_ALBUM_ID, song.getAlbumId());
         values.put(COLUMN_IS_PLAYABLE, song.isPlayable() ? 1 : 0);
+        values.put(COLUMN_CREATED_AT, now);
 
-        // On conflict: update mutable fields only, preserve created_at and user_canonical_variant_id
         long result = db.insertWithOnConflict(TABLE_SONGS, null, values, SQLiteDatabase.CONFLICT_IGNORE);
         if (result == -1) {
-            // Row already exists — update mutable fields
             ContentValues update = new ContentValues();
-            update.put(COLUMN_SPOTIFY_URI, song.getUri());
             update.put(COLUMN_ISRC, song.getIsrc());
             update.put(COLUMN_ALBUM_ID, song.getAlbumId());
             update.put(COLUMN_IS_PLAYABLE, song.isPlayable() ? 1 : 0);
-            db.update(TABLE_SONGS, update, COLUMN_SONG_ID + " = ?", new String[]{song.getId()});
-        } else {
-            // New row — set created_at
-            ContentValues createdAt = new ContentValues();
-            createdAt.put(COLUMN_CREATED_AT, now);
-            db.update(TABLE_SONGS, createdAt, COLUMN_SONG_ID + " = ?", new String[]{song.getId()});
+            db.update(TABLE_SONGS, update, COLUMN_SPOTIFY_URI + " = ?", new String[]{song.getId()});
         }
 
         db.close();
 
-        // Upsert song–artist links
-        upsertSongArtists(song);
+        // Upsert ISRC link if present
+        if (song.getIsrc() != null && !song.getIsrc().isEmpty()) {
+            upsertIsrcLink(song.getIsrc(), song.getId());
+        }
     }
 
-    private void upsertSongArtists(SongModel song) {
-        String[] artistNames = song.getArtistArray();
-        if (artistNames == null) return;
-        // song_artists uses artist_id from artists table; for remote-track songs we don't have IDs
-        // so we skip — this is populated properly via PlaylistSetup/LibraryActivity paths
-    }
-
-    public void upsertSongArtistLink(String songId, String artistId, int position) {
+    public void upsertSongArtistLink(String spotifyUri, String artistId, int position) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
-        values.put(COLUMN_SONG_ID, songId);
+        values.put(COLUMN_SPOTIFY_URI, spotifyUri);
         values.put(COLUMN_ARTIST_ID, artistId);
         values.put(COLUMN_POSITION, position);
         db.insertWithOnConflict(TABLE_SONG_ARTISTS, null, values, SQLiteDatabase.CONFLICT_REPLACE);
         db.close();
     }
 
-    public void updateSongPopularity(String songId, int popularity) {
+    public void upsertIsrcLink(String isrc, String spotifyUri) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_ISRC, isrc);
+        values.put(COLUMN_SPOTIFY_URI, spotifyUri);
+        db.insertWithOnConflict(TABLE_SONG_ISRC_LINKS, null, values, SQLiteDatabase.CONFLICT_IGNORE);
+        db.close();
+    }
+
+    public void updateSongPopularity(String spotifyUri, int popularity) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
         values.put(COLUMN_POPULARITY, popularity);
         values.put(COLUMN_LAST_REFRESHED_AT, utcNow());
-        db.update(TABLE_SONGS, values, COLUMN_SONG_ID + " = ?", new String[]{songId});
+        db.update(TABLE_SONGS, values, COLUMN_SPOTIFY_URI + " = ?", new String[]{spotifyUri});
         db.close();
     }
 
-    public void updateSongIsPlayable(String songId, boolean isPlayable) {
+    public void updateSongIsPlayable(String spotifyUri, boolean isPlayable) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
         values.put(COLUMN_IS_PLAYABLE, isPlayable ? 1 : 0);
         values.put(COLUMN_LAST_REFRESHED_AT, utcNow());
-        db.update(TABLE_SONGS, values, COLUMN_SONG_ID + " = ?", new String[]{songId});
+        db.update(TABLE_SONGS, values, COLUMN_SPOTIFY_URI + " = ?", new String[]{spotifyUri});
         db.close();
     }
 
-    public void refreshSong(String songId, int popularity, boolean isPlayable) {
+    public void refreshSong(String spotifyUri, int popularity, boolean isPlayable) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
         values.put(COLUMN_POPULARITY, popularity);
         values.put(COLUMN_IS_PLAYABLE, isPlayable ? 1 : 0);
         values.put(COLUMN_LAST_REFRESHED_AT, utcNow());
-        db.update(TABLE_SONGS, values, COLUMN_SONG_ID + " = ?", new String[]{songId});
+        db.update(TABLE_SONGS, values, COLUMN_SPOTIFY_URI + " = ?", new String[]{spotifyUri});
         db.close();
     }
 
-    public void promoteVariantToCanonical(String songId, long variantId) {
-        SQLiteDatabase db = this.getWritableDatabase();
-
-        // Fetch the variant
-        Cursor cursor = db.rawQuery(
-                "SELECT " + COLUMN_SPOTIFY_URI + ", " + COLUMN_ALBUM_ID +
-                        " FROM " + TABLE_SONG_VARIANTS +
-                        " WHERE " + COLUMN_VARIANT_ID + " = ?",
-                new String[]{String.valueOf(variantId)});
-
-        if (cursor.moveToFirst()) {
-            String variantUri = cursor.getString(0);
-            String variantAlbumId = cursor.getString(1);
-
-            ContentValues values = new ContentValues();
-            values.put(COLUMN_USER_CANONICAL_VARIANT_ID, variantId);
-            values.put(COLUMN_SPOTIFY_URI, variantUri);
-            if (variantAlbumId != null) values.put(COLUMN_ALBUM_ID, variantAlbumId);
-            db.update(TABLE_SONGS, values, COLUMN_SONG_ID + " = ?", new String[]{songId});
-        }
-
-        cursor.close();
-        db.close();
-    }
-
-    // Returns songId → spotifyUri for songs not refreshed in the last 7 days
+    // Returns spotifyUri → spotifyUri for songs not refreshed in the last 7 days
+    // (both columns are now the same — kept as Map for API compatibility with SongRefreshService)
     public Map<String, String> getSongsNeedingRefresh() {
         Map<String, String> result = new HashMap<>();
         String sevenDaysAgo = utcDaysAgo(7);
-
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
-                "SELECT " + COLUMN_SONG_ID + ", " + COLUMN_SPOTIFY_URI + " FROM " + TABLE_SONGS +
-                        " WHERE " + COLUMN_SPOTIFY_URI + " IS NOT NULL AND (" +
-                        COLUMN_LAST_REFRESHED_AT + " IS NULL OR " +
-                        COLUMN_LAST_REFRESHED_AT + " < ?)",
+                "SELECT " + COLUMN_SPOTIFY_URI + " FROM " + TABLE_SONGS +
+                        " WHERE " + COLUMN_LAST_REFRESHED_AT + " IS NULL OR " +
+                        COLUMN_LAST_REFRESHED_AT + " < ?",
                 new String[]{sevenDaysAgo});
-
         if (cursor.moveToFirst()) {
             do {
-                result.put(cursor.getString(0), cursor.getString(1));
+                String uri = cursor.getString(0);
+                result.put(uri, uri);
             } while (cursor.moveToNext());
         }
         cursor.close();
@@ -426,45 +530,21 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return result;
     }
 
-    // Maps Spotify track IDs → composite song_ids in a single query
-    public Map<String, String> getSongIdsBySpotifyTrackIds(List<String> spotifyTrackIds) {
-        Map<String, String> result = new HashMap<>();
-        if (spotifyTrackIds == null || spotifyTrackIds.isEmpty()) return result;
-
-        List<String> uris = new ArrayList<>(spotifyTrackIds.size());
-        for (String id : spotifyTrackIds) uris.add(SongModel.SPOTIFY_TRACK_URI_PREFIX + id);
-
-        SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(
-                "SELECT " + COLUMN_SONG_ID + ", " + COLUMN_SPOTIFY_URI + " FROM " + TABLE_SONGS +
-                        " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + buildPlaceholders(uris.size()) + ")",
-                uris.toArray(new String[0]));
-        while (cursor.moveToNext()) {
-            String songId = cursor.getString(0);
-            String uri = cursor.getString(1);
-            String trackId = uri.substring(SongModel.SPOTIFY_TRACK_URI_PREFIX.length());
-            result.put(trackId, songId);
-        }
-        cursor.close();
-        db.close();
-        return result;
-    }
-
     // Lean SongModel — for list views (PlaylistView, LibraryActivity)
-    public SongModel getLeanSong(String songId) {
+    public SongModel getLeanSong(String spotifyUri) {
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
-                "SELECT s." + COLUMN_SONG_ID + ", s." + COLUMN_SONG_NAME +
+                "SELECT s." + COLUMN_SPOTIFY_URI + ", s." + COLUMN_SONG_NAME +
                         ", s." + COLUMN_DURATION_MS + ", s." + COLUMN_SPOTIFY_URI +
                         ", s." + COLUMN_POPULARITY + ", a." + COLUMN_COVER_IMAGE_URL +
                         ", a." + COLUMN_ALBUM_NAME + ", a." + COLUMN_RELEASE_DATE +
                         ", ar." + COLUMN_ARTIST_NAME +
                         " FROM " + TABLE_SONGS + " s" +
                         " LEFT JOIN " + TABLE_ALBUMS + " a ON s." + COLUMN_ALBUM_ID + " = a." + COLUMN_ALBUM_ID +
-                        " LEFT JOIN " + TABLE_SONG_ARTISTS + " sa ON s." + COLUMN_SONG_ID + " = sa." + COLUMN_SONG_ID + " AND sa." + COLUMN_POSITION + " = 0" +
+                        " LEFT JOIN " + TABLE_SONG_ARTISTS + " sa ON s." + COLUMN_SPOTIFY_URI + " = sa." + COLUMN_SPOTIFY_URI + " AND sa." + COLUMN_POSITION + " = 0" +
                         " LEFT JOIN " + TABLE_ARTISTS + " ar ON sa." + COLUMN_ARTIST_ID + " = ar." + COLUMN_ARTIST_ID +
-                        " WHERE s." + COLUMN_SONG_ID + " = ?",
-                new String[]{songId});
+                        " WHERE s." + COLUMN_SPOTIFY_URI + " = ?",
+                new String[]{spotifyUri});
 
         SongModel song = null;
         if (cursor.moveToFirst()) {
@@ -476,55 +556,50 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     // Full SongModel — for SongView
-    public SongModel getFullSong(String songId) {
+    public SongModel getFullSong(String spotifyUri) {
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
-                "SELECT s.*, a." + COLUMN_ALBUM_NAME + ", a." + COLUMN_ALBUM_TYPE +
-                        ", a." + COLUMN_RELEASE_DATE + ", a." + COLUMN_COVER_IMAGE_URL +
+                "SELECT s.*, a." + COLUMN_ALBUM_NAME + " AS album_name, a." + COLUMN_ALBUM_TYPE +
+                        ", a." + COLUMN_RELEASE_DATE + ", a." + COLUMN_COVER_IMAGE_URL + " AS album_cover" +
                         " FROM " + TABLE_SONGS + " s" +
                         " LEFT JOIN " + TABLE_ALBUMS + " a ON s." + COLUMN_ALBUM_ID + " = a." + COLUMN_ALBUM_ID +
-                        " WHERE s." + COLUMN_SONG_ID + " = ?",
-                new String[]{songId});
+                        " WHERE s." + COLUMN_SPOTIFY_URI + " = ?",
+                new String[]{spotifyUri});
 
         SongModel song = null;
         if (cursor.moveToFirst()) {
-            String id = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SONG_ID));
+            String uri = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SPOTIFY_URI));
             String name = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SONG_NAME));
             int duration = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_DURATION_MS));
-            String uri = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SPOTIFY_URI));
             String isrc = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_ISRC));
             int popularity = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_POPULARITY));
             boolean isPlayable = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_IS_PLAYABLE)) == 1;
             String albumId = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_ALBUM_ID));
             String createdAt = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_CREATED_AT));
-            String albumName = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_ALBUM_NAME));
+            String albumName = cursor.getString(cursor.getColumnIndexOrThrow("album_name"));
             String albumType = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_ALBUM_TYPE));
             String releaseDate = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_RELEASE_DATE));
-            String coverImageUrl = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_COVER_IMAGE_URL));
+            String coverImageUrl = cursor.getString(cursor.getColumnIndexOrThrow("album_cover"));
 
-            // Fetch all artists for this song
-            List<Artist> artistList = getSongArtists(songId);
+            List<Artist> artistList = getSongArtists(spotifyUri);
             String primaryArtist = !artistList.isEmpty() ? artistList.get(0).getName() : null;
             String[] artistNames = new String[artistList.size()];
             for (int i = 0; i < artistList.size(); i++) artistNames[i] = artistList.get(i).getName();
 
-            song = new SongModel(id, name, primaryArtist, artistNames, duration, uri, coverImageUrl,
+            song = new SongModel(uri, name, primaryArtist, artistNames, duration, uri, coverImageUrl,
                     popularity, albumId, albumName, albumType, releaseDate, isrc, isPlayable, createdAt);
         }
         cursor.close();
         db.close();
 
-        if (song != null) {
-            song.setVariants(getSongVariants(songId));
-        }
         return song;
     }
 
-    public boolean songExists(String songId) {
+    public boolean songExists(String spotifyUri) {
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
-                "SELECT 1 FROM " + TABLE_SONGS + " WHERE " + COLUMN_SONG_ID + " = ?",
-                new String[]{songId});
+                "SELECT 1 FROM " + TABLE_SONGS + " WHERE " + COLUMN_SPOTIFY_URI + " = ?",
+                new String[]{spotifyUri});
         boolean exists = cursor.moveToFirst();
         cursor.close();
         db.close();
@@ -532,32 +607,32 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     private SongModel leanSongFromCursor(Cursor cursor) {
-        String id = cursor.getString(0);
+        String uri = cursor.getString(0);
         String name = cursor.getString(1);
         int duration = cursor.getInt(2);
-        String uri = cursor.getString(3);
+        // column 3 is also spotify_uri (same value, selected twice for compatibility)
         int popularity = cursor.getInt(4);
         String coverImageUrl = cursor.getString(5);
         String albumName = cursor.getString(6);
         String releaseDate = cursor.getString(7);
         String primaryArtist = cursor.getString(8);
-        return new SongModel(id, name, primaryArtist, duration, uri, coverImageUrl, popularity, albumName, releaseDate);
+        return new SongModel(uri, name, primaryArtist, duration, uri, coverImageUrl, popularity, albumName, releaseDate);
     }
 
     //#endregion
 
     //#region ======== SONG ARTISTS ========
 
-    public List<Artist> getSongArtists(String songId) {
+    public List<Artist> getSongArtists(String spotifyUri) {
         List<Artist> artists = new ArrayList<>();
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
                 "SELECT ar." + COLUMN_ARTIST_ID + ", ar." + COLUMN_ARTIST_NAME +
                         " FROM " + TABLE_SONG_ARTISTS + " sa" +
                         " JOIN " + TABLE_ARTISTS + " ar ON sa." + COLUMN_ARTIST_ID + " = ar." + COLUMN_ARTIST_ID +
-                        " WHERE sa." + COLUMN_SONG_ID + " = ?" +
+                        " WHERE sa." + COLUMN_SPOTIFY_URI + " = ?" +
                         " ORDER BY sa." + COLUMN_POSITION + " ASC",
-                new String[]{songId});
+                new String[]{spotifyUri});
 
         if (cursor.moveToFirst()) {
             do {
@@ -571,135 +646,128 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     //#endregion
 
-    //#region ======== SONG VARIANTS ========
+    //#region ======== SONG ISRC LINKS ========
 
-    // Returns variant_id if a variant with this URI already exists for the song, else -1
-    public long getVariantIdByUri(String songId, String spotifyUri) {
-        SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(
-                "SELECT " + COLUMN_VARIANT_ID + " FROM " + TABLE_SONG_VARIANTS +
-                        " WHERE " + COLUMN_SONG_ID + " = ? AND " + COLUMN_SPOTIFY_URI + " = ?",
-                new String[]{songId, spotifyUri});
-        long id = cursor.moveToFirst() ? cursor.getLong(0) : -1;
-        cursor.close();
-        db.close();
-        return id;
-    }
-
-    public long insertVariant(String songId, String spotifyUri, String albumId, int popularity) {
-        SQLiteDatabase db = this.getWritableDatabase();
-        ContentValues values = new ContentValues();
-        values.put(COLUMN_SONG_ID, songId);
-        values.put(COLUMN_SPOTIFY_URI, spotifyUri);
-        values.put(COLUMN_ALBUM_ID, albumId);
-        values.put(COLUMN_POPULARITY, popularity);
-        values.put(COLUMN_FIRST_SEEN_AT, utcNow());
-        long id = db.insert(TABLE_SONG_VARIANTS, null, values);
-        db.close();
-        return id;
-    }
-
-    public void updateVariantPopularity(long variantId, int popularity) {
-        SQLiteDatabase db = this.getWritableDatabase();
-        ContentValues values = new ContentValues();
-        values.put(COLUMN_POPULARITY, popularity);
-        db.update(TABLE_SONG_VARIANTS, values, COLUMN_VARIANT_ID + " = ?", new String[]{String.valueOf(variantId)});
-        db.close();
-    }
-
-    public void upsertVariantArtistLink(long variantId, String artistId, int position) {
-        SQLiteDatabase db = this.getWritableDatabase();
-        ContentValues values = new ContentValues();
-        values.put(COLUMN_VARIANT_ID, variantId);
-        values.put(COLUMN_ARTIST_ID, artistId);
-        values.put(COLUMN_POSITION, position);
-        db.insertWithOnConflict(TABLE_SONG_VARIANT_ARTISTS, null, values, SQLiteDatabase.CONFLICT_REPLACE);
-        db.close();
-    }
-
-    public List<SongVariant> getSongVariants(String songId) {
-        List<SongVariant> variants = new ArrayList<>();
-        SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(
-                "SELECT sv." + COLUMN_VARIANT_ID + ", sv." + COLUMN_SONG_ID +
-                        ", sv." + COLUMN_SPOTIFY_URI + ", sv." + COLUMN_ALBUM_ID +
-                        ", a." + COLUMN_ALBUM_NAME + ", a." + COLUMN_COVER_IMAGE_URL +
-                        ", sv." + COLUMN_POPULARITY + ", sv." + COLUMN_FIRST_SEEN_AT +
-                        " FROM " + TABLE_SONG_VARIANTS + " sv" +
-                        " LEFT JOIN " + TABLE_ALBUMS + " a ON sv." + COLUMN_ALBUM_ID + " = a." + COLUMN_ALBUM_ID +
-                        " WHERE sv." + COLUMN_SONG_ID + " = ?" +
-                        " ORDER BY sv." + COLUMN_VARIANT_ID + " ASC",
-                new String[]{songId});
-
-        if (cursor.moveToFirst()) {
-            do {
-                SongVariant v = new SongVariant(
-                        cursor.getLong(0), cursor.getString(1), cursor.getString(2),
-                        cursor.getString(3), cursor.getString(4), cursor.getString(5),
-                        cursor.getInt(6), cursor.getString(7));
-                variants.add(v);
-            } while (cursor.moveToNext());
-        }
-        cursor.close();
-        db.close();
-
-        // Populate artists for each variant
-        for (SongVariant v : variants) {
-            v.setArtists(getVariantArtists(v.getVariantId()));
-        }
-        return variants;
-    }
-
-    private List<Artist> getVariantArtists(long variantId) {
-        List<Artist> artists = new ArrayList<>();
-        SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(
-                "SELECT ar." + COLUMN_ARTIST_ID + ", ar." + COLUMN_ARTIST_NAME +
-                        " FROM " + TABLE_SONG_VARIANT_ARTISTS + " sva" +
-                        " JOIN " + TABLE_ARTISTS + " ar ON sva." + COLUMN_ARTIST_ID + " = ar." + COLUMN_ARTIST_ID +
-                        " WHERE sva." + COLUMN_VARIANT_ID + " = ?" +
-                        " ORDER BY sva." + COLUMN_POSITION + " ASC",
-                new String[]{String.valueOf(variantId)});
-
-        if (cursor.moveToFirst()) {
-            do {
-                artists.add(new Artist(cursor.getString(0), cursor.getString(1)));
-            } while (cursor.moveToNext());
-        }
-        cursor.close();
-        db.close();
-        return artists;
-    }
-
-    // Recomputes songs.popularity as max across all variants (and the canonical row itself)
-    public void recomputeMaxPopularity(String songId, int canonicalPopularity) {
-        SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(
-                "SELECT MAX(" + COLUMN_POPULARITY + ") FROM " + TABLE_SONG_VARIANTS +
-                        " WHERE " + COLUMN_SONG_ID + " = ?",
-                new String[]{songId});
-
-        int maxVariantPop = cursor.moveToFirst() ? cursor.getInt(0) : 0;
-        cursor.close();
-        db.close();
-
-        int maxPop = Math.max(canonicalPopularity, maxVariantPop);
-        updateSongPopularity(songId, maxPop);
-    }
-
-    public List<String> getVariantSpotifyUris(String songId) {
+    // Returns all spotify URIs that share the same ISRC as the given URI (i.e. same recording, different releases)
+    public List<String> getIsrcLinkedUris(String spotifyUri) {
         List<String> uris = new ArrayList<>();
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
-                "SELECT " + COLUMN_SPOTIFY_URI + " FROM " + TABLE_SONG_VARIANTS +
-                        " WHERE " + COLUMN_SONG_ID + " = ?",
-                new String[]{songId});
+                "SELECT sil2." + COLUMN_SPOTIFY_URI +
+                        " FROM " + TABLE_SONG_ISRC_LINKS + " sil1" +
+                        " JOIN " + TABLE_SONG_ISRC_LINKS + " sil2 ON sil1." + COLUMN_ISRC + " = sil2." + COLUMN_ISRC +
+                        " WHERE sil1." + COLUMN_SPOTIFY_URI + " = ? AND sil2." + COLUMN_SPOTIFY_URI + " != ?",
+                new String[]{spotifyUri, spotifyUri});
         if (cursor.moveToFirst()) {
             do { uris.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
         db.close();
         return uris;
+    }
+
+    // Returns the max popularity across all variant URIs (used to show the best known value)
+    public int getMaxPopularityForUris(List<String> uris) {
+        if (uris == null || uris.isEmpty()) return 0;
+        String placeholders = makePlaceholders(uris.size());
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT MAX(" + COLUMN_POPULARITY + ") FROM " + TABLE_SONGS +
+                        " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + placeholders + ")",
+                uris.toArray(new String[0]));
+        int max = 0;
+        if (cursor.moveToFirst()) max = cursor.getInt(0);
+        cursor.close();
+        db.close();
+        return max;
+    }
+
+    public List<String> getListenHistoryForUris(List<String> uris) {
+        List<String> timestamps = new ArrayList<>();
+        if (uris == null || uris.isEmpty()) return timestamps;
+        String placeholders = makePlaceholders(uris.size());
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT " + COLUMN_LISTEN_TIMESTAMP + " FROM " + TABLE_LISTEN_HISTORY +
+                        " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + placeholders + ")" +
+                        " ORDER BY " + COLUMN_LISTEN_TIMESTAMP + " ASC",
+                uris.toArray(new String[0]));
+        if (cursor.moveToFirst()) {
+            do { timestamps.add(cursor.getString(0)); } while (cursor.moveToNext());
+        }
+        cursor.close();
+        db.close();
+        return timestamps;
+    }
+
+    public List<SongNote> getSongNotesForUris(List<String> uris) {
+        List<SongNote> notes = new ArrayList<>();
+        if (uris == null || uris.isEmpty()) return notes;
+        String placeholders = makePlaceholders(uris.size());
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT * FROM " + TABLE_SONG_NOTES +
+                        " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + placeholders + ")" +
+                        " ORDER BY " + COLUMN_TIMESTAMP + " ASC",
+                uris.toArray(new String[0]));
+        if (cursor.moveToFirst()) {
+            do { notes.add(noteFromCursor(cursor)); } while (cursor.moveToNext());
+        }
+        cursor.close();
+        db.close();
+        return notes;
+    }
+
+    public List<SongSnippet> getSongSnippetsForUris(List<String> uris) {
+        List<SongSnippet> snippets = new ArrayList<>();
+        if (uris == null || uris.isEmpty()) return snippets;
+        String placeholders = makePlaceholders(uris.size());
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT * FROM " + TABLE_SONG_SNIPPETS +
+                        " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + placeholders + ")" +
+                        " ORDER BY " + COLUMN_SNIPPET_NO + " ASC",
+                uris.toArray(new String[0]));
+        if (cursor.moveToFirst()) {
+            do { snippets.add(snippetFromCursor(cursor)); } while (cursor.moveToNext());
+        }
+        cursor.close();
+        db.close();
+        return snippets;
+    }
+
+    public List<PlaylistLink> getPlaylistsForUris(List<String> uris) {
+        List<PlaylistLink> result = new ArrayList<>();
+        if (uris == null || uris.isEmpty()) return result;
+        String placeholders = makePlaceholders(uris.size());
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT DISTINCT sp." + COLUMN_PLAYLIST_ID + ", p." + COLUMN_PLAYLIST_NAME +
+                        ", p." + COLUMN_IMAGE_URL + ", sp." + COLUMN_REMOVED_AT +
+                        " FROM " + TABLE_SONG_PLAYLISTS + " sp" +
+                        " JOIN " + TABLE_PLAYLISTS + " p ON sp." + COLUMN_PLAYLIST_ID + " = p." + COLUMN_PLAYLIST_ID +
+                        " WHERE sp." + COLUMN_SPOTIFY_URI + " IN (" + placeholders + ")" +
+                        " ORDER BY sp." + COLUMN_REMOVED_AT + " IS NOT NULL ASC, p." + COLUMN_PLAYLIST_NAME + " ASC",
+                uris.toArray(new String[0]));
+        if (cursor.moveToFirst()) {
+            do {
+                result.add(new PlaylistLink(
+                        cursor.getString(0), cursor.getString(1),
+                        cursor.getString(2), cursor.getString(3)));
+            } while (cursor.moveToNext());
+        }
+        cursor.close();
+        db.close();
+        return result;
+    }
+
+    private static String makePlaceholders(int count) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < count; i++) {
+            if (i > 0) sb.append(',');
+            sb.append('?');
+        }
+        return sb.toString();
     }
 
     //#endregion
@@ -715,19 +783,81 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_DESCRIPTION, description);
         values.put(COLUMN_IMAGE_URL, imageUrl);
         values.put(COLUMN_TRACK_COUNT, trackCount);
+        values.put(COLUMN_REMOTE_TRACK_COUNT, trackCount);
         values.put(COLUMN_OWNER, owner);
-        // Preserve is_favourite and is_archived on conflict
+        // track_count is managed by updatePlaylistTrackCount after scanning; remote_track_count always reflects latest Spotify total
         long result = db.insertWithOnConflict(TABLE_PLAYLISTS, null, values, SQLiteDatabase.CONFLICT_IGNORE);
         if (result == -1) {
             ContentValues update = new ContentValues();
             update.put(COLUMN_PLAYLIST_NAME, name);
             update.put(COLUMN_DESCRIPTION, description);
             update.put(COLUMN_IMAGE_URL, imageUrl);
-            update.put(COLUMN_TRACK_COUNT, trackCount);
+            update.put(COLUMN_REMOTE_TRACK_COUNT, trackCount);
             update.put(COLUMN_OWNER, owner);
             db.update(TABLE_PLAYLISTS, update, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
         }
         db.close();
+    }
+
+    public void updatePlaylistTrackCount(String playlistId, int trackCount) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        // Read the current remote_track_count so we can stamp track_count to match it.
+        // This way the skip check (track_count == remote_track_count) will pass on the next
+        // launch even when the playlist has duplicates (remote=1143, distinct=1128).
+        int remoteCount = trackCount;
+        Cursor c = db.rawQuery(
+                "SELECT " + COLUMN_REMOTE_TRACK_COUNT + " FROM " + TABLE_PLAYLISTS +
+                " WHERE " + COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
+        if (c.moveToFirst()) remoteCount = c.getInt(0);
+        c.close();
+
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_TRACK_COUNT, remoteCount);
+        db.update(TABLE_PLAYLISTS, values, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
+        db.close();
+    }
+
+    public void upsertPlaylistStub(String playlistId, boolean isArchived, boolean isFavourite) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_PLAYLIST_ID, playlistId);
+        values.put(COLUMN_PLAYLIST_NAME, "");
+        values.put(COLUMN_IS_ARCHIVED, isArchived ? 1 : 0);
+        values.put(COLUMN_IS_FAVOURITE, isFavourite ? 1 : 0);
+        long result = db.insertWithOnConflict(TABLE_PLAYLISTS, null, values, SQLiteDatabase.CONFLICT_IGNORE);
+        if (result == -1) {
+            // Row exists — just update the flag, don't touch name/image/etc
+            ContentValues update = new ContentValues();
+            if (isArchived)  update.put(COLUMN_IS_ARCHIVED, 1);
+            if (isFavourite) update.put(COLUMN_IS_FAVOURITE, 1);
+            if (!update.isEmpty()) {
+                db.update(TABLE_PLAYLISTS, update, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
+            }
+        }
+        db.close();
+    }
+
+    public PlaylistModel getPlaylistById(String playlistId) {
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT " + COLUMN_PLAYLIST_NAME + ", " + COLUMN_IMAGE_URL + ", " + COLUMN_TRACK_COUNT +
+                        ", " + COLUMN_IS_FAVOURITE +
+                        " FROM " + TABLE_PLAYLISTS +
+                        " WHERE " + COLUMN_PLAYLIST_ID + " = ?",
+                new String[]{playlistId});
+        PlaylistModel result = null;
+        if (cursor.moveToFirst()) {
+            String name = cursor.getString(0);
+            String imageUrl = cursor.getString(1);
+            int trackCount = cursor.getInt(2);
+            boolean isFavourite = cursor.getInt(3) == 1;
+            result = new PlaylistModel(playlistId, name, trackCount, null, new ArrayList<>());
+            result.setImageUrl(imageUrl);
+            result.setFavourite(isFavourite);
+        }
+        cursor.close();
+        db.close();
+        return result;
     }
 
     public void favouritePlaylist(String playlistId) {
@@ -797,47 +927,95 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return ids;
     }
 
+    public void deletePlaylist(String playlistId) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        db.delete(TABLE_SONG_PLAYLISTS, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
+        db.delete(TABLE_PLAYLISTS, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
+        db.close();
+    }
+
     //#endregion
 
     //#region ======== SONG–PLAYLIST LINKS ========
 
-    public void upsertSongPlaylistLink(String songId, String playlistId, String addedAt) {
+    public List<String> getAllPlaylistIds() {
+        List<String> ids = new ArrayList<>();
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery("SELECT " + COLUMN_PLAYLIST_ID + " FROM " + TABLE_PLAYLISTS, null);
+        if (cursor.moveToFirst()) {
+            do { ids.add(cursor.getString(0)); } while (cursor.moveToNext());
+        }
+        cursor.close();
+        db.close();
+        return ids;
+    }
+
+    public static class PlaylistScanInfo {
+        public final int remoteCount;   // latest Spotify tracks.total
+        public final int scannedCount;  // remote total at the time of last scan (== remoteCount when up to date)
+        public final String name;
+        public PlaylistScanInfo(int remoteCount, int scannedCount, String name) {
+            this.remoteCount = remoteCount;
+            this.scannedCount = scannedCount;
+            this.name = name;
+        }
+    }
+
+    public Map<String, PlaylistScanInfo> getPlaylistTrackCounts() {
+        Map<String, PlaylistScanInfo> result = new HashMap<>();
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT p." + COLUMN_PLAYLIST_ID + ", p." + COLUMN_REMOTE_TRACK_COUNT +
+                ", p." + COLUMN_TRACK_COUNT +
+                ", p." + COLUMN_PLAYLIST_NAME +
+                " FROM " + TABLE_PLAYLISTS + " p",
+                null);
+        if (cursor.moveToFirst()) {
+            do {
+                result.put(cursor.getString(0),
+                        new PlaylistScanInfo(cursor.getInt(1), cursor.getInt(2), cursor.getString(3)));
+            } while (cursor.moveToNext());
+        }
+        cursor.close();
+        db.close();
+        return result;
+    }
+
+    public void upsertSongPlaylistLink(String spotifyUri, String playlistId, String addedAt) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
-        values.put(COLUMN_SONG_ID, songId);
+        values.put(COLUMN_SPOTIFY_URI, spotifyUri);
         values.put(COLUMN_PLAYLIST_ID, playlistId);
         values.put(COLUMN_ADDED_AT, addedAt);
         values.putNull(COLUMN_REMOVED_AT);
         long result = db.insertWithOnConflict(TABLE_SONG_PLAYLISTS, null, values, SQLiteDatabase.CONFLICT_IGNORE);
         if (result == -1) {
-            // Already exists — clear removed_at in case it was previously removed
             ContentValues update = new ContentValues();
             update.putNull(COLUMN_REMOVED_AT);
             db.update(TABLE_SONG_PLAYLISTS, update,
-                    COLUMN_SONG_ID + " = ? AND " + COLUMN_PLAYLIST_ID + " = ?",
-                    new String[]{songId, playlistId});
+                    COLUMN_SPOTIFY_URI + " = ? AND " + COLUMN_PLAYLIST_ID + " = ?",
+                    new String[]{spotifyUri, playlistId});
         }
         db.close();
     }
 
-    public void markSongRemovedFromPlaylist(String songId, String playlistId) {
+    public void markSongRemovedFromPlaylist(String spotifyUri, String playlistId) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
         values.put(COLUMN_REMOVED_AT, utcNow());
         db.update(TABLE_SONG_PLAYLISTS, values,
-                COLUMN_SONG_ID + " = ? AND " + COLUMN_PLAYLIST_ID + " = ? AND " + COLUMN_REMOVED_AT + " IS NULL",
-                new String[]{songId, playlistId});
+                COLUMN_SPOTIFY_URI + " = ? AND " + COLUMN_PLAYLIST_ID + " = ? AND " + COLUMN_REMOVED_AT + " IS NULL",
+                new String[]{spotifyUri, playlistId});
         db.close();
     }
 
-    // Returns all playlist IDs the song is linked to (both active and removed)
-    public List<String> getPlaylistIdsForSong(String songId) {
+    public List<String> getPlaylistIdsForSong(String spotifyUri) {
         List<String> ids = new ArrayList<>();
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
                 "SELECT " + COLUMN_PLAYLIST_ID + " FROM " + TABLE_SONG_PLAYLISTS +
-                        " WHERE " + COLUMN_SONG_ID + " = ?",
-                new String[]{songId});
+                        " WHERE " + COLUMN_SPOTIFY_URI + " = ?",
+                new String[]{spotifyUri});
         if (cursor.moveToFirst()) {
             do { ids.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
@@ -846,14 +1024,13 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return ids;
     }
 
-    // Returns playlist IDs still active (not removed) for a song
-    public List<String> getActivePlaylistIdsForSong(String songId) {
+    public List<String> getActivePlaylistIdsForSong(String spotifyUri) {
         List<String> ids = new ArrayList<>();
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
                 "SELECT " + COLUMN_PLAYLIST_ID + " FROM " + TABLE_SONG_PLAYLISTS +
-                        " WHERE " + COLUMN_SONG_ID + " = ? AND " + COLUMN_REMOVED_AT + " IS NULL",
-                new String[]{songId});
+                        " WHERE " + COLUMN_SPOTIFY_URI + " = ? AND " + COLUMN_REMOVED_AT + " IS NULL",
+                new String[]{spotifyUri});
         if (cursor.moveToFirst()) {
             do { ids.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
@@ -862,28 +1039,26 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return ids;
     }
 
-    // Returns active song IDs for a given playlist
-    public List<String> getActiveSongIdsForPlaylist(String playlistId) {
-        List<String> ids = new ArrayList<>();
+    public List<String> getActiveSongUrisForPlaylist(String playlistId) {
+        List<String> uris = new ArrayList<>();
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
-                "SELECT " + COLUMN_SONG_ID + " FROM " + TABLE_SONG_PLAYLISTS +
+                "SELECT " + COLUMN_SPOTIFY_URI + " FROM " + TABLE_SONG_PLAYLISTS +
                         " WHERE " + COLUMN_PLAYLIST_ID + " = ? AND " + COLUMN_REMOVED_AT + " IS NULL",
                 new String[]{playlistId});
         if (cursor.moveToFirst()) {
-            do { ids.add(cursor.getString(0)); } while (cursor.moveToNext());
+            do { uris.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
         db.close();
-        return ids;
+        return uris;
     }
 
-    // Used during sync: marks any song–playlist links no longer in the current track list as removed
-    public void reconcilePlaylistSongs(String playlistId, List<String> currentSongIds) {
-        List<String> storedActive = getActiveSongIdsForPlaylist(playlistId);
-        for (String storedId : storedActive) {
-            if (!currentSongIds.contains(storedId)) {
-                markSongRemovedFromPlaylist(storedId, playlistId);
+    public void reconcilePlaylistSongs(String playlistId, List<String> currentSongUris) {
+        List<String> storedActive = getActiveSongUrisForPlaylist(playlistId);
+        for (String storedUri : storedActive) {
+            if (!currentSongUris.contains(storedUri)) {
+                markSongRemovedFromPlaylist(storedUri, playlistId);
             }
         }
     }
@@ -892,7 +1067,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         public final String playlistId;
         public final String name;
         public final String imageUrl;
-        public final String removedAt; // null = currently active
+        public final String removedAt;
 
         public PlaylistLink(String playlistId, String name, String imageUrl, String removedAt) {
             this.playlistId = playlistId;
@@ -904,7 +1079,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         public boolean isActive() { return removedAt == null; }
     }
 
-    public List<PlaylistLink> getPlaylistsForSong(String songId) {
+    public List<PlaylistLink> getPlaylistsForSong(String spotifyUri) {
         List<PlaylistLink> result = new ArrayList<>();
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
@@ -912,9 +1087,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                         ", p." + COLUMN_IMAGE_URL + ", sp." + COLUMN_REMOVED_AT +
                         " FROM " + TABLE_SONG_PLAYLISTS + " sp" +
                         " JOIN " + TABLE_PLAYLISTS + " p ON sp." + COLUMN_PLAYLIST_ID + " = p." + COLUMN_PLAYLIST_ID +
-                        " WHERE sp." + COLUMN_SONG_ID + " = ?" +
+                        " WHERE sp." + COLUMN_SPOTIFY_URI + " = ?" +
                         " ORDER BY sp." + COLUMN_REMOVED_AT + " IS NOT NULL ASC, p." + COLUMN_PLAYLIST_NAME + " ASC",
-                new String[]{songId});
+                new String[]{spotifyUri});
         if (cursor.moveToFirst()) {
             do {
                 result.add(new PlaylistLink(
@@ -943,14 +1118,14 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return allNotes;
     }
 
-    public List<SongNote> getSongNotes(String songId) {
+    public List<SongNote> getSongNotes(String spotifyUri) {
         List<SongNote> notes = new ArrayList<>();
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
                 "SELECT * FROM " + TABLE_SONG_NOTES +
-                        " WHERE " + COLUMN_SONG_ID + " = ?" +
+                        " WHERE " + COLUMN_SPOTIFY_URI + " = ?" +
                         " ORDER BY " + COLUMN_TIMESTAMP + " ASC",
-                new String[]{songId});
+                new String[]{spotifyUri});
         if (cursor.moveToFirst()) {
             do { notes.add(noteFromCursor(cursor)); } while (cursor.moveToNext());
         }
@@ -967,7 +1142,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         }
         ContentValues values = new ContentValues();
         values.put(COLUMN_UUID, note.getUuid());
-        values.put(COLUMN_SONG_ID, note.getSongId());
+        values.put(COLUMN_SPOTIFY_URI, note.getSongId());
         values.put(COLUMN_NOTE_TYPE, note.getNoteType());
         values.put(COLUMN_CONTENT, note.getContent());
         long id = db.insert(TABLE_SONG_NOTES, null, values);
@@ -994,10 +1169,10 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.close();
     }
 
-    public boolean hasSongNotes(String songId) {
+    public boolean hasSongNotes(String spotifyUri) {
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.query(TABLE_SONG_NOTES, new String[]{COLUMN_ID},
-                COLUMN_SONG_ID + " = ?", new String[]{songId}, null, null, null, "1");
+                COLUMN_SPOTIFY_URI + " = ?", new String[]{spotifyUri}, null, null, null, "1");
         boolean has = cursor.moveToFirst();
         cursor.close();
         db.close();
@@ -1008,7 +1183,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         List<String> ids = new ArrayList<>();
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
-                "SELECT DISTINCT " + COLUMN_SONG_ID + " FROM " + TABLE_SONG_NOTES +
+                "SELECT DISTINCT " + COLUMN_SPOTIFY_URI + " FROM " + TABLE_SONG_NOTES +
                         " ORDER BY " + COLUMN_TIMESTAMP + " DESC", null);
         if (cursor.moveToFirst()) {
             do { ids.add(cursor.getString(0)); } while (cursor.moveToNext());
@@ -1044,7 +1219,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return new SongNote(
                 cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_UUID)),
                 cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_ID)),
-                cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SONG_ID)),
+                cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SPOTIFY_URI)),
                 cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_NOTE_TYPE)),
                 cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_CONTENT)),
                 cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TIMESTAMP)));
@@ -1066,14 +1241,14 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return all;
     }
 
-    public List<SongSnippet> getSongSnippets(String songId) {
+    public List<SongSnippet> getSongSnippets(String spotifyUri) {
         List<SongSnippet> snippets = new ArrayList<>();
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
                 "SELECT * FROM " + TABLE_SONG_SNIPPETS +
-                        " WHERE " + COLUMN_SONG_ID + " = ?" +
+                        " WHERE " + COLUMN_SPOTIFY_URI + " = ?" +
                         " ORDER BY " + COLUMN_SNIPPET_NO + " ASC",
-                new String[]{songId});
+                new String[]{spotifyUri});
         if (cursor.moveToFirst()) {
             do { snippets.add(snippetFromCursor(cursor)); } while (cursor.moveToNext());
         }
@@ -1090,7 +1265,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         }
         ContentValues values = new ContentValues();
         values.put(COLUMN_UUID, snippet.getUuid());
-        values.put(COLUMN_SONG_ID, snippet.getSongId());
+        values.put(COLUMN_SPOTIFY_URI, snippet.getSongId());
         values.put(COLUMN_SNIPPET_NO, snippet.getSnippetNo());
         values.put(COLUMN_TITLE, snippet.getTitle());
         values.put(COLUMN_START_TIME, snippet.getStartTime());
@@ -1120,10 +1295,10 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.close();
     }
 
-    public boolean hasSongSnippets(String songId) {
+    public boolean hasSongSnippets(String spotifyUri) {
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.query(TABLE_SONG_SNIPPETS, new String[]{COLUMN_ID},
-                COLUMN_SONG_ID + " = ?", new String[]{songId}, null, null, null, "1");
+                COLUMN_SPOTIFY_URI + " = ?", new String[]{spotifyUri}, null, null, null, "1");
         boolean has = cursor.moveToFirst();
         cursor.close();
         db.close();
@@ -1134,7 +1309,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         List<String> ids = new ArrayList<>();
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
-                "SELECT DISTINCT " + COLUMN_SONG_ID + " FROM " + TABLE_SONG_SNIPPETS +
+                "SELECT DISTINCT " + COLUMN_SPOTIFY_URI + " FROM " + TABLE_SONG_SNIPPETS +
                         " ORDER BY " + COLUMN_ID + " DESC", null);
         if (cursor.moveToFirst()) {
             do { ids.add(cursor.getString(0)); } while (cursor.moveToNext());
@@ -1148,7 +1323,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return new SongSnippet(
                 cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_UUID)),
                 cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_ID)),
-                cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SONG_ID)),
+                cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SPOTIFY_URI)),
                 cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SNIPPET_NO)),
                 cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TITLE)),
                 cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_START_TIME)),
@@ -1169,7 +1344,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 all.add(new ListenHistoryEntry(
                         cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_UUID)),
                         cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_ID)),
-                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SONG_ID)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SPOTIFY_URI)),
                         cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_LISTEN_TIMESTAMP))));
             } while (cursor.moveToNext());
         }
@@ -1178,33 +1353,33 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return all;
     }
 
-    public void addListenRecord(String songId) {
+    public void addListenRecord(String spotifyUri) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
         values.put(COLUMN_UUID, java.util.UUID.randomUUID().toString());
-        values.put(COLUMN_SONG_ID, songId);
+        values.put(COLUMN_SPOTIFY_URI, spotifyUri);
         values.put(COLUMN_LISTEN_TIMESTAMP, utcNow());
         db.insert(TABLE_LISTEN_HISTORY, null, values);
         db.close();
     }
 
-    public void addListenRecordWithTimestamp(String songId, String utcTimestamp) {
+    public void addListenRecordWithTimestamp(String spotifyUri, String utcTimestamp) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
         values.put(COLUMN_UUID, java.util.UUID.randomUUID().toString());
-        values.put(COLUMN_SONG_ID, songId);
+        values.put(COLUMN_SPOTIFY_URI, spotifyUri);
         values.put(COLUMN_LISTEN_TIMESTAMP, utcTimestamp);
         db.insert(TABLE_LISTEN_HISTORY, null, values);
         db.close();
     }
 
-    public List<String> getListenHistory(String songId) {
+    public List<String> getListenHistory(String spotifyUri) {
         List<String> timestamps = new ArrayList<>();
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
                 "SELECT " + COLUMN_LISTEN_TIMESTAMP + " FROM " + TABLE_LISTEN_HISTORY +
-                        " WHERE " + COLUMN_SONG_ID + " = ? ORDER BY " + COLUMN_LISTEN_TIMESTAMP + " ASC",
-                new String[]{songId});
+                        " WHERE " + COLUMN_SPOTIFY_URI + " = ? ORDER BY " + COLUMN_LISTEN_TIMESTAMP + " ASC",
+                new String[]{spotifyUri});
         if (cursor.moveToFirst()) {
             do { timestamps.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
@@ -1213,29 +1388,56 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return timestamps;
     }
 
-    public String getMostRecentListenTimestamp(String songId) {
+    public List<String> getOrphanedListenUris() {
+        List<String> uris = new ArrayList<>();
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT DISTINCT lh." + COLUMN_SPOTIFY_URI +
+                " FROM " + TABLE_LISTEN_HISTORY + " lh" +
+                " LEFT JOIN " + TABLE_SONGS + " s ON s." + COLUMN_SPOTIFY_URI + " = lh." + COLUMN_SPOTIFY_URI +
+                " WHERE s." + COLUMN_SPOTIFY_URI + " IS NULL" +
+                " AND lh." + COLUMN_SPOTIFY_URI + " LIKE 'spotify:track:______________________'",
+                null);
+        if (cursor.moveToFirst()) {
+            do { uris.add(cursor.getString(0)); } while (cursor.moveToNext());
+        }
+        cursor.close();
+        db.close();
+        return uris;
+    }
+
+    public void deleteOrphanedListens() {
+        SQLiteDatabase db = this.getWritableDatabase();
+        int deleted = db.delete(TABLE_LISTEN_HISTORY,
+                COLUMN_SPOTIFY_URI + " NOT IN (SELECT " + COLUMN_SPOTIFY_URI + " FROM " + TABLE_SONGS + ")",
+                null);
+        db.close();
+        if (deleted > 0) Log.d("DatabaseHelper", "Deleted " + deleted + " unresolvable orphaned listen entries");
+    }
+
+    public String getMostRecentListenTimestamp(String spotifyUri) {
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
                 "SELECT " + COLUMN_LISTEN_TIMESTAMP + " FROM " + TABLE_LISTEN_HISTORY +
-                        " WHERE " + COLUMN_SONG_ID + " = ? ORDER BY " + COLUMN_LISTEN_TIMESTAMP + " DESC LIMIT 1",
-                new String[]{songId});
+                        " WHERE " + COLUMN_SPOTIFY_URI + " = ? ORDER BY " + COLUMN_LISTEN_TIMESTAMP + " DESC LIMIT 1",
+                new String[]{spotifyUri});
         String timestamp = cursor.moveToFirst() ? cursor.getString(0) : null;
         cursor.close();
         db.close();
         return timestamp;
     }
 
-    public Map<String, String> getMostRecentListenTimestampsBatch(List<String> songIds) {
+    public Map<String, String> getMostRecentListenTimestampsBatch(List<String> spotifyUris) {
         Map<String, String> results = new HashMap<>();
-        if (songIds == null || songIds.isEmpty()) return results;
-        String placeholders = buildPlaceholders(songIds.size());
+        if (spotifyUris == null || spotifyUris.isEmpty()) return results;
+        String placeholders = buildPlaceholders(spotifyUris.size());
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
-                "SELECT " + COLUMN_SONG_ID + ", MAX(" + COLUMN_LISTEN_TIMESTAMP + ") as latest" +
+                "SELECT " + COLUMN_SPOTIFY_URI + ", MAX(" + COLUMN_LISTEN_TIMESTAMP + ") as latest" +
                         " FROM " + TABLE_LISTEN_HISTORY +
-                        " WHERE " + COLUMN_SONG_ID + " IN (" + placeholders + ")" +
-                        " GROUP BY " + COLUMN_SONG_ID,
-                songIds.toArray(new String[0]));
+                        " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + placeholders + ")" +
+                        " GROUP BY " + COLUMN_SPOTIFY_URI,
+                spotifyUris.toArray(new String[0]));
         if (cursor.moveToFirst()) {
             do {
                 results.put(cursor.getString(0), cursor.getString(1));
@@ -1246,17 +1448,17 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return results;
     }
 
-    public Map<String, Integer> getListenCountsBatch(List<String> songIds) {
+    public Map<String, Integer> getListenCountsBatch(List<String> spotifyUris) {
         Map<String, Integer> results = new HashMap<>();
-        if (songIds == null || songIds.isEmpty()) return results;
-        String placeholders = buildPlaceholders(songIds.size());
+        if (spotifyUris == null || spotifyUris.isEmpty()) return results;
+        String placeholders = buildPlaceholders(spotifyUris.size());
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
-                "SELECT " + COLUMN_SONG_ID + ", COUNT(*) as count" +
+                "SELECT " + COLUMN_SPOTIFY_URI + ", COUNT(*) as count" +
                         " FROM " + TABLE_LISTEN_HISTORY +
-                        " WHERE " + COLUMN_SONG_ID + " IN (" + placeholders + ")" +
-                        " GROUP BY " + COLUMN_SONG_ID,
-                songIds.toArray(new String[0]));
+                        " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + placeholders + ")" +
+                        " GROUP BY " + COLUMN_SPOTIFY_URI,
+                spotifyUris.toArray(new String[0]));
         if (cursor.moveToFirst()) {
             do {
                 results.put(cursor.getString(0), cursor.getInt(1));
@@ -1267,78 +1469,61 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return results;
     }
 
-    public boolean hasListenWithinDuration(String songId, long spotifyTimestamp, int songDurationMs) {
+    public boolean hasListenWithinDuration(String spotifyUri, long spotifyTimestamp, int songDurationMs) {
         SQLiteDatabase db = this.getReadableDatabase();
         java.text.SimpleDateFormat utcFormat = utcDateFormat();
         String windowStartStr = utcFormat.format(new java.util.Date(spotifyTimestamp - songDurationMs));
         String windowEndStr = utcFormat.format(new java.util.Date(spotifyTimestamp + songDurationMs));
         Cursor cursor = db.rawQuery(
                 "SELECT COUNT(*) FROM " + TABLE_LISTEN_HISTORY +
-                        " WHERE " + COLUMN_SONG_ID + " = ? AND " +
+                        " WHERE " + COLUMN_SPOTIFY_URI + " = ? AND " +
                         COLUMN_LISTEN_TIMESTAMP + " >= ? AND " + COLUMN_LISTEN_TIMESTAMP + " <= ?",
-                new String[]{songId, windowStartStr, windowEndStr});
+                new String[]{spotifyUri, windowStartStr, windowEndStr});
         boolean has = cursor.moveToFirst() && cursor.getInt(0) > 0;
         cursor.close();
         db.close();
         return has;
     }
 
-    public boolean hasExactListen(String songId, String utcTimestamp) {
+    public boolean hasExactListen(String spotifyUri, String utcTimestamp) {
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
                 "SELECT COUNT(*) FROM " + TABLE_LISTEN_HISTORY +
-                        " WHERE " + COLUMN_SONG_ID + " = ? AND " + COLUMN_LISTEN_TIMESTAMP + " = ?",
-                new String[]{songId, utcTimestamp});
+                        " WHERE " + COLUMN_SPOTIFY_URI + " = ? AND " + COLUMN_LISTEN_TIMESTAMP + " = ?",
+                new String[]{spotifyUri, utcTimestamp});
         boolean exists = cursor.moveToFirst() && cursor.getInt(0) > 0;
         cursor.close();
         db.close();
         return exists;
     }
 
-    // Holds state for bulk listen import — one open DB connection, in-memory dedup sets, pending rows.
     public static class ListenImportBatch {
         final SQLiteDatabase db;
-        final java.util.Set<String> existingKeys; // "songId\0timestamp"
-        final java.util.Set<String> existingUuids;
         final List<ContentValues> pending = new ArrayList<>();
 
-        ListenImportBatch(SQLiteDatabase db, java.util.Set<String> existingKeys, java.util.Set<String> existingUuids) {
+        ListenImportBatch(SQLiteDatabase db) {
             this.db = db;
-            this.existingKeys = existingKeys;
-            this.existingUuids = existingUuids;
         }
     }
 
     public ListenImportBatch beginListenImportBatch() {
-        SQLiteDatabase db = this.getWritableDatabase();
-        java.util.Set<String> existingKeys = new java.util.HashSet<>();
-        java.util.Set<String> existingUuids = new java.util.HashSet<>();
-        Cursor cursor = db.rawQuery(
-                "SELECT " + COLUMN_UUID + ", " + COLUMN_SONG_ID + ", " + COLUMN_LISTEN_TIMESTAMP
-                        + " FROM " + TABLE_LISTEN_HISTORY, null);
-        if (cursor.moveToFirst()) {
-            do {
-                String uuid = cursor.getString(0);
-                if (uuid != null) existingUuids.add(uuid);
-                existingKeys.add(cursor.getString(1) + "\0" + cursor.getString(2));
-            } while (cursor.moveToNext());
-        }
-        cursor.close();
-        return new ListenImportBatch(db, existingKeys, existingUuids);
+        return new ListenImportBatch(this.getWritableDatabase());
     }
 
-    public boolean hasExactListenInBatch(ListenImportBatch batch, String songId, String utcTimestamp) {
-        return batch.existingKeys.contains(songId + "\0" + utcTimestamp);
+    public boolean hasExactListenInBatch(ListenImportBatch batch, String spotifyUri, String utcTimestamp) {
+        Cursor c = batch.db.rawQuery(
+                "SELECT 1 FROM " + TABLE_LISTEN_HISTORY
+                        + " WHERE " + COLUMN_SPOTIFY_URI + "=? AND " + COLUMN_LISTEN_TIMESTAMP + "=? LIMIT 1",
+                new String[]{spotifyUri, utcTimestamp});
+        boolean exists = c.moveToFirst();
+        c.close();
+        return exists;
     }
 
-    public void addListenToBatch(ListenImportBatch batch, String uuid, String songId, String utcTimestamp) {
-        // Skip if this UUID is already in the DB (e.g. from a previous partial import run)
-        if (uuid != null && batch.existingUuids.contains(uuid)) return;
-        batch.existingKeys.add(songId + "\0" + utcTimestamp);
-        if (uuid != null) batch.existingUuids.add(uuid);
+    public void addListenToBatch(ListenImportBatch batch, String uuid, String spotifyUri, String utcTimestamp) {
         ContentValues values = new ContentValues();
         values.put(COLUMN_UUID, uuid != null ? uuid : java.util.UUID.randomUUID().toString());
-        values.put(COLUMN_SONG_ID, songId);
+        values.put(COLUMN_SPOTIFY_URI, spotifyUri);
         values.put(COLUMN_LISTEN_TIMESTAMP, utcTimestamp);
         batch.pending.add(values);
     }
@@ -1348,7 +1533,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         batch.db.beginTransaction();
         try {
             for (ContentValues values : batch.pending) {
-                batch.db.insert(TABLE_LISTEN_HISTORY, null, values);
+                batch.db.insertWithOnConflict(TABLE_LISTEN_HISTORY, null, values, SQLiteDatabase.CONFLICT_IGNORE);
             }
             batch.db.setTransactionSuccessful();
         } finally {
@@ -1449,7 +1634,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     if (!dbHelper.dataExistsByUUID(db, TABLE_LISTEN_HISTORY, entry.getUuid())) {
                         ContentValues values = new ContentValues();
                         values.put(COLUMN_UUID, entry.getUuid());
-                        values.put(COLUMN_SONG_ID, entry.getSongId());
+                        values.put(COLUMN_SPOTIFY_URI, entry.getSongId());
                         values.put(COLUMN_LISTEN_TIMESTAMP, entry.getListenTimestamp());
                         if (db.insert(TABLE_LISTEN_HISTORY, null, values) != -1) stats.listenHistoryAdded++;
                     }
