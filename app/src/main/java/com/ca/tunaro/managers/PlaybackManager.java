@@ -198,8 +198,7 @@ public class PlaybackManager {
 
             boolean trackChanged = false;
             if (currentSong == null || !remoteTrack.uri.equals(currentSong.getUri())) {
-                String songId = SongModel.generateSongId(remoteTrack.name, artistNames.length > 0 ? artistNames[0] : null, (int) remoteTrack.duration);
-                currentSong = createSongModelFromRemoteTrack(remoteTrack, songId, artistNames);
+                currentSong = createSongModelFromRemoteTrack(remoteTrack, remoteTrack.uri, artistNames);
                 trackChanged = true;
                 checkPlaybackDevice();
                 if (applicationContext != null) {

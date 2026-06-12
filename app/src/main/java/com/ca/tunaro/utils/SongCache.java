@@ -60,8 +60,6 @@ public class SongCache {
             // Write JSON once
             saveCachedSongs(cachedSongs);
             saveCacheTimestamps(timestamps);
-
-            Log.d(TAG, "Batch cached " + addedCount + " song" + (addedCount == 1 ? "" : "s"));
         } catch (Exception e) {
             Log.e(TAG, "Error batch caching songs", e);
         }
