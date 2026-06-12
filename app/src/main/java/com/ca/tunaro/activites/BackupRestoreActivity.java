@@ -25,7 +25,6 @@ import com.google.gson.JsonParser;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -137,26 +136,21 @@ public class BackupRestoreActivity extends AppCompatActivity {
             for (JsonElement e : notesArray)    allTrackIds.add(e.getAsJsonObject().get("songId").getAsString());
             for (JsonElement e : snippetsArray) allTrackIds.add(e.getAsJsonObject().get("songId").getAsString());
 
-            // Pre-map invalid IDs (local files, podcasts, etc.) to placeholders — they'll fail the API call
-            Map<String, String> trackIdToSongId = new HashMap<>();
+            // Filter to valid track IDs — invalid ones (local files, podcasts) skip the API call
             Set<String> validTrackIds = new LinkedHashSet<>();
             for (String id : allTrackIds) {
-                if (isValidSpotifyTrackId(id)) {
-                    validTrackIds.add(id);
-                } else {
-                    trackIdToSongId.put(id, SongModel.SPOTIFY_TRACK_URI_PREFIX + id);
-                }
+                if (isValidSpotifyTrackId(id)) validTrackIds.add(id);
             }
 
             int totalTracks = validTrackIds.size();
             int totalBatches = (totalTracks + BATCH_SIZE - 1) / BATCH_SIZE;
-            status("Resolving " + totalTracks + " unique tracks via Spotify API...");
-            details("Tracks to resolve: " + totalTracks + "\nAPI calls needed: " + totalBatches);
+            status("Fetching metadata for " + totalTracks + " unique tracks via Spotify API...");
+            details("Tracks to fetch: " + totalTracks + "\nAPI calls needed: " + totalBatches);
 
             setProgressMax(totalBatches);
             setProgressIndeterminate(false);
 
-            // Batch-resolve trackId → composite song ID via getSeveralTracks
+            // Batch-fetch track metadata and upsert to DB; song ID is always spotify:track:<trackId>
             List<String> trackIdList = new ArrayList<>(validTrackIds);
             int resolved = 0;
             int unresolvable = allTrackIds.size() - validTrackIds.size(); // pre-filtered invalid IDs
@@ -167,6 +161,7 @@ public class BackupRestoreActivity extends AppCompatActivity {
                 List<String> batch = trackIdList.subList(i, end);
 
                 try {
+                    Log.d(TAG, "API: getSeveralTracks count=" + batch.size() + " batchOffset=" + i);
                     Track[] tracks = spotifyApi
                             .getSeveralTracks(String.join(",", batch))
                             .setQueryParameter("market", "from_token")
@@ -178,26 +173,16 @@ public class BackupRestoreActivity extends AppCompatActivity {
                         String trackId = batch.get(j);
 
                         if (track == null) {
-                            trackIdToSongId.put(trackId, SongModel.SPOTIFY_TRACK_URI_PREFIX + trackId);
                             unresolvable++;
                             continue;
                         }
 
-                        ArtistSimplified[] artists = track.getArtists();
-                        String primaryArtist = SongModel.getPrimaryArtistName(artists);
-                        String songId = SongModel.generateSongId(track.getName(), primaryArtist, track.getDurationMs());
-                        trackIdToSongId.put(trackId, songId);
-                        upsertTrackToDb(track, songId);
+                        upsertTrackToDb(track, SongModel.SPOTIFY_TRACK_URI_PREFIX + trackId);
                         resolved++;
                     }
                 } catch (Exception e) {
                     Log.e(TAG, "Batch failed at offset " + i, e);
-                    for (String trackId : batch) {
-                        if (!trackIdToSongId.containsKey(trackId)) {
-                            trackIdToSongId.put(trackId, SongModel.SPOTIFY_TRACK_URI_PREFIX + trackId);
-                            unresolvable++;
-                        }
-                    }
+                    unresolvable += batch.size();
                 }
 
                 batchsDone++;
@@ -218,7 +203,6 @@ public class BackupRestoreActivity extends AppCompatActivity {
             progressBar.setProgress(0);
 
             int listensAdded = 0;
-            int listensSkipped = 0;
             int rowCount = 0;
 
             DatabaseHelper.ListenImportBatch listenBatch = dbHelper.beginListenImportBatch();
@@ -226,25 +210,20 @@ public class BackupRestoreActivity extends AppCompatActivity {
                 JsonObject entry = e.getAsJsonObject();
                 String trackId = entry.get("songId").getAsString();
                 String timestamp = entry.get("listenTimestamp").getAsString();
-                String songId = trackIdToSongId.getOrDefault(trackId, SongModel.SPOTIFY_TRACK_URI_PREFIX + trackId);
+                String songId = SongModel.SPOTIFY_TRACK_URI_PREFIX + trackId;
                 String uuid = entry.has("uuid") ? entry.get("uuid").getAsString() : null;
 
-                if (dbHelper.hasExactListenInBatch(listenBatch, songId, timestamp)) {
-                    listensSkipped++;
-                } else {
-                    dbHelper.addListenToBatch(listenBatch, uuid, songId, timestamp);
-                    listensAdded++;
-                }
+                dbHelper.addListenToBatch(listenBatch, uuid, songId, timestamp);
+                listensAdded++;
 
                 rowCount++;
                 if (rowCount % 5000 == 0) {
                     dbHelper.flushListenBatch(listenBatch);
                     final int addedSnap = listensAdded;
-                    final int skippedSnap = listensSkipped;
                     final int rowSnap = rowCount;
                     runOnUiThread(() -> {
                         progressBar.setProgress(rowSnap);
-                        details("Listens imported: " + addedSnap + "\nSkipped (duplicates): " + skippedSnap);
+                        details("Listens imported: " + addedSnap);
                     });
                 }
             }
@@ -256,7 +235,7 @@ public class BackupRestoreActivity extends AppCompatActivity {
             for (JsonElement e : notesArray) {
                 JsonObject obj = e.getAsJsonObject();
                 String trackId = obj.get("songId").getAsString();
-                String songId = trackIdToSongId.getOrDefault(trackId, SongModel.SPOTIFY_TRACK_URI_PREFIX + trackId);
+                String songId = SongModel.SPOTIFY_TRACK_URI_PREFIX + trackId;
                 String uuid = obj.has("uuid") ? obj.get("uuid").getAsString() : null;
                 String noteType = obj.has("noteType") ? obj.get("noteType").getAsString() : "General";
                 String content = obj.has("content") ? obj.get("content").getAsString() : "";
@@ -269,7 +248,7 @@ public class BackupRestoreActivity extends AppCompatActivity {
             for (JsonElement e : snippetsArray) {
                 JsonObject obj = e.getAsJsonObject();
                 String trackId = obj.get("songId").getAsString();
-                String songId = trackIdToSongId.getOrDefault(trackId, SongModel.SPOTIFY_TRACK_URI_PREFIX + trackId);
+                String songId = SongModel.SPOTIFY_TRACK_URI_PREFIX + trackId;
                 String uuid = obj.has("uuid") ? obj.get("uuid").getAsString() : null;
                 long snippetNo = obj.has("snippetNo") ? obj.get("snippetNo").getAsLong() : 1;
                 String title = obj.has("title") ? obj.get("title").getAsString() : "";
@@ -279,11 +258,11 @@ public class BackupRestoreActivity extends AppCompatActivity {
                 if (dbHelper.addSnippet(new SongSnippet(uuid, songId, snippetNo, title, startTime, endTime, includeInRankings)) != -1) snippetsAdded++;
             }
 
-            // Import archived playlists
+            // Import archived playlists — insert stubs so the flag survives the playlist sync
             status("Importing archived playlists...");
             int playlistsArchived = 0;
             for (JsonElement e : archivedArray) {
-                dbHelper.archivePlaylist(e.getAsString());
+                dbHelper.upsertPlaylistStub(e.getAsString(), true, false);
                 playlistsArchived++;
             }
 
@@ -295,7 +274,6 @@ public class BackupRestoreActivity extends AppCompatActivity {
             final int finalResolved = resolved;
             final int finalUnresolvable = unresolvable;
             final int finalListensAdded = listensAdded;
-            final int finalListensSkipped = listensSkipped;
             final int finalNotesAdded = notesAdded;
             final int finalSnippetsAdded = snippetsAdded;
             final int finalPlaylistsArchived = playlistsArchived;
@@ -307,8 +285,7 @@ public class BackupRestoreActivity extends AppCompatActivity {
                 details(
                         "Tracks resolved: " + finalResolved + "\n" +
                         "Unresolvable (placeholder): " + finalUnresolvable + "\n\n" +
-                        "Listen history imported: " + finalListensAdded + "\n" +
-                        "Listens skipped (duplicates): " + finalListensSkipped + "\n\n" +
+                        "Listen history imported: " + finalListensAdded + "\n\n" +
                         "Notes imported: " + finalNotesAdded + "\n" +
                         "Snippets imported: " + finalSnippetsAdded + "\n" +
                         "Playlists archived: " + finalPlaylistsArchived

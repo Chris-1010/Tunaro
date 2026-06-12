@@ -37,7 +37,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
-                android:text="Select your tunaro_backup_*.json file. All track IDs will be resolved via the Spotify API and converted to composite song IDs before import. This may take several minutes."
+                android:text="Select your tunaro_backup_*.json file. Track metadata will be fetched from the Spotify API before import. This may take several minutes."
                 android:textColor="@color/white"
                 android:textSize="14sp" />
 

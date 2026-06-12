@@ -16,7 +16,6 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-import java.util.Map;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.UUID;
@@ -494,21 +493,12 @@ public class AutomaticFetcher {
         int successCount = 0;
         int failedCount = 0;
 
-        // Resolve all Spotify track IDs → composite song IDs in one query
-        List<String> trackIds = new ArrayList<>(listens.size());
-        for (ServerApiClient.Listen listen : listens) trackIds.add(listen.getTrackId());
-        Map<String, String> songIdMap = dbHelper.getSongIdsBySpotifyTrackIds(trackIds);
-
         for (ServerApiClient.Listen listen : listens) {
             try {
                 int trackDuration = listen.getTrackDuration();
                 long playedAtMs = parseTimestampToMillis(listen.getPlayedAt());
 
-                String songId = songIdMap.get(listen.getTrackId());
-                if (songId == null) {
-                    // Song not yet in DB — placeholder until next playlist sync
-                    songId = SongModel.SPOTIFY_TRACK_URI_PREFIX + listen.getTrackId();
-                }
+                String songId = SongModel.SPOTIFY_TRACK_URI_PREFIX + listen.getTrackId();
 
                 if (!dbHelper.hasListenWithinDuration(songId, playedAtMs, trackDuration)) {
                     dbHelper.addListenRecordWithTimestamp(songId, listen.getPlayedAt());

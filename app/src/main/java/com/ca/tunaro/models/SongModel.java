@@ -1,17 +1,18 @@
 package com.ca.tunaro.models;
 
+import android.util.Log;
+
 import com.ca.tunaro.activites.MainActivity;
 
 import java.io.Serializable;
 import java.util.Date;
-import java.util.List;
 
 import se.michaelthelin.spotify.model_objects.specification.ArtistSimplified;
 
 public class SongModel implements Serializable {
 
     // --- Core fields (always populated) ---
-    String id;           // Composite key: lowercase(name)|lowercase(primaryArtist)|roundedDurationSeconds
+    String id;           // Spotify URI (spotify:track:XXXX)
     String name;
     String primaryArtist;
     int duration;        // milliseconds
@@ -31,7 +32,6 @@ public class SongModel implements Serializable {
     String isrc;
     boolean isPlayable;
     String createdAt;    // when Tunaro first saw this song
-    List<SongVariant> variants;
 
     //#region Constructors
 
@@ -166,8 +166,6 @@ public class SongModel implements Serializable {
     public String getCreatedAt() { return createdAt; }
     public Date getDateAddedToPlaylist() { return dateAddedToPlaylist; }
     public void setDateAddedToPlaylist(Date date) { this.dateAddedToPlaylist = date; }
-    public List<SongVariant> getVariants() { return variants; }
-    public void setVariants(List<SongVariant> variants) { this.variants = variants; }
 
     //#endregion
 
@@ -196,6 +194,7 @@ public class SongModel implements Serializable {
             return;
         }
 
+        Log.d("SongModel", "API: getTrack trackId=" + parts[2] + " song=" + name);
         mainActivity.getSpotifyApi().getTrack(parts[2])
                 .build()
                 .executeAsync()
@@ -217,13 +216,6 @@ public class SongModel implements Serializable {
 
     public static String getPrimaryArtistName(ArtistSimplified[] artists) {
         return (artists != null && artists.length > 0) ? artists[0].getName() : null;
-    }
-
-    public static String generateSongId(String name, String primaryArtist, int durationMs) {
-        String normalizedName = name == null ? "" : name.trim().toLowerCase();
-        String normalizedArtist = primaryArtist == null ? "" : primaryArtist.trim().toLowerCase();
-        long durationSeconds = Math.round(durationMs / 1000.0);
-        return normalizedName + "|" + normalizedArtist + "|" + durationSeconds;
     }
 
     private static String[] extractArtistNames(ArtistSimplified[] artists) {
