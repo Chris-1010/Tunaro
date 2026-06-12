@@ -326,19 +326,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         adapter.updateSongs(filteredList);
         queueLineDecoration.setQueueMatchesDisplay(false);
 
-        // Update contextual info display
         adapter.updateSortContext(currentSortOption);
-
-        // Update listen count map if sorting by Listen Count
-        if (currentSortOption == 6) {
-            DatabaseHelper listenCountDbHelper = new DatabaseHelper(this);
-            List<String> listenCountSongIds = new ArrayList<>();
-            for (SongModel song : filteredList) {
-                listenCountSongIds.add(song.getId());
-            }
-            Map<String, Integer> listenCountMap = listenCountDbHelper.getVariantListenCountsBatch(listenCountSongIds);
-            adapter.updateListenCounts(listenCountMap);
-        }
+        pushContextualMapsToAdapter(filteredList, currentSortOption);
 
     }
 
@@ -470,6 +459,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 }
 
                 Map<String, String> timestampMap = dbHelper.getVariantMostRecentListenTimestampsBatch(songIds);
+                dbHelper.close();
 
                 // Support both timestamp formats (milliseconds included for Tunaro records, not for Spotify)
                 java.text.SimpleDateFormat formatWithMillis = new java.text.SimpleDateFormat(
@@ -536,6 +526,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                     popularitySongIds.add(song.getId());
                 }
                 Map<String, Integer> popularityMap = popularityDbHelper.getVariantPopularityBatch(popularitySongIds);
+                popularityDbHelper.close();
                 comparator = (song1, song2) -> Integer.compare(
                         popularityMap.getOrDefault(song1.getId(), song1.getPopularity()),
                         popularityMap.getOrDefault(song2.getId(), song2.getPopularity()));
@@ -548,6 +539,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 }
 
                 Map<String, Integer> listenCountMap = listenCountDbHelper.getVariantListenCountsBatch(listenCountSongIds);
+                listenCountDbHelper.close();
 
                 comparator = (song1, song2) -> {
                     int count1 = listenCountMap.getOrDefault(song1.getId(), 0);
@@ -586,24 +578,31 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
         ArrayList<SongModel> songs = new ArrayList<>(allSongs);
 
-        // Apply sort to the list
         applySortToList(songs, sortOption);
         adapter.updateSongs(songs);
         queueLineDecoration.setQueueMatchesDisplay(false);
 
         adapter.updateSortContext(sortOption);
+        pushContextualMapsToAdapter(songs, sortOption);
+    }
 
-        // Pass listen count map to adapter for efficient display (only for Listen Count sort)
-        if (sortOption == 6) {
-            DatabaseHelper listenCountDbHelper = new DatabaseHelper(this);
-            List<String> listenCountSongIds = new ArrayList<>();
-            for (SongModel song : songs) {
-                listenCountSongIds.add(song.getId());
-            }
-            Map<String, Integer> listenCountMap = listenCountDbHelper.getVariantListenCountsBatch(listenCountSongIds);
-            adapter.updateListenCounts(listenCountMap);
+    private void pushContextualMapsToAdapter(List<SongModel> songs, int sortOption) {
+        List<String> ids = new ArrayList<>();
+        for (SongModel song : songs) ids.add(song.getId());
+
+        if (sortOption == 1) {
+            DatabaseHelper db = new DatabaseHelper(this);
+            adapter.updateLastListenedMap(db.getVariantMostRecentListenTimestampsBatch(ids));
+            db.close();
+        } else if (sortOption == 5) {
+            DatabaseHelper db = new DatabaseHelper(this);
+            adapter.updatePopularityMap(db.getVariantPopularityBatch(ids));
+            db.close();
+        } else if (sortOption == 6) {
+            DatabaseHelper db = new DatabaseHelper(this);
+            adapter.updateListenCounts(db.getVariantListenCountsBatch(ids));
+            db.close();
         }
-
     }
 
     private void showShimmerLoading(boolean isLoading) {
