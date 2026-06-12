@@ -78,8 +78,8 @@ public class HomeActivity extends BaseActivity {
             startActivity(intent);
         });
 
-        findViewById(R.id.sql_button).setOnClickListener(view -> {
-            Intent intent = new Intent(HomeActivity.this, SqlQueryActivity.class);
+        findViewById(R.id.developer_button).setOnClickListener(view -> {
+            Intent intent = new Intent(HomeActivity.this, DeveloperActivity.class);
             startActivity(intent);
         });
 

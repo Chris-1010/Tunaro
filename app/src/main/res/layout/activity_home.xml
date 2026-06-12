@@ -237,9 +237,9 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
-            <!-- SQL Button -->
+            <!-- Developer Button -->
             <androidx.cardview.widget.CardView
-                android:id="@+id/sql_button"
+                android:id="@+id/developer_button"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_rowWeight="1"
@@ -260,7 +260,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="SQL"
+                        android:text="Developer"
                         android:textAlignment="center"
                         android:textColor="@color/white"
                         android:textSize="20sp"
@@ -269,7 +269,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Run raw queries on the database"
+                        android:text="SQL queries and API requests"
                         android:textAlignment="center"
                         android:textColor="#CCCCCC"
                         android:textSize="12sp" />

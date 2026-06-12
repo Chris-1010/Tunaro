@@ -79,7 +79,7 @@
             android:screenOrientation="portrait" />
 
         <activity
-            android:name=".activites.SqlQueryActivity"
+            android:name=".activites.DeveloperActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
 

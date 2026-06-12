@@ -1,40 +1,60 @@
-package com.ca.tunaro.activites;
+package com.ca.tunaro.fragments;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
+import android.widget.Toast;
 
-import com.ca.tunaro.BaseActivity;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.fragment.app.Fragment;
+
 import com.ca.tunaro.R;
 import com.ca.tunaro.database.DatabaseHelper;
+import com.ca.tunaro.utils.DeveloperHistory;
+import com.ca.tunaro.utils.HistoryDialog;
 
-public class SqlQueryActivity extends BaseActivity {
+import java.util.List;
+
+public class SqlQueryFragment extends Fragment {
+
+    private static final String DEFAULT_QUERY =
+            "SELECT name, COUNT(*) as c FROM sqlite_master WHERE type='table' GROUP BY name";
 
     private EditText queryInput;
     private TextView resultsText;
     private TextView rowCount;
     private Button runButton;
 
+    @Nullable
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        if (checkForRecovery()) return;
-        setContentView(R.layout.activity_sql_query);
+    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
+                             @Nullable Bundle savedInstanceState) {
+        return inflater.inflate(R.layout.fragment_sql_query, container, false);
+    }
 
-        queryInput = findViewById(R.id.query_input);
-        resultsText = findViewById(R.id.results_text);
-        rowCount = findViewById(R.id.row_count);
-        runButton = findViewById(R.id.run_button);
+    @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        queryInput = view.findViewById(R.id.query_input);
+        resultsText = view.findViewById(R.id.results_text);
+        rowCount = view.findViewById(R.id.row_count);
+        runButton = view.findViewById(R.id.run_button);
 
-        findViewById(R.id.back_button).setOnClickListener(v -> finish());
-
-        queryInput.setText("SELECT name, COUNT(*) as c FROM sqlite_master WHERE type='table' GROUP BY name");
+        List<String> history = DeveloperHistory.getSqlQueries(requireContext());
+        queryInput.setText(history.isEmpty() ? DEFAULT_QUERY : history.get(0));
 
         runButton.setOnClickListener(v -> runQuery());
+        view.findViewById(R.id.history_button).setOnClickListener(v -> showHistory());
 
         queryInput.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_GO) { runQuery(); return true; }
@@ -42,18 +62,38 @@ public class SqlQueryActivity extends BaseActivity {
         });
     }
 
+    private void showHistory() {
+        List<String> history = DeveloperHistory.getSqlQueries(requireContext());
+        if (history.isEmpty()) {
+            Toast.makeText(requireContext(), "No query history yet", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        HistoryDialog.show(requireContext(), "Query History", history, position -> {
+            String query = history.get(position);
+            ClipboardManager clipboard =
+                    (ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE);
+            clipboard.setPrimaryClip(ClipData.newPlainText("SQL query", query));
+            queryInput.setText(query);
+            queryInput.setSelection(query.length());
+        });
+    }
+
     private void runQuery() {
         String sql = queryInput.getText().toString().trim();
         if (sql.isEmpty()) return;
+
+        DeveloperHistory.addSqlQuery(requireContext(), sql);
 
         runButton.setEnabled(false);
         rowCount.setText("Running…");
         resultsText.setText("");
 
+        Context appContext = requireContext().getApplicationContext();
         android.os.AsyncTask.THREAD_POOL_EXECUTOR.execute(() -> {
             String resultText;
             String countText;
-            DatabaseHelper dbHelper = new DatabaseHelper(this);
+            DatabaseHelper dbHelper = new DatabaseHelper(appContext);
             SQLiteDatabase db = dbHelper.getWritableDatabase();
             try {
                 String upper = sql.toUpperCase();
@@ -76,7 +116,9 @@ public class SqlQueryActivity extends BaseActivity {
             }
             String finalResult = resultText;
             String finalCount = countText;
-            runOnUiThread(() -> {
+            if (getActivity() == null) return;
+            getActivity().runOnUiThread(() -> {
+                if (!isAdded()) return;
                 resultsText.setText(finalResult);
                 rowCount.setText(finalCount);
                 runButton.setEnabled(true);
