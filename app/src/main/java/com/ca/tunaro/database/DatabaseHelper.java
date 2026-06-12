@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public class DatabaseHelper extends SQLiteOpenHelper {
 
@@ -1466,6 +1467,210 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         }
         cursor.close();
         db.close();
+        return results;
+    }
+
+    /**
+     * Like getListenCountsBatch but sums listens across all ISRC variants of each URI.
+     * Songs with no ISRC entry count only their own listens.
+     */
+    public Map<String, Integer> getVariantListenCountsBatch(List<String> spotifyUris) {
+        Map<String, Integer> results = new HashMap<>();
+        if (spotifyUris == null || spotifyUris.isEmpty()) return results;
+
+        SQLiteDatabase db = this.getReadableDatabase();
+
+        // Step 1: resolve each requested URI to its ISRC and collect all sibling URIs
+        String placeholders = buildPlaceholders(spotifyUris.size());
+        Cursor isrcCursor = db.rawQuery(
+                "SELECT sil_req.spotify_uri, sil_sib.spotify_uri" +
+                        " FROM " + TABLE_SONG_ISRC_LINKS + " sil_req" +
+                        " JOIN " + TABLE_SONG_ISRC_LINKS + " sil_sib ON sil_sib.isrc = sil_req.isrc" +
+                        " WHERE sil_req.spotify_uri IN (" + placeholders + ")",
+                spotifyUris.toArray(new String[0]));
+
+        // uri → all variant uris (including self)
+        Map<String, List<String>> variantMap = new HashMap<>();
+        if (isrcCursor.moveToFirst()) {
+            do {
+                String reqUri = isrcCursor.getString(0);
+                String sibUri = isrcCursor.getString(1);
+                variantMap.computeIfAbsent(reqUri, k -> new ArrayList<>()).add(sibUri);
+            } while (isrcCursor.moveToNext());
+        }
+        isrcCursor.close();
+
+        // URIs not in song_isrc_links map only to themselves
+        for (String uri : spotifyUris) {
+            if (!variantMap.containsKey(uri)) {
+                variantMap.put(uri, java.util.Collections.singletonList(uri));
+            }
+        }
+
+        // Step 2: query listen_history for all sibling URIs at once
+        Set<String> allSiblings = new java.util.HashSet<>();
+        for (List<String> siblings : variantMap.values()) allSiblings.addAll(siblings);
+
+        Map<String, Integer> siblingCounts = new HashMap<>();
+        if (!allSiblings.isEmpty()) {
+            List<String> siblingList = new ArrayList<>(allSiblings);
+            String sibPlaceholders = buildPlaceholders(siblingList.size());
+            Cursor lhCursor = db.rawQuery(
+                    "SELECT " + COLUMN_SPOTIFY_URI + ", COUNT(*) FROM " + TABLE_LISTEN_HISTORY +
+                            " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + sibPlaceholders + ")" +
+                            " GROUP BY " + COLUMN_SPOTIFY_URI,
+                    siblingList.toArray(new String[0]));
+            if (lhCursor.moveToFirst()) {
+                do {
+                    siblingCounts.put(lhCursor.getString(0), lhCursor.getInt(1));
+                } while (lhCursor.moveToNext());
+            }
+            lhCursor.close();
+        }
+
+        db.close();
+
+        // Step 3: aggregate per requested URI
+        for (String uri : spotifyUris) {
+            int total = 0;
+            for (String sib : variantMap.getOrDefault(uri, java.util.Collections.singletonList(uri))) {
+                total += siblingCounts.getOrDefault(sib, 0);
+            }
+            results.put(uri, total);
+        }
+        return results;
+    }
+
+    /**
+     * Like getMostRecentListenTimestampsBatch but considers all ISRC variants of each URI.
+     */
+    public Map<String, String> getVariantMostRecentListenTimestampsBatch(List<String> spotifyUris) {
+        Map<String, String> results = new HashMap<>();
+        if (spotifyUris == null || spotifyUris.isEmpty()) return results;
+
+        SQLiteDatabase db = this.getReadableDatabase();
+
+        String placeholders = buildPlaceholders(spotifyUris.size());
+        Cursor isrcCursor = db.rawQuery(
+                "SELECT sil_req.spotify_uri, sil_sib.spotify_uri" +
+                        " FROM " + TABLE_SONG_ISRC_LINKS + " sil_req" +
+                        " JOIN " + TABLE_SONG_ISRC_LINKS + " sil_sib ON sil_sib.isrc = sil_req.isrc" +
+                        " WHERE sil_req.spotify_uri IN (" + placeholders + ")",
+                spotifyUris.toArray(new String[0]));
+
+        Map<String, List<String>> variantMap = new HashMap<>();
+        if (isrcCursor.moveToFirst()) {
+            do {
+                String reqUri = isrcCursor.getString(0);
+                String sibUri = isrcCursor.getString(1);
+                variantMap.computeIfAbsent(reqUri, k -> new ArrayList<>()).add(sibUri);
+            } while (isrcCursor.moveToNext());
+        }
+        isrcCursor.close();
+
+        for (String uri : spotifyUris) {
+            if (!variantMap.containsKey(uri)) {
+                variantMap.put(uri, java.util.Collections.singletonList(uri));
+            }
+        }
+
+        Set<String> allSiblings = new java.util.HashSet<>();
+        for (List<String> siblings : variantMap.values()) allSiblings.addAll(siblings);
+
+        Map<String, String> siblingLatest = new HashMap<>();
+        if (!allSiblings.isEmpty()) {
+            List<String> siblingList = new ArrayList<>(allSiblings);
+            String sibPlaceholders = buildPlaceholders(siblingList.size());
+            Cursor lhCursor = db.rawQuery(
+                    "SELECT " + COLUMN_SPOTIFY_URI + ", MAX(" + COLUMN_LISTEN_TIMESTAMP + ")" +
+                            " FROM " + TABLE_LISTEN_HISTORY +
+                            " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + sibPlaceholders + ")" +
+                            " GROUP BY " + COLUMN_SPOTIFY_URI,
+                    siblingList.toArray(new String[0]));
+            if (lhCursor.moveToFirst()) {
+                do {
+                    siblingLatest.put(lhCursor.getString(0), lhCursor.getString(1));
+                } while (lhCursor.moveToNext());
+            }
+            lhCursor.close();
+        }
+
+        db.close();
+
+        for (String uri : spotifyUris) {
+            String best = null;
+            for (String sib : variantMap.getOrDefault(uri, java.util.Collections.singletonList(uri))) {
+                String ts = siblingLatest.get(sib);
+                if (ts != null && (best == null || ts.compareTo(best) > 0)) best = ts;
+            }
+            if (best != null) results.put(uri, best);
+        }
+        return results;
+    }
+
+    /**
+     * Like getMaxPopularityForUris but keyed per requested URI (returns the max across variants for each).
+     * Returns a map from each requested URI to its variant-max popularity.
+     */
+    public Map<String, Integer> getVariantPopularityBatch(List<String> spotifyUris) {
+        Map<String, Integer> results = new HashMap<>();
+        if (spotifyUris == null || spotifyUris.isEmpty()) return results;
+
+        SQLiteDatabase db = this.getReadableDatabase();
+
+        String placeholders = buildPlaceholders(spotifyUris.size());
+        Cursor isrcCursor = db.rawQuery(
+                "SELECT sil_req.spotify_uri, sil_sib.spotify_uri" +
+                        " FROM " + TABLE_SONG_ISRC_LINKS + " sil_req" +
+                        " JOIN " + TABLE_SONG_ISRC_LINKS + " sil_sib ON sil_sib.isrc = sil_req.isrc" +
+                        " WHERE sil_req.spotify_uri IN (" + placeholders + ")",
+                spotifyUris.toArray(new String[0]));
+
+        Map<String, List<String>> variantMap = new HashMap<>();
+        if (isrcCursor.moveToFirst()) {
+            do {
+                String reqUri = isrcCursor.getString(0);
+                String sibUri = isrcCursor.getString(1);
+                variantMap.computeIfAbsent(reqUri, k -> new ArrayList<>()).add(sibUri);
+            } while (isrcCursor.moveToNext());
+        }
+        isrcCursor.close();
+
+        for (String uri : spotifyUris) {
+            if (!variantMap.containsKey(uri)) {
+                variantMap.put(uri, java.util.Collections.singletonList(uri));
+            }
+        }
+
+        Set<String> allSiblings = new java.util.HashSet<>();
+        for (List<String> siblings : variantMap.values()) allSiblings.addAll(siblings);
+
+        Map<String, Integer> siblingPop = new HashMap<>();
+        if (!allSiblings.isEmpty()) {
+            List<String> siblingList = new ArrayList<>(allSiblings);
+            String sibPlaceholders = buildPlaceholders(siblingList.size());
+            Cursor popCursor = db.rawQuery(
+                    "SELECT " + COLUMN_SPOTIFY_URI + ", " + COLUMN_POPULARITY +
+                            " FROM " + TABLE_SONGS +
+                            " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + sibPlaceholders + ")",
+                    siblingList.toArray(new String[0]));
+            if (popCursor.moveToFirst()) {
+                do {
+                    siblingPop.put(popCursor.getString(0), popCursor.getInt(1));
+                } while (popCursor.moveToNext());
+            }
+            popCursor.close();
+        }
+
+        db.close();
+
+        for (String uri : spotifyUris) {
+            int max = 0;
+            for (String sib : variantMap.getOrDefault(uri, java.util.Collections.singletonList(uri))) {
+                max = Math.max(max, siblingPop.getOrDefault(sib, 0));
+            }
+            results.put(uri, max);
+        }
         return results;
     }
 

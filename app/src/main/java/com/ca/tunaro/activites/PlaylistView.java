@@ -336,7 +336,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             for (SongModel song : filteredList) {
                 listenCountSongIds.add(song.getId());
             }
-            Map<String, Integer> listenCountMap = listenCountDbHelper.getListenCountsBatch(listenCountSongIds);
+            Map<String, Integer> listenCountMap = listenCountDbHelper.getVariantListenCountsBatch(listenCountSongIds);
             adapter.updateListenCounts(listenCountMap);
         }
 
@@ -469,7 +469,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                     songIds.add(song.getId());
                 }
 
-                Map<String, String> timestampMap = dbHelper.getMostRecentListenTimestampsBatch(songIds);
+                Map<String, String> timestampMap = dbHelper.getVariantMostRecentListenTimestampsBatch(songIds);
 
                 // Support both timestamp formats (milliseconds included for Tunaro records, not for Spotify)
                 java.text.SimpleDateFormat formatWithMillis = new java.text.SimpleDateFormat(
@@ -529,17 +529,25 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             case 4: // Artist
                 comparator = Comparator.comparing(SongModel::getArtist, String.CASE_INSENSITIVE_ORDER);
                 break;
-            case 5: // Popularity
-                comparator = Comparator.comparingInt(SongModel::getPopularity);
+            case 5: // Popularity (variant-aware: uses max across ISRC siblings)
+                DatabaseHelper popularityDbHelper = new DatabaseHelper(this);
+                List<String> popularitySongIds = new ArrayList<>();
+                for (SongModel song : songs) {
+                    popularitySongIds.add(song.getId());
+                }
+                Map<String, Integer> popularityMap = popularityDbHelper.getVariantPopularityBatch(popularitySongIds);
+                comparator = (song1, song2) -> Integer.compare(
+                        popularityMap.getOrDefault(song1.getId(), song1.getPopularity()),
+                        popularityMap.getOrDefault(song2.getId(), song2.getPopularity()));
                 break;
-            case 6: // Listen Count
+            case 6: // Listen Count (variant-aware: sums across ISRC siblings)
                 DatabaseHelper listenCountDbHelper = new DatabaseHelper(this);
                 List<String> listenCountSongIds = new ArrayList<>();
                 for (SongModel song : songs) {
                     listenCountSongIds.add(song.getId());
                 }
 
-                Map<String, Integer> listenCountMap = listenCountDbHelper.getListenCountsBatch(listenCountSongIds);
+                Map<String, Integer> listenCountMap = listenCountDbHelper.getVariantListenCountsBatch(listenCountSongIds);
 
                 comparator = (song1, song2) -> {
                     int count1 = listenCountMap.getOrDefault(song1.getId(), 0);
@@ -592,7 +600,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             for (SongModel song : songs) {
                 listenCountSongIds.add(song.getId());
             }
-            Map<String, Integer> listenCountMap = listenCountDbHelper.getListenCountsBatch(listenCountSongIds);
+            Map<String, Integer> listenCountMap = listenCountDbHelper.getVariantListenCountsBatch(listenCountSongIds);
             adapter.updateListenCounts(listenCountMap);
         }
 
