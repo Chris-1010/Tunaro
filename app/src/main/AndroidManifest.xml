@@ -79,6 +79,11 @@
             android:screenOrientation="portrait" />
 
         <activity
+            android:name=".activites.SqlQueryActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name="com.spotify.sdk.android.auth.LoginActivity"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:exported="true">
