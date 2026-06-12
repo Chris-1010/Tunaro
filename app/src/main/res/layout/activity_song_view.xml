@@ -63,11 +63,10 @@
                 <!-- Album Cover + Playlist Panel container -->
                 <!-- FrameLayout: panel sits behind the cover, slides left on tap -->
                 <FrameLayout
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="280dp"
                     android:layout_gravity="center"
-                    android:layout_marginBottom="10dp"
-                    android:clipChildren="false">
+                    android:layout_marginBottom="10dp">
 
                     <!-- Playlist Panel (behind the album cover, slides out to the left) -->
                     <LinearLayout
@@ -78,14 +77,14 @@
                         android:background="@drawable/rounded_md"
                         android:backgroundTint="#CC000000"
                         android:clipToPadding="false"
-                        android:gravity="center_horizontal"
+                        android:gravity="center|left"
                         android:orientation="vertical"
                         android:paddingTop="8dp"
                         android:paddingBottom="8dp"
                         android:translationX="-56dp"
                         android:visibility="invisible"
-                        tools:visibility="visible"
-                        tools:translationX="0dp">
+                        tools:translationX="0dp"
+                        tools:visibility="visible">
 
                         <!-- Playlist icons populated dynamically -->
                         <!-- "Not in any playlists" label shown when empty -->
@@ -105,7 +104,8 @@
                             android:layout_width="match_parent"
                             android:layout_height="match_parent"
                             android:overScrollMode="never"
-                            android:visibility="gone">
+                            android:visibility="gone"
+                            tools:visibility="visible">
 
                             <LinearLayout
                                 android:id="@+id/playlist_panel_icons"
@@ -123,7 +123,7 @@
                     <androidx.cardview.widget.CardView
                         android:layout_width="280dp"
                         android:layout_height="280dp"
-                        android:layout_gravity="end|top"
+                        android:layout_gravity="center|top"
                         android:foreground="@drawable/image_border"
                         app:cardCornerRadius="12dp"
                         app:cardElevation="8dp">
