@@ -61,20 +61,19 @@ public class PlaylistCache {
             List<PlaylistMetadata> metadataList = new ArrayList<>();
 
             for (PlaylistModel playlist : playlists) {
-                // Only extract song IDs if songs are actually loaded
-                List<String> songIds = new ArrayList<>();
+                List<String> songIds;
                 if (playlist.getSongs() != null && !playlist.getSongs().isEmpty()) {
+                    songIds = new ArrayList<>();
                     for (SongModel song : playlist.getSongs()) {
                         songIds.add(song.getId());
                     }
-
-                    // Store song IDs separately for this playlist
                     String songIdsJson = gson.toJson(songIds);
                     prefs.edit().putString(SONGS_KEY_PREFIX + playlist.getId(), songIdsJson).apply();
-
                     Log.d(TAG, "Caching " + songIds.size() + " song IDs for playlist: " + playlist.getPlaylistName());
                 } else {
-                    Log.d(TAG, "Playlist " + playlist.getPlaylistName() + " has no songs loaded yet - caching empty list");
+                    // Songs not loaded — preserve whatever song IDs are already cached
+                    List<String> existing = getCachedPlaylistSongIds(playlist.getId());
+                    songIds = existing != null ? existing : new ArrayList<>();
                 }
 
                 PlaylistMetadata metadata = new PlaylistMetadata(

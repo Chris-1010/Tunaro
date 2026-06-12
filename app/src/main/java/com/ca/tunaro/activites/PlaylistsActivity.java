@@ -73,14 +73,14 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
     }
 
     private void loadPlaylists() {
-        if (mainActivity == null || mainActivity.getSpotifyApi() == null || mainActivity.getUserID() == null) {
+        if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
             showToast("Spotify API not ready");
             return;
         }
 
         swipeRefreshLayout.setRefreshing(true);
 
-        PlaylistSetup.getPlaylistData(mainActivity.getUserID(), mainActivity.getSpotifyApi())
+        PlaylistSetup.getPlaylistData(mainActivity.getSpotifyApi())
                 .thenAccept(playlists -> {
                     if (playlists.isEmpty() && !retried) {
                         // Playlists may be empty due to expired token — try refreshing and retrying
@@ -109,12 +109,12 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
     }
 
     private void refreshData() {
-        if (mainActivity == null || mainActivity.getSpotifyApi() == null || mainActivity.getUserID() == null) {
+        if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
             swipeRefreshLayout.setRefreshing(false);
             return;
         }
 
-        PlaylistSetup.refreshPlaylists(mainActivity.getUserID(), mainActivity.getSpotifyApi())
+        PlaylistSetup.refreshPlaylists(mainActivity.getSpotifyApi())
                 .thenAccept(this::updateUIWithFilteredPlaylists)
                 .exceptionally(e -> {
                     runOnUiThread(() -> {
@@ -196,17 +196,14 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
     }
 
     private void refreshPlaylists() {
-        if (mainActivity == null || mainActivity.getSpotifyApi() == null || mainActivity.getUserID() == null) {
+        if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
             return;
         }
 
-        // Show loading indicator
         swipeRefreshLayout.setRefreshing(true);
 
-        // Only refresh from API if coming from archived view to normal view
         if (showingArchived) {
-            // Use cached data since archived playlists don't need fresh API data
-            PlaylistSetup.getPlaylistData(mainActivity.getUserID(), mainActivity.getSpotifyApi())
+            PlaylistSetup.getPlaylistData(mainActivity.getSpotifyApi())
                     .thenAccept(this::updateUIWithFilteredPlaylists)
                     .exceptionally(e -> {
                         runOnUiThread(() -> {
@@ -216,8 +213,7 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
                         return null;
                     });
         } else {
-            // If showing main view, do a full refresh
-            PlaylistSetup.refreshPlaylists(mainActivity.getUserID(), mainActivity.getSpotifyApi())
+            PlaylistSetup.refreshPlaylists(mainActivity.getSpotifyApi())
                     .thenAccept(this::updateUIWithFilteredPlaylists)
                     .exceptionally(e -> {
                         runOnUiThread(() -> {
