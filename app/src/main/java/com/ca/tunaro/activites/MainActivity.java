@@ -9,11 +9,13 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.services.AutomaticFetcher;
 import com.ca.tunaro.services.SongRefreshService;
 import com.ca.tunaro.utils.DeviceChecker;
 import com.ca.tunaro.utils.PlaylistSetup;
+import com.ca.tunaro.utils.PoolingSpotifyHttpManager;
 import com.ca.tunaro.R;
 import com.spotify.android.appremote.api.SpotifyAppRemote;
 import com.spotify.sdk.android.auth.AuthorizationClient;
@@ -30,6 +32,8 @@ import java.net.URI;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -98,6 +102,8 @@ public class MainActivity extends AppCompatActivity {
                         performInitialDeviceCheck();
                         performAutomaticFetch();
                         performBackgroundRefresh();
+                        performPlaylistSongScan();
+                        performOrphanedListenFetch();
                     })
                     .exceptionally(e -> {
                         Log.e(TAG, "Token refresh failed after session restore", e);
@@ -105,6 +111,8 @@ public class MainActivity extends AppCompatActivity {
                         performInitialDeviceCheck();
                         performAutomaticFetch();
                         performBackgroundRefresh();
+                        performPlaylistSongScan();
+                        performOrphanedListenFetch();
                         return null;
                     });
 
@@ -183,6 +191,7 @@ public class MainActivity extends AppCompatActivity {
             performInitialDeviceCheck();
             performAutomaticFetch();
             performBackgroundRefresh();
+            performPlaylistSongScan();
         }), executor);
     }
 
@@ -221,6 +230,7 @@ public class MainActivity extends AppCompatActivity {
     private CompletableFuture<Void> getCurrentUsersProfile_Async() {
         final GetCurrentUsersProfileRequest getCurrentUsersProfileRequest = spotifyApi.getCurrentUsersProfile()
                 .build();
+        Log.d(TAG, "API: getCurrentUsersProfile");
         return getCurrentUsersProfileRequest.executeAsync()
                 .thenAccept(user -> {
                     userID = user.getId();
@@ -412,7 +422,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void performInitialDeviceCheck() {
-        DeviceChecker.checkPlaybackDevice(this, spotifyApi, (isCorrectDevice, message) -> runOnUiThread(() -> {
+        DeviceChecker.checkPlaybackDevice(this, buildFreshSpotifyApi(), (isCorrectDevice, message) -> runOnUiThread(() -> {
             if (!isCorrectDevice && PlaybackManager.getInstance().isPlaying() && DeviceChecker.isDeviceCheckEnabled(this)) {
                 showToast(message);
             }
@@ -436,9 +446,93 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    private void performPlaylistSongScan() {
+        if (spotifyApi == null) return;
+        PlaylistSetup.scanAllPlaylistSongs(buildFreshSpotifyApi())
+                .exceptionally(e -> {
+                    Log.e(TAG, "Playlist song scan failed", e);
+                    return null;
+                });
+    }
+
+    private void performOrphanedListenFetch() {
+        if (spotifyApi == null) return;
+        SpotifyApi api = buildFreshSpotifyApi();
+        CompletableFuture.runAsync(() -> {
+            try {
+                DatabaseHelper db = new DatabaseHelper(getApplicationContext());
+                List<String> orphanedUris = db.getOrphanedListenUris();
+                db.close();
+
+                if (orphanedUris.isEmpty()) return;
+                Log.d(TAG, "Found " + orphanedUris.size() + " orphaned listen URIs");
+
+                List<String> validUris = new ArrayList<>();
+                for (String uri : orphanedUris) {
+                    if (uri != null && uri.startsWith("spotify:track:")) {
+                        String id = uri.substring("spotify:track:".length());
+                        if (id.matches("[A-Za-z0-9]{22}")) validUris.add(uri);
+                        else Log.d(TAG, "Skipping malformed orphaned URI: " + uri);
+                    } else {
+                        Log.d(TAG, "Skipping non-track orphaned URI: " + uri);
+                    }
+                }
+                if (validUris.isEmpty()) return;
+                Log.d(TAG, "Fetching metadata for " + validUris.size() + " orphaned listen URIs");
+
+                for (int i = 0; i < validUris.size(); i += 50) {
+                    List<String> batch = validUris.subList(i, Math.min(i + 50, validUris.size()));
+                    List<String> trackIds = new ArrayList<>(batch.size());
+                    for (String uri : batch) trackIds.add(uri.substring(uri.lastIndexOf(":") + 1));
+
+                    try {
+                        se.michaelthelin.spotify.model_objects.specification.Track[] tracks =
+                                api.getSeveralTracks(String.join(",", trackIds))
+                                        .build().execute();
+
+                        DatabaseHelper dbWrite = new DatabaseHelper(getApplicationContext());
+                        for (int j = 0; j < tracks.length; j++) {
+                            se.michaelthelin.spotify.model_objects.specification.Track track = tracks[j];
+                            if (track == null) continue;
+
+                            se.michaelthelin.spotify.model_objects.specification.AlbumSimplified album = track.getAlbum();
+                            se.michaelthelin.spotify.model_objects.specification.Image[] images = album != null ? album.getImages() : null;
+                            String imageUrl = images != null && images.length > 0 ? images[0].getUrl() : null;
+
+                            com.ca.tunaro.models.SongModel.Album songAlbum = album != null ? new com.ca.tunaro.models.SongModel.Album(
+                                    album.getId(), album.getName(),
+                                    album.getAlbumType() != null ? album.getAlbumType().getType() : null,
+                                    album.getReleaseDate(), imageUrl) : null;
+
+                            String isrc = null;
+                            if (track.getExternalIds() != null && track.getExternalIds().getExternalIds() != null) {
+                                isrc = track.getExternalIds().getExternalIds().get("isrc");
+                            }
+
+                            Boolean playable = track.getIsPlayable();
+                            dbWrite.upsertSong(new com.ca.tunaro.models.SongModel(
+                                    track.getUri(), track.getName(), track.getArtists(),
+                                    track.getDurationMs(), track.getUri(), track.getPopularity(),
+                                    songAlbum, isrc, null, playable == null || playable));
+                        }
+                        dbWrite.close();
+                    } catch (Exception e) {
+                        Log.w(TAG, "Orphaned listen fetch batch failed at offset " + i, e);
+                    }
+                }
+                DatabaseHelper dbCleanup = new DatabaseHelper(getApplicationContext());
+                dbCleanup.deleteOrphanedListens();
+                dbCleanup.close();
+                Log.d(TAG, "Orphaned listen fetch complete");
+            } catch (Exception e) {
+                Log.e(TAG, "Orphaned listen fetch failed", e);
+            }
+        });
+    }
+
     private void performBackgroundRefresh() {
         if (spotifyApi == null) return;
-        new SongRefreshService(this, spotifyApi).refreshStaleSongs()
+        new SongRefreshService(this, buildFreshSpotifyApi()).refreshStaleSongs()
                 .exceptionally(e -> {
                     Log.e(TAG, "Background song refresh failed", e);
                     return null;
@@ -573,6 +667,20 @@ public class MainActivity extends AppCompatActivity {
     // Getters for important objects
     public SpotifyApi getSpotifyApi() {
         return spotifyApi;
+    }
+
+    // Returns a fresh SpotifyApi instance with its own connection manager — use this
+    // when making concurrent API calls to avoid BasicHttpClientConnectionManager contention.
+    public SpotifyApi buildFreshSpotifyApi() {
+        if (spotifyApi == null) return null;
+        return new SpotifyApi.Builder()
+                .setClientId(CLIENT_ID)
+                .setClientSecret(CLIENT_SECRET)
+                .setRedirectUri(REDIRECT_URI)
+                .setAccessToken(spotifyApi.getAccessToken())
+                .setRefreshToken(spotifyApi.getRefreshToken())
+                .setHttpManager(new PoolingSpotifyHttpManager())
+                .build();
     }
 
     public SpotifyAppRemote getSpotifyAppRemote() {
