@@ -25,6 +25,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -993,11 +994,40 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         if (result == -1) {
             ContentValues update = new ContentValues();
             update.putNull(COLUMN_REMOVED_AT);
+            if (addedAt != null) update.put(COLUMN_ADDED_AT, addedAt);
             db.update(TABLE_SONG_PLAYLISTS, update,
                     COLUMN_SPOTIFY_URI + " = ? AND " + COLUMN_PLAYLIST_ID + " = ?",
                     new String[]{spotifyUri, playlistId});
         }
         db.close();
+    }
+
+    public Map<String, Date> getAddedAtMapForPlaylist(String playlistId) {
+        Map<String, Date> result = new HashMap<>();
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT " + COLUMN_SPOTIFY_URI + ", " + COLUMN_ADDED_AT +
+                        " FROM " + TABLE_SONG_PLAYLISTS +
+                        " WHERE " + COLUMN_PLAYLIST_ID + " = ? AND " + COLUMN_REMOVED_AT + " IS NULL",
+                new String[]{playlistId});
+        java.text.SimpleDateFormat fmt1 = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US);
+        java.text.SimpleDateFormat fmt2 = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US);
+        fmt1.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+        fmt2.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+        if (cursor.moveToFirst()) {
+            do {
+                String uri = cursor.getString(0);
+                String ts = cursor.getString(1);
+                if (ts != null) {
+                    try {
+                        try { result.put(uri, fmt2.parse(ts)); } catch (java.text.ParseException e2) { result.put(uri, fmt1.parse(ts)); }
+                    } catch (java.text.ParseException ignored) {}
+                }
+            } while (cursor.moveToNext());
+        }
+        cursor.close();
+        db.close();
+        return result;
     }
 
     public void markSongRemovedFromPlaylist(String spotifyUri, String playlistId) {

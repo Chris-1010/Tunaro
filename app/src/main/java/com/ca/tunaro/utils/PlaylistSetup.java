@@ -162,6 +162,18 @@ public class PlaylistSetup {
                             cachedSongs.size(), cachedSongIds.size());
                 }
 
+                // Back-fill dateAddedToPlaylist from DB — the cached SongModel may carry
+                // a stale date from a different playlist's scan.
+                if (appContext != null) {
+                    DatabaseHelper dbHelper = new DatabaseHelper(appContext);
+                    Map<String, java.util.Date> addedAtMap = dbHelper.getAddedAtMapForPlaylist(playlistId);
+                    dbHelper.close();
+                    for (SongModel song : cachedSongs) {
+                        java.util.Date addedAt = addedAtMap.get(song.getId());
+                        if (addedAt != null) song.setDateAddedToPlaylist(addedAt);
+                    }
+                }
+
                 // If all songs cached, return with needsCaching=false
                 if (missingSongIds.isEmpty()) {
                     Log.d("PlaylistSetup", "All " + cachedSongs.size() + " songs found in cache");
