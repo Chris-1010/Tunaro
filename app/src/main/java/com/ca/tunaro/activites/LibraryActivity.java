@@ -25,13 +25,9 @@ import com.ca.tunaro.models.SongModel;
 import java.util.ArrayList;
 import java.util.List;
 
-import se.michaelthelin.spotify.SpotifyApi;
-
 public class LibraryActivity extends BaseActivity implements Library_RecyclerViewInterface {
     private static final String TAG = "LibraryActivity";
 
-    private MainActivity mainActivity;
-    private SpotifyApi spotifyApi;
     private LibrarySongAdapter adapter;
     private DatabaseHelper dbHelper;
     private final List<SongModel> allSongs = new ArrayList<>();
@@ -46,11 +42,7 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
         setContentView(R.layout.activity_library);
 
         Log.d(TAG, "LibraryActivity onCreate MainActivity.getInstance()");
-        mainActivity = MainActivity.getInstance();
-
-        if (mainActivity != null) {
-            spotifyApi = mainActivity.getSpotifyApi();
-        } else {
+        if (MainActivity.getInstance() == null) {
             showToast("Could not connect to Spotify");
             finish();
             return;
@@ -109,14 +101,8 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
             return;
         }
 
-        // Not in DB — should not happen in normal flow, but fall back to Spotify API
-        if (spotifyApi == null) {
-            loadSongsSequentially(songIds, index + 1);
-            return;
-        }
-
-        // songId is a composite key and can't be passed to Spotify API directly
-        // Log a warning and skip; song data will be populated on next playlist sync
+        // Not in DB — should not happen in normal flow. Skip; song data will be
+        // populated on the next playlist sync / orphan back-fill.
         Log.w(TAG, "Song not in DB, skipping library entry: " + songId);
         new Handler(Looper.getMainLooper()).post(() -> loadSongsSequentially(songIds, index + 1));
     }
