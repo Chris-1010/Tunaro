@@ -110,6 +110,7 @@ public class SongView extends BaseActivity {
         setupBasicSongInfo();
         if (loadingFromApi) {
             startHeaderShimmer();
+            showNewSongPill();
             fetchAndPopulateFromApi(selectedSong.getId());
         }
         setupAlbumCover();
@@ -413,10 +414,49 @@ public class SongView extends BaseActivity {
         }
     }
 
+    private void showNewSongPill() {
+        View pillShimmer = findViewById(R.id.new_song_pill_shimmer);
+        if (pillShimmer == null) return;
+        pillShimmer.setVisibility(View.VISIBLE);
+        pillShimmer.setScaleX(0f);
+        pillShimmer.setScaleY(0f);
+        pillShimmer.animate().scaleX(1f).scaleY(1f)
+                .setDuration(350)
+                .setInterpolator(new android.view.animation.OvershootInterpolator())
+                .start();
+    }
+
+    private void styleNewSongPill(int startColor, int endColor) {
+        TextView pill = findViewById(R.id.new_song_pill);
+        View pillShimmer = findViewById(R.id.new_song_pill_shimmer);
+        if (pill == null || pillShimmer == null || pillShimmer.getVisibility() != View.VISIBLE) return;
+
+        // Inverted album colours so the pill pops against the cover it sits on
+        int invertedStart = invertColor(startColor);
+        int invertedEnd = invertColor(endColor);
+
+        GradientDrawable bg = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{invertedStart, invertedEnd});
+        bg.setCornerRadius(dpToPx(50));
+        bg.setStroke(dpToPx(1), Color.argb(80, 255, 255, 255));
+        pill.setBackground(bg);
+
+        int midColor = androidx.core.graphics.ColorUtils.blendARGB(invertedStart, invertedEnd, 0.5f);
+        boolean whiteReadable = androidx.core.graphics.ColorUtils.calculateContrast(Color.WHITE, midColor)
+                >= androidx.core.graphics.ColorUtils.calculateContrast(Color.BLACK, midColor);
+        pill.setTextColor(whiteReadable ? Color.WHITE : Color.BLACK);
+    }
+
+    private static int invertColor(int color) {
+        return Color.rgb(255 - Color.red(color), 255 - Color.green(color), 255 - Color.blue(color));
+    }
+
     private void setupDynamicBackground() {
         ColorExtractor.extractColors(this, selectedSong.getAlbumCoverUrl(), new ColorExtractor.ColorExtractionCallback() {
             @Override
             public void onColorExtracted(int dominantColor, int vibrantColor) {
+                styleNewSongPill(vibrantColor, dominantColor);
                 if (ColorExtractor.hasSufficientContrast(dominantColor, Color.BLACK, 0)) {
                     applyGradientBackground(dominantColor);
                     return;

@@ -137,6 +137,34 @@
                             android:longClickable="true"
                             android:scaleType="centerCrop"
                             tools:srcCompat="@tools:sample/backgrounds/scenic" />
+
+                        <!-- "NEW" pill — shown for songs Tunaro hasn't seen before -->
+                        <com.facebook.shimmer.ShimmerFrameLayout
+                            android:id="@+id/new_song_pill_shimmer"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="top|end"
+                            android:layout_margin="10dp"
+                            android:visibility="gone"
+                            app:shimmer_base_alpha="1"
+                            app:shimmer_highlight_alpha="0.65"
+                            app:shimmer_duration="5000"
+                            tools:visibility="visible">
+
+                            <TextView
+                                android:id="@+id/new_song_pill"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/pill_new_song"
+                                android:elevation="4dp"
+                                android:letterSpacing="0.12"
+                                android:paddingHorizontal="14dp"
+                                android:paddingVertical="6dp"
+                                android:text="NEW"
+                                android:textColor="@android:color/white"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+                        </com.facebook.shimmer.ShimmerFrameLayout>
                     </androidx.cardview.widget.CardView>
 
                 </FrameLayout>
