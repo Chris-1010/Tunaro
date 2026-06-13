@@ -29,7 +29,7 @@ import androidx.fragment.app.Fragment;
 import com.ca.tunaro.R;
 import com.ca.tunaro.activites.MainActivity;
 import com.ca.tunaro.utils.DeveloperHistory;
-import com.ca.tunaro.utils.HistoryDialog;
+import com.ca.tunaro.utils.DarkListDialog;
 import com.ca.tunaro.utils.JsonHighlighter;
 
 import java.io.IOException;
@@ -418,7 +418,7 @@ public class ApiRequestFragment extends Fragment {
             items.add(entry.endpoint + "\n" + entry.url);
         }
 
-        HistoryDialog.show(requireContext(), "Request History", items, position -> {
+        DarkListDialog.show(requireContext(), "Request History", items, position -> {
             DeveloperHistory.ApiEntry entry = history.get(position);
             ClipboardManager clipboard =
                     (ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE);

@@ -17,9 +17,10 @@ import com.ca.tunaro.R;
 import java.util.List;
 
 /**
- * Dark rounded dialog listing previously executed commands on the Developer screen.
+ * Dark rounded dialog presenting a tappable list of items
+ * (Developer screen command history, SongView variant picker).
  */
-public class HistoryDialog {
+public class DarkListDialog {
 
     public interface OnEntrySelected {
         void onSelected(int position);

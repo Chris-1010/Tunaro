@@ -22,7 +22,7 @@ import androidx.fragment.app.Fragment;
 import com.ca.tunaro.R;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.utils.DeveloperHistory;
-import com.ca.tunaro.utils.HistoryDialog;
+import com.ca.tunaro.utils.DarkListDialog;
 
 import java.util.List;
 
@@ -69,7 +69,7 @@ public class SqlQueryFragment extends Fragment {
             return;
         }
 
-        HistoryDialog.show(requireContext(), "Query History", history, position -> {
+        DarkListDialog.show(requireContext(), "Query History", history, position -> {
             String query = history.get(position);
             ClipboardManager clipboard =
                     (ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE);

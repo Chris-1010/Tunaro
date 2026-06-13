@@ -1,6 +1,5 @@
 package com.ca.tunaro.fragments;
 
-import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -22,10 +21,12 @@ import com.ca.tunaro.activites.SongView;
 import com.ca.tunaro.activites.SongWebInfoActivity;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.models.SongModel;
+import com.ca.tunaro.utils.DarkListDialog;
 import com.ca.tunaro.utils.SelectedSongHolder;
 import com.google.android.material.button.MaterialButton;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -252,10 +253,8 @@ public class SongDetailsFragment extends Fragment {
             labels[i] = album + " — " + v.getArtist();
         }
 
-        new AlertDialog.Builder(requireContext())
-                .setTitle("Other versions")
-                .setItems(labels, (dialog, which) -> navigateToVariant(variants.get(which)))
-                .show();
+        DarkListDialog.show(requireContext(), "Other versions", Arrays.asList(labels),
+                position -> navigateToVariant(variants.get(position)));
     }
 
     private void navigateToVariant(SongModel variant) {
