@@ -258,11 +258,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         ColorExtractor.extractColors(this, playlistImage, new ColorExtractor.ColorExtractionCallback() {
             @Override
             public void onColorExtracted(int dominantColor, int vibrantColor) {
-                if (ColorExtractor.hasSufficientContrast(dominantColor, Color.BLACK, 0)) {
-                    applyGradientBackground(dominantColor);
-                    return;
-                }
-                applyGradientBackground(vibrantColor);
+                applyGradientBackground(ColorExtractor.pickBackgroundColor(dominantColor, vibrantColor));
             }
 
             @Override

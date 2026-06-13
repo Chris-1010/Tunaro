@@ -457,11 +457,7 @@ public class SongView extends BaseActivity {
             @Override
             public void onColorExtracted(int dominantColor, int vibrantColor) {
                 styleNewSongPill(vibrantColor, dominantColor);
-                if (ColorExtractor.hasSufficientContrast(dominantColor, Color.BLACK, 0)) {
-                    applyGradientBackground(dominantColor);
-                    return;
-                }
-                applyGradientBackground(vibrantColor);
+                applyGradientBackground(ColorExtractor.pickBackgroundColor(dominantColor, vibrantColor));
             }
 
             @Override

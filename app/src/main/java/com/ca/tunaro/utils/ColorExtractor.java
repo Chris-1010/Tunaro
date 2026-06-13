@@ -72,4 +72,37 @@ public class ColorExtractor {
         }
         return androidx.core.graphics.ColorUtils.calculateContrast(foregroundColor, backgroundColor) >= minContrastRatio;
     }
+
+    /**
+     * Pick a background colour for a black gradient, preferring the vibrant swatch
+     * over the dominant one and avoiding greyish (low-saturation) colours unless
+     * nothing better qualifies.
+     */
+    // The background is decorative, not text, so the vibrant swatch only needs to be
+    // visible against the black gradient end — far below the 4.5:1 WCAG text ratio.
+    // 2.5:1 still rejects the dark-red getVibrantColor fallback (1.5:1), which is how
+    // "no vibrant swatch exists" is filtered out.
+    private static final float MIN_VIBRANT_CONTRAST = 2.5f;
+
+    public static int pickBackgroundColor(int dominantColor, int vibrantColor) {
+        if (hasSufficientContrast(vibrantColor, Color.BLACK, MIN_VIBRANT_CONTRAST) && !isGreyish(vibrantColor)) {
+            return vibrantColor;
+        }
+        if (hasSufficientContrast(dominantColor, Color.BLACK, 0) && !isGreyish(dominantColor)) {
+            return dominantColor;
+        }
+        if (hasSufficientContrast(vibrantColor, Color.BLACK, MIN_VIBRANT_CONTRAST)) {
+            return vibrantColor;
+        }
+        if (hasSufficientContrast(dominantColor, Color.BLACK, 0)) {
+            return dominantColor;
+        }
+        return vibrantColor;
+    }
+
+    private static boolean isGreyish(int color) {
+        float[] hsv = new float[3];
+        Color.colorToHSV(color, hsv);
+        return hsv[1] < 0.35f;
+    }
 }
