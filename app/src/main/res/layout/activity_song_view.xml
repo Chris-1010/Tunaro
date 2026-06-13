@@ -209,10 +209,13 @@
                 android:layout_height="wrap_content"
                 android:background="@android:color/transparent"
                 android:contentDescription="@string/songViewTabsDesc"
+                android:paddingStart="2dp"
+                android:paddingEnd="2dp"
                 app:tabGravity="center"
-                app:tabMode="scrollable"
-                app:tabPaddingEnd="4dp"
-                app:tabPaddingStart="4dp" />
+                app:tabMode="fixed"
+                app:tabIndicatorHeight="0dp"
+                app:tabPaddingEnd="2dp"
+                app:tabPaddingStart="2dp" />
 
             <!-- ViewPager for tab content -->
             <androidx.viewpager2.widget.ViewPager2

@@ -1,5 +1,6 @@
 package com.ca.tunaro.fragments;
 
+import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
@@ -26,13 +27,15 @@ import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.models.SongSnippet;
 import com.ca.tunaro.adapters.SongSnippetsAdapter;
 import com.ca.tunaro.database.DatabaseHelper;
+import com.ca.tunaro.utils.ColorExtractor;
+import com.ca.tunaro.utils.SnippetTheme;
 import com.spotify.android.appremote.api.SpotifyAppRemote;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-public class SongSnippetsFragment extends Fragment {
+public class SongSnippetsFragment extends Fragment implements PlaybackManager.PlaybackListener {
     private static final String TAG = "SongSnippetsFragment";
 
     private View snippetCreationOverlay;
@@ -48,6 +51,7 @@ public class SongSnippetsFragment extends Fragment {
     private SongModel song;
     private DatabaseHelper dbHelper;
     private RecyclerView snippetsRecyclerView;
+    private Button addSnippetButton;
     private SongSnippetsAdapter snippetAdapter;
     private List<SongSnippet> snippets = new ArrayList<>();
 
@@ -60,6 +64,7 @@ public class SongSnippetsFragment extends Fragment {
     private boolean isUpdatingPlayback = false;
 
     private List<String> variantUris;
+    private SnippetTheme currentTheme;
 
     public static SongSnippetsFragment newInstance(SongModel song, List<String> variantUris) {
         SongSnippetsFragment fragment = new SongSnippetsFragment();
@@ -84,7 +89,7 @@ public class SongSnippetsFragment extends Fragment {
         }
 
         // Initialize the add snippet button and recycler view
-        Button addSnippetButton = view.findViewById(R.id.addSnippetButton);
+        addSnippetButton = view.findViewById(R.id.addSnippetButton);
         snippetsRecyclerView = view.findViewById(R.id.snippetsRecyclerView);
 
         // Setup button click handler
@@ -97,7 +102,148 @@ public class SongSnippetsFragment extends Fragment {
                 : dbHelper.getSongSnippets(song.getId());
         snippetAdapter.updateSnippets(snippets);
 
+        applySnippetTheme();
+
         return view;
+    }
+
+    /**
+     * Derive a colour theme for the snippet rows from the album cover, matching
+     * the dynamic background used by {@code SongView}.
+     */
+    private void applySnippetTheme() {
+        String coverUrl = song != null ? song.getAlbumCoverUrl() : null;
+        if (coverUrl == null && song != null) {
+            SongModel lean = dbHelper.getLeanSong(song.getId());
+            if (lean != null) coverUrl = lean.getAlbumCoverUrl();
+        }
+        if (coverUrl == null) {
+            applyTheme(SnippetTheme.fallback());
+            return;
+        }
+        ColorExtractor.extractColors(requireContext(), coverUrl, new ColorExtractor.ColorExtractionCallback() {
+            @Override
+            public void onColorExtracted(int dominantColor, int vibrantColor) {
+                if (!isAdded()) return;
+                applyTheme(SnippetTheme.from(vibrantColor, dominantColor));
+            }
+
+            @Override
+            public void onError() {
+                if (!isAdded()) return;
+                applyTheme(SnippetTheme.fallback());
+            }
+        });
+    }
+
+    private void applyTheme(SnippetTheme theme) {
+        currentTheme = theme;
+        snippetAdapter.setTheme(theme);
+        applyOverlayTheme();
+
+        // Match the "Add Snippet" button to the vibrant accent.
+        if (addSnippetButton != null) {
+            addSnippetButton.setBackgroundTintList(
+                    android.content.res.ColorStateList.valueOf(theme.playButton));
+            addSnippetButton.setTextColor(SnippetTheme.contrastColor(theme.playButton));
+        }
+    }
+
+    /**
+     * Tint the snippet-creation modal (card + primary buttons) to the album
+     * theme. Safe to call before the overlay exists or before a theme arrives.
+     */
+    private void applyOverlayTheme() {
+        if (snippetCreationOverlay == null || currentTheme == null) return;
+
+        // Opaque, readable card fill: the album tint composited over a dark base.
+        int cardColor = androidx.core.graphics.ColorUtils.compositeColors(
+                currentTheme.rowBackground, Color.parseColor("#1A1A1A"));
+        View card = snippetCreationOverlay.findViewById(R.id.snippet_controls_card);
+        if (card instanceof androidx.cardview.widget.CardView) {
+            ((androidx.cardview.widget.CardView) card).setCardBackgroundColor(cardColor);
+        }
+
+        // Title field: white-ish box/hint normally, accent when focused.
+        View titleLayout = snippetCreationOverlay.findViewById(R.id.snippet_title_layout);
+        if (titleLayout instanceof com.google.android.material.textfield.TextInputLayout) {
+            com.google.android.material.textfield.TextInputLayout til =
+                    (com.google.android.material.textfield.TextInputLayout) titleLayout;
+            int unfocused = Color.parseColor("#B3FFFFFF");
+            int focused = currentTheme.seekbarProgress;
+            android.content.res.ColorStateList boxColors = new android.content.res.ColorStateList(
+                    new int[][]{
+                            new int[]{android.R.attr.state_focused},
+                            new int[]{}
+                    },
+                    new int[]{focused, unfocused});
+            til.setBoxStrokeColorStateList(boxColors);
+            til.setHintTextColor(boxColors);
+            til.setDefaultHintTextColor(boxColors);
+        }
+
+        android.content.res.ColorStateList accent =
+                android.content.res.ColorStateList.valueOf(currentTheme.playButton);
+
+        // Filled primary buttons: accent background, contrast label.
+        int onAccent = SnippetTheme.contrastColor(currentTheme.playButton);
+        int[] primaryButtons = {R.id.set_start_button, R.id.set_end_button, R.id.save_snippet_button};
+        for (int id : primaryButtons) {
+            View b = snippetCreationOverlay.findViewById(id);
+            if (b instanceof Button) {
+                b.setBackgroundTintList(accent);
+                ((Button) b).setTextColor(onAccent);
+            }
+        }
+
+        // Outlined buttons (Preview Start/End, Cancel): accent text + stroke,
+        // replacing the default purple.
+        int[] outlinedButtons = {R.id.preview_start_button, R.id.preview_end_button, R.id.cancel_snippet_button};
+        for (int id : outlinedButtons) {
+            View b = snippetCreationOverlay.findViewById(id);
+            if (b instanceof com.google.android.material.button.MaterialButton) {
+                com.google.android.material.button.MaterialButton mb =
+                        (com.google.android.material.button.MaterialButton) b;
+                mb.setTextColor(currentTheme.seekbarProgress);
+                mb.setStrokeColor(android.content.res.ColorStateList.valueOf(currentTheme.seekbarProgress));
+                mb.setRippleColor(accent);
+            }
+        }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        PlaybackManager.getInstance().addListener(this);
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        PlaybackManager.getInstance().removeListener(this);
+    }
+
+    // ----- PlaybackManager.PlaybackListener -----
+
+    private String currentPlayingSongId;
+    private boolean currentlyPlaying;
+
+    @Override
+    public void onPlaybackStateChanged(boolean isPlaying, SongModel currentSong) {
+        currentPlayingSongId = currentSong != null ? currentSong.getId() : null;
+        currentlyPlaying = isPlaying;
+    }
+
+    @Override
+    public void onConnectionStateChanged(boolean isConnected) {
+        // No-op: snippet rows only react to position.
+    }
+
+    @Override
+    public void onPlaybackPositionChanged(long positionMs, long durationMs) {
+        if (snippetAdapter != null) {
+            snippetAdapter.updatePlaybackPosition(positionMs, currentPlayingSongId, currentlyPlaying);
+        }
     }
 
     private void setupSnippetsList() {
@@ -107,6 +253,11 @@ public class SongSnippetsFragment extends Fragment {
             public void onPlaySnippet(SongSnippet snippet) {
                 // Playback logic
                 playSnippet(snippet);
+            }
+
+            @Override
+            public void onPauseSnippet(SongSnippet snippet) {
+                PlaybackManager.getInstance().pauseSnippet();
             }
 
             @Override
@@ -121,6 +272,9 @@ public class SongSnippetsFragment extends Fragment {
                 showEditSnippetDialog(snippet);
             }
         });
+
+        snippetAdapter.setVariantUris(variantUris != null ? variantUris
+                : java.util.Collections.singletonList(song.getId()));
 
         // Setup recycler view
         snippetsRecyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
@@ -148,6 +302,7 @@ public class SongSnippetsFragment extends Fragment {
                         .inflate(R.layout.snippet_creation_overlay, parent, false);
                 parent.addView(snippetCreationOverlay);
                 setupSnippetCreationOverlay();
+                applyOverlayTheme();
             }
         }
 
