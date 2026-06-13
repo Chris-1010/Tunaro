@@ -18,7 +18,6 @@
             android:orientation="vertical">
 
             <!-- Header with Back Button, Album Cover, Song Info -->
-
             <LinearLayout
                 android:id="@+id/header_content"
                 android:layout_width="match_parent"
@@ -61,26 +60,114 @@
                         android:textSize="20sp" />
                 </LinearLayout>
 
-                <!-- Album Cover (Long press to play) -->
-                <androidx.cardview.widget.CardView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                <!-- Album Cover + Playlist Panel container -->
+                <!-- FrameLayout: panel sits behind the cover, slides left on tap -->
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="280dp"
                     android:layout_gravity="center"
-                    android:layout_marginBottom="10dp"
-                    android:foreground="@drawable/image_border"
-                    app:cardCornerRadius="12dp"
-                    app:cardElevation="8dp">
+                    android:layout_marginBottom="10dp">
 
-                    <ImageView
-                        android:id="@+id/SongView_AlbumCover"
+                    <!-- Playlist Panel (behind the album cover, slides out to the left) -->
+                    <LinearLayout
+                        android:id="@+id/playlist_panel"
+                        android:layout_width="56dp"
+                        android:layout_height="280dp"
+                        android:layout_gravity="start|top"
+                        android:background="@drawable/rounded_md"
+                        android:backgroundTint="#CC000000"
+                        android:clipToPadding="false"
+                        android:gravity="center|left"
+                        android:orientation="vertical"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="8dp"
+                        android:translationX="-56dp"
+                        android:visibility="invisible"
+                        tools:translationX="0dp"
+                        tools:visibility="visible">
+
+                        <!-- Playlist icons populated dynamically -->
+                        <!-- "Not in any playlists" label shown when empty -->
+                        <TextView
+                            android:id="@+id/playlist_panel_empty"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:gravity="center"
+                            android:padding="8dp"
+                            android:text="Not in any playlists"
+                            android:textColor="#99FFFFFF"
+                            android:textSize="10sp"
+                            android:visibility="gone" />
+
+                        <androidx.core.widget.NestedScrollView
+                            android:id="@+id/playlist_panel_scroll"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:overScrollMode="never"
+                            android:visibility="gone"
+                            tools:visibility="visible">
+
+                            <LinearLayout
+                                android:id="@+id/playlist_panel_icons"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_horizontal"
+                                android:orientation="vertical"
+                                android:padding="4dp" />
+
+                        </androidx.core.widget.NestedScrollView>
+
+                    </LinearLayout>
+
+                    <!-- Album Cover (tap → toggle panel, long-press → play) -->
+                    <androidx.cardview.widget.CardView
                         android:layout_width="280dp"
                         android:layout_height="280dp"
-                        android:contentDescription="@string/songAlbumCoverImage"
-                        android:cropToPadding="true"
-                        android:longClickable="true"
-                        android:scaleType="centerCrop"
-                        tools:srcCompat="@tools:sample/backgrounds/scenic" />
-                </androidx.cardview.widget.CardView>
+                        android:layout_gravity="center|top"
+                        android:foreground="@drawable/image_border"
+                        app:cardCornerRadius="12dp"
+                        app:cardElevation="8dp">
+
+                        <ImageView
+                            android:id="@+id/SongView_AlbumCover"
+                            android:layout_width="280dp"
+                            android:layout_height="280dp"
+                            android:contentDescription="@string/songAlbumCoverImage"
+                            android:cropToPadding="true"
+                            android:longClickable="true"
+                            android:scaleType="centerCrop"
+                            tools:srcCompat="@tools:sample/backgrounds/scenic" />
+
+                        <!-- "NEW" pill — shown for songs Tunaro hasn't seen before -->
+                        <com.facebook.shimmer.ShimmerFrameLayout
+                            android:id="@+id/new_song_pill_shimmer"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="top|end"
+                            android:layout_margin="10dp"
+                            android:visibility="gone"
+                            app:shimmer_base_alpha="1"
+                            app:shimmer_highlight_alpha="0.65"
+                            app:shimmer_duration="5000"
+                            tools:visibility="visible">
+
+                            <TextView
+                                android:id="@+id/new_song_pill"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/pill_new_song"
+                                android:elevation="4dp"
+                                android:letterSpacing="0.12"
+                                android:paddingHorizontal="14dp"
+                                android:paddingVertical="6dp"
+                                android:text="NEW"
+                                android:textColor="@android:color/white"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+                        </com.facebook.shimmer.ShimmerFrameLayout>
+                    </androidx.cardview.widget.CardView>
+
+                </FrameLayout>
 
                 <!-- Song Name and Artist -->
                 <TextView

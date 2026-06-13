@@ -43,10 +43,13 @@ public class SongNotesFragment extends Fragment {
     private SongNotesAdapter notesAdapter;
     private List<SongNote> notes = new ArrayList<>();
 
-    public static SongNotesFragment newInstance(SongModel song) {
+    private List<String> variantUris;
+
+    public static SongNotesFragment newInstance(SongModel song, List<String> variantUris) {
         SongNotesFragment fragment = new SongNotesFragment();
         Bundle args = new Bundle();
         args.putString("songId", song.getId());
+        args.putStringArrayList("variantUris", new java.util.ArrayList<>(variantUris));
         fragment.setArguments(args);
         fragment.song = song;
         return fragment;
@@ -57,6 +60,9 @@ public class SongNotesFragment extends Fragment {
         View view = inflater.inflate(R.layout.fragment_song_notes, container, false);
 
         dbHelper = new DatabaseHelper(requireContext());
+        if (getArguments() != null) {
+            variantUris = getArguments().getStringArrayList("variantUris");
+        }
 
         // Initialize the add note button
         Button addNoteButton = view.findViewById(R.id.addNoteButton);
@@ -106,7 +112,6 @@ public class SongNotesFragment extends Fragment {
 
         long id = dbHelper.addNote(note);
         if (id != -1) {
-            showToast("Note added successfully");
             noteInput.setText("");
             loadNotes(); // Refresh the notes list
             updateNotesBadge();
@@ -116,7 +121,9 @@ public class SongNotesFragment extends Fragment {
     }
 
     private void loadNotes() {
-        notes = dbHelper.getSongNotes(song.getId());
+        notes = variantUris != null && variantUris.size() > 1
+                ? dbHelper.getSongNotesForUris(variantUris)
+                : dbHelper.getSongNotes(song.getId());
         notesAdapter.updateNotes(notes);
     }
 
@@ -239,7 +246,6 @@ public class SongNotesFragment extends Fragment {
 
                     long id = dbHelper.addNote(note);
                     if (id != -1) {
-                        showToast("Note added successfully");
                         loadNotes(); // Refresh the notes list
                         updateNotesBadge();
                     } else {
@@ -387,7 +393,9 @@ public class SongNotesFragment extends Fragment {
 
     private void updateNotesBadge() {
         if (getActivity() instanceof com.ca.tunaro.activites.SongView) {
-            int count = dbHelper.getSongNotes(song.getId()).size();
+            int count = (variantUris != null && variantUris.size() > 1
+                    ? dbHelper.getSongNotesForUris(variantUris)
+                    : dbHelper.getSongNotes(song.getId())).size();
             ((com.ca.tunaro.activites.SongView) getActivity()).updateTabBadge(1, count);
         }
     }

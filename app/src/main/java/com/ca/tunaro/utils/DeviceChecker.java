@@ -4,6 +4,8 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Log;
 
+import com.ca.tunaro.activites.MainActivity;
+
 import se.michaelthelin.spotify.SpotifyApi;
 import se.michaelthelin.spotify.model_objects.miscellaneous.Device;
 
@@ -41,6 +43,21 @@ public class DeviceChecker {
             return;
         }
 
+        MainActivity mainActivity = MainActivity.getInstance();
+        if (mainActivity != null) {
+            mainActivity.refreshAccessToken()
+                    .exceptionally(e -> {
+                        Log.w(TAG, "Token refresh failed before device check, proceeding with existing token");
+                        return null;
+                    })
+                    .thenRun(() -> doDeviceCheck(spotifyApi, expectedDeviceName, callback));
+        } else {
+            doDeviceCheck(spotifyApi, expectedDeviceName, callback);
+        }
+    }
+
+    private static void doDeviceCheck(SpotifyApi spotifyApi, String expectedDeviceName, DeviceCheckCallback callback) {
+        Log.d(TAG, "API: getUsersAvailableDevices");
         spotifyApi.getUsersAvailableDevices()
                 .build()
                 .executeAsync()

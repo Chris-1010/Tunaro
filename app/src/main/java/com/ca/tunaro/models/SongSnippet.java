@@ -11,7 +11,7 @@ public class SongSnippet {
     private boolean includeInRankings;
 
     public SongSnippet(String uuid, String songId, long snippetNo, String title, long startTime, long endTime, boolean includeInRankings) {
-        if (uuid == null) this.uuid = java.util.UUID.randomUUID().toString(); // Generate UUID
+        if (uuid == null) this.uuid = java.util.UUID.randomUUID().toString();
         else this.uuid = uuid;
         this.songId = songId;
         this.snippetNo = snippetNo;
@@ -23,7 +23,7 @@ public class SongSnippet {
 
     // Constructor with id for database operations
     public SongSnippet(String uuid, long id, String songId, long snippetNo, String title, long startTime, long endTime, boolean includeInRankings) {
-        if (uuid == null) this.uuid = java.util.UUID.randomUUID().toString(); // Generate UUID
+        if (uuid == null) this.uuid = java.util.UUID.randomUUID().toString();
         else this.uuid = uuid;
         this.id = id;
         this.songId = songId;

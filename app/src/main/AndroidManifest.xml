@@ -65,6 +65,23 @@
             android:name=".activites.SpotifyHistoryImportActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
+        <activity
+            android:name=".activites.BackupRestoreActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".activites.AlbumView"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".activites.ArtistView"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
+            android:name=".activites.DeveloperActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
 
         <activity
             android:name="com.spotify.sdk.android.auth.LoginActivity"

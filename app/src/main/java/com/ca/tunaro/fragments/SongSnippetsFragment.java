@@ -59,10 +59,13 @@ public class SongSnippetsFragment extends Fragment {
     private Runnable playbackUpdateRunnable;
     private boolean isUpdatingPlayback = false;
 
-    public static SongSnippetsFragment newInstance(SongModel song) {
+    private List<String> variantUris;
+
+    public static SongSnippetsFragment newInstance(SongModel song, List<String> variantUris) {
         SongSnippetsFragment fragment = new SongSnippetsFragment();
         Bundle args = new Bundle();
         args.putString("songId", song.getId());
+        args.putStringArrayList("variantUris", new java.util.ArrayList<>(variantUris));
         fragment.setArguments(args);
         fragment.song = song;
         return fragment;
@@ -76,6 +79,9 @@ public class SongSnippetsFragment extends Fragment {
 
 
         dbHelper = new DatabaseHelper(requireContext());
+        if (getArguments() != null) {
+            variantUris = getArguments().getStringArrayList("variantUris");
+        }
 
         // Initialize the add snippet button and recycler view
         Button addSnippetButton = view.findViewById(R.id.addSnippetButton);
@@ -85,8 +91,10 @@ public class SongSnippetsFragment extends Fragment {
         addSnippetButton.setOnClickListener(v -> showSnippetCreationOverlay());
         setupSnippetsList();
 
-        // Load snippets
-        snippets = dbHelper.getSongSnippets(song.getId());
+        // Load snippets — merge across variants so all versions' snippets are visible
+        snippets = variantUris != null && variantUris.size() > 1
+                ? dbHelper.getSongSnippetsForUris(variantUris)
+                : dbHelper.getSongSnippets(song.getId());
         snippetAdapter.updateSnippets(snippets);
 
         return view;
@@ -681,7 +689,9 @@ public class SongSnippetsFragment extends Fragment {
 
     private void updateSnippetsBadge() {
         if (getActivity() instanceof com.ca.tunaro.activites.SongView) {
-            int count = dbHelper.getSongSnippets(song.getId()).size();
+            int count = (variantUris != null && variantUris.size() > 1
+                    ? dbHelper.getSongSnippetsForUris(variantUris)
+                    : dbHelper.getSongSnippets(song.getId())).size();
             ((com.ca.tunaro.activites.SongView) getActivity()).updateTabBadge(2, count);
         }
     }

@@ -113,6 +113,7 @@ public class ServerApiClient {
 
     public LoginResponse login(String username, String password) throws Exception {
         String endpoint = BASE_URL + "/api/v1/auth/login";
+        Log.d(TAG, "API: POST " + endpoint + " username=" + username);
 
         JSONObject requestBody = new JSONObject();
         requestBody.put("username", username);
@@ -130,6 +131,7 @@ public class ServerApiClient {
 
     public ApiKeyResponse generateApiKey(String jwtToken) throws Exception {
         String endpoint = BASE_URL + "/api/v1/auth/api-key/generate";
+        Log.d(TAG, "API: POST " + endpoint);
 
         String response = makeRequest(endpoint, "POST", "", jwtToken);
         JSONObject jsonResponse = new JSONObject(response);
@@ -152,6 +154,7 @@ public class ServerApiClient {
     //#region Spotify Endpoints
     public SpotifyStatusResponse checkSpotifyStatus(String jwtToken) throws Exception {
         String endpoint = BASE_URL + "/api/v1/spotify/status";
+        Log.d(TAG, "API: GET " + endpoint);
 
         String response = makeRequest(endpoint, "GET", null, jwtToken);
         JSONObject jsonResponse = new JSONObject(response);
@@ -178,6 +181,7 @@ public class ServerApiClient {
 
     public ListensResponse fetchListens(String jwtToken) throws Exception {
         String endpoint = BASE_URL + "/api/v1/spotify/listens";
+        Log.d(TAG, "API: GET " + endpoint);
 
         String response = makeRequest(endpoint, "GET", null, jwtToken);
         JSONObject jsonResponse = new JSONObject(response);

@@ -12,7 +12,6 @@
         android:layout_marginStart="8dp"
         android:layout_marginTop="15dp"
         android:layout_marginEnd="8dp"
-        android:paddingBottom="4dp"
         android:foreground="@android:color/transparent"
         app:cardBackgroundColor="@color/blueBlack"
         app:cardCornerRadius="20dp"
@@ -23,7 +22,9 @@
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
+            android:layout_height="wrap_content"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp">
 
             <com.google.android.material.imageview.ShapeableImageView
                 android:id="@+id/albumCoverView"
@@ -34,90 +35,96 @@
                 android:background="?attr/selectableItemBackground"
                 android:longClickable="true"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintHeight_percent="0.6"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintVertical_bias="0.19999999"
                 app:shapeAppearanceOverlay="@style/roundedImageView"
                 tools:srcCompat="@tools:sample/avatars" />
 
-            <TextView
-                android:id="@+id/songNameView"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+            <LinearLayout
+                android:id="@+id/textColumn"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
                 android:layout_marginStart="15dp"
-                android:ellipsize="marquee"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:marqueeRepeatLimit="marquee_forever"
-                android:maxWidth="250sp"
-                android:minHeight="40dp"
-                android:scrollHorizontally="true"
-                android:singleLine="true"
-                android:textColor="@color/tanAccent"
-                android:textSize="30sp"
-                android:textStyle="bold"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintHorizontal_bias="0.0"
-                app:layout_constraintStart_toEndOf="@+id/albumCoverView"
-                app:layout_constraintTop_toTopOf="@+id/albumCoverView"
-                app:layout_wrapBehaviorInParent="horizontal_only"
-                tools:text="@string/app_name" />
-
-            <TextView
-                android:id="@+id/artistView"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="15dp"
-                android:layout_marginTop="5dp"
-                android:textColor="#80E3CDB3"
-                android:textSize="18sp"
-                android:textStyle="bold"
+                android:layout_marginEnd="34dp"
+                android:gravity="center_vertical"
+                android:orientation="vertical"
                 app:layout_constraintBottom_toBottomOf="@+id/albumCoverView"
+                app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toEndOf="@+id/albumCoverView"
-                app:layout_constraintTop_toBottomOf="@+id/songNameView"
-                tools:text="Ricky Stanicky" />
+                app:layout_constraintTop_toTopOf="@+id/albumCoverView">
 
-            <ImageView
-                android:id="@+id/hasNotesIcon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/ic_note"
-                android:visibility="visible"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toEndOf="@+id/albumCoverView"
-                app:layout_constraintHorizontal_bias="0.2"
-                app:layout_constraintStart_toStartOf="@+id/albumCoverView"
-                app:layout_constraintTop_toBottomOf="@+id/albumCoverView"
-                app:tint="@android:color/holo_blue_dark" />
+                <TextView
+                    android:id="@+id/songNameView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="marquee"
+                    android:includeFontPadding="false"
+                    android:marqueeRepeatLimit="marquee_forever"
+                    android:scrollHorizontally="true"
+                    android:singleLine="true"
+                    android:textColor="@color/tanAccent"
+                    android:textSize="22sp"
+                    android:textStyle="bold"
+                    tools:text="@string/app_name" />
 
-            <ImageView
-                android:id="@+id/hasSnippetsIcon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/snippet"
-                android:visibility="visible"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toEndOf="@+id/albumCoverView"
-                app:layout_constraintHorizontal_bias="0.8"
-                app:layout_constraintStart_toStartOf="@+id/albumCoverView"
-                app:layout_constraintTop_toBottomOf="@+id/albumCoverView" />
+                <TextView
+                    android:id="@+id/artistView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="1dp"
+                    android:ellipsize="marquee"
+                    android:includeFontPadding="false"
+                    android:marqueeRepeatLimit="marquee_forever"
+                    android:scrollHorizontally="true"
+                    android:singleLine="true"
+                    android:textColor="#80E3CDB3"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    tools:text="Ricky Stanicky" />
 
-            <TextView
-                android:id="@+id/contextualInfoView"
+                <TextView
+                    android:id="@+id/contextualInfoView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="1dp"
+                    android:ellipsize="end"
+                    android:includeFontPadding="false"
+                    android:singleLine="true"
+                    android:textColor="#60E3CDB3"
+                    android:textSize="12sp"
+                    android:visibility="gone"
+                    tools:text="Last listened: 2 days ago"
+                    tools:visibility="visible" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/indicatorColumn"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="15dp"
-                android:layout_marginTop="2dp"
-                android:layout_marginBottom="5dp"
-                android:textColor="#60E3CDB3"
-                android:textSize="14sp"
-                android:visibility="gone"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintStart_toEndOf="@+id/albumCoverView"
-                app:layout_constraintTop_toBottomOf="@+id/artistView"
-                tools:text="Last listened: 2 days ago"
-                tools:visibility="visible" />
+                android:layout_marginTop="10dp"
+                android:layout_marginEnd="10dp"
+                android:orientation="vertical"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent">
+
+                <ImageView
+                    android:id="@+id/hasNotesIcon"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@drawable/ic_note"
+                    android:visibility="visible"
+                    app:tint="@android:color/holo_blue_dark" />
+
+                <ImageView
+                    android:id="@+id/hasSnippetsIcon"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_marginTop="4dp"
+                    android:src="@drawable/snippet"
+                    android:visibility="visible" />
+
+            </LinearLayout>
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 

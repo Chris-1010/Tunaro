@@ -1,6 +1,5 @@
 package com.ca.tunaro.utils;
 
-import com.ca.tunaro.activites.MainActivity;
 import com.ca.tunaro.models.SongModel;
 
 /**
@@ -20,7 +19,7 @@ public class SelectedSongHolder {
         return instance;
     }
 
-    public void setSelectedSong(SongModel song, MainActivity activity) {
+    public void setSelectedSong(SongModel song) {
         this.selectedSong = song;
     }
 

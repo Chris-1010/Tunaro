@@ -64,10 +64,13 @@ public class SettingsActivity extends BaseActivity {
         Button importButton = findViewById(R.id.import_button);
         Button exportButton = findViewById(R.id.export_button);
         Button clearCacheButton = findViewById(R.id.clear_cache_button);
+        Button restoreBackupButton = findViewById(R.id.restore_backup_button);
         clearCacheButton.setOnClickListener(v -> clearAllCaches());
 
         importButton.setOnClickListener(v -> importData());
         exportButton.setOnClickListener(v -> exportData());
+        restoreBackupButton.setOnClickListener(v -> startActivity(
+                new android.content.Intent(this, BackupRestoreActivity.class)));
     }
 
     // Handle the import button click
@@ -203,6 +206,7 @@ public class SettingsActivity extends BaseActivity {
             return;
         }
 
+        Log.d(TAG, "API: getUsersAvailableDevices");
         mainActivity.getSpotifyApi().getUsersAvailableDevices()
                 .build()
                 .executeAsync()
@@ -315,34 +319,29 @@ public class SettingsActivity extends BaseActivity {
 
     private void updateRegistrationStatus(boolean registered) {
         Button registerButton = findViewById(R.id.register_fetcher_button);
+        TextView usernameText = findViewById(R.id.fetcher_username);
         TextView statisticsText = findViewById(R.id.fetcher_statistics);
         SwitchCompat enableSwitch = findViewById(R.id.fetcher_enable_switch);
         LinearLayout enableLayout = findViewById(R.id.fetcher_enable_layout);
         Button deregisterButton = findViewById(R.id.deregister_fetcher_button);
 
         if (registered) {
-            // Hide registration button
             registerButton.setVisibility(View.GONE);
 
-            // Show statistics and toggle
-            statisticsText.setVisibility(View.VISIBLE);
-            enableLayout.setVisibility(View.VISIBLE);
-            deregisterButton.setVisibility(View.VISIBLE);
-
-            // Update statistics text
-            statisticsText.setText(automaticFetcher.getStatisticsDisplay());
-
-            // Set toggle state
             AutomaticFetcher.FetcherCredentials creds = automaticFetcher.getStoredCredentials();
             if (creds != null) {
+                usernameText.setText("Registered as: " + creds.getUsername());
+                usernameText.setVisibility(View.VISIBLE);
                 enableSwitch.setChecked(creds.isEnabled());
             }
 
+            statisticsText.setText(automaticFetcher.getStatisticsDisplay());
+            statisticsText.setVisibility(View.VISIBLE);
+            enableLayout.setVisibility(View.VISIBLE);
+            deregisterButton.setVisibility(View.VISIBLE);
         } else {
-            // Show registration button
             registerButton.setVisibility(View.VISIBLE);
-
-            // Hide statistics and toggle
+            usernameText.setVisibility(View.GONE);
             statisticsText.setVisibility(View.GONE);
             enableLayout.setVisibility(View.GONE);
             deregisterButton.setVisibility(View.GONE);

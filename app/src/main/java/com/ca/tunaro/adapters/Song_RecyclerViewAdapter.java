@@ -30,9 +30,11 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
     private ArrayList<SongModel> songModels;
     private final DatabaseHelper dbHelper;
 
-    private int currentSortOption = -1; // Track current sort option
+    private int currentSortOption = -1;
     private boolean shouldShowContextualInfo = false;
-    private Map<String, Integer> listenCountMap = null; // Cached listen counts for performance
+    private Map<String, Integer> listenCountMap = null;
+    private Map<String, Integer> popularityMap = null;
+    private Map<String, String> lastListenedMap = null;
 
     public Song_RecyclerViewAdapter(Context context, Song_RecyclerViewInterface recyclerViewInterface, ArrayList<SongModel> songModels) {
         this.context = context;
@@ -53,6 +55,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         SongModel model = songModels.get(position);
         holder.songNameView.setSelected(true); // Enable marquee
         holder.songNameView.setText(model.getName());
+        holder.artistView.setSelected(true); // Enable marquee
         holder.artistView.setText(model.getArtist());
 
         // Active/queue state indicators
@@ -96,7 +99,9 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
                     break;
 
                 case 1: // Last Listened
-                    String lastListened = dbHelper.getMostRecentListenTimestamp(model.getId());
+                    String lastListened = lastListenedMap != null
+                            ? lastListenedMap.get(model.getId())
+                            : dbHelper.getMostRecentListenTimestamp(model.getId());
                     if (lastListened != null) {
                         String formattedTime = DatabaseHelper.getRelativeTimeDescription(lastListened);
                         holder.contextualInfoView.setText("Last listened: " + formattedTime);
@@ -110,7 +115,9 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
                     break;
 
                 case 5: // Popularity
-                    int popularity = model.getPopularity();
+                    int popularity = popularityMap != null
+                            ? popularityMap.getOrDefault(model.getId(), model.getPopularity())
+                            : model.getPopularity();
                     holder.contextualInfoView.setText("Popularity: " + popularity + "/100");
                     break;
 
@@ -216,6 +223,16 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
 
     public void updateListenCounts(Map<String, Integer> listenCountMap) {
         this.listenCountMap = listenCountMap;
+        notifyDataSetChanged();
+    }
+
+    public void updatePopularityMap(Map<String, Integer> popularityMap) {
+        this.popularityMap = popularityMap;
+        notifyDataSetChanged();
+    }
+
+    public void updateLastListenedMap(Map<String, String> lastListenedMap) {
+        this.lastListenedMap = lastListenedMap;
         notifyDataSetChanged();
     }
 

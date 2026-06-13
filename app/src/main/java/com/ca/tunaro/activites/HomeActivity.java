@@ -78,6 +78,11 @@ public class HomeActivity extends BaseActivity {
             startActivity(intent);
         });
 
+        findViewById(R.id.developer_button).setOnClickListener(view -> {
+            Intent intent = new Intent(HomeActivity.this, DeveloperActivity.class);
+            startActivity(intent);
+        });
+
         playEarliestButton.setOnClickListener(view -> showToast("Play from Earliest feature coming soon"));
     }
 
