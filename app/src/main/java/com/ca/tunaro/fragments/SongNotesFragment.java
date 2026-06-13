@@ -1,5 +1,7 @@
 package com.ca.tunaro.fragments;
 
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.text.Editable;
@@ -28,6 +30,8 @@ import com.ca.tunaro.models.SongNote;
 import com.ca.tunaro.adapters.SongNotesAdapter;
 import com.ca.tunaro.callbacks.SwipeToDeleteCallback;
 import com.ca.tunaro.database.DatabaseHelper;
+import com.ca.tunaro.utils.ColorExtractor;
+import com.ca.tunaro.utils.SnippetTheme;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,10 +44,12 @@ public class SongNotesFragment extends Fragment {
     private Spinner noteTypeSpinner;
     private EditText noteInput;
     private RecyclerView notesRecyclerView;
+    private Button addNoteButton;
     private SongNotesAdapter notesAdapter;
     private List<SongNote> notes = new ArrayList<>();
 
     private List<String> variantUris;
+    private SnippetTheme currentTheme;
 
     public static SongNotesFragment newInstance(SongModel song, List<String> variantUris) {
         SongNotesFragment fragment = new SongNotesFragment();
@@ -65,14 +71,55 @@ public class SongNotesFragment extends Fragment {
         }
 
         // Initialize the add note button
-        Button addNoteButton = view.findViewById(R.id.addNoteButton);
+        addNoteButton = view.findViewById(R.id.addNoteButton);
         notesRecyclerView = view.findViewById(R.id.notesRecyclerView);
 
         addNoteButton.setOnClickListener(v -> showAddNoteDialog());
         setupNotesList();
         loadNotes();
+        applyNoteTheme();
 
         return view;
+    }
+
+    /**
+     * Theme the note rows and add-note button from the album art, matching the
+     * snippet tab and the dynamic background used by {@code SongView}.
+     */
+    private void applyNoteTheme() {
+        String coverUrl = song != null ? song.getAlbumCoverUrl() : null;
+        if (coverUrl == null && song != null) {
+            SongModel lean = dbHelper.getLeanSong(song.getId());
+            if (lean != null) coverUrl = lean.getAlbumCoverUrl();
+        }
+        if (coverUrl == null) {
+            applyTheme(SnippetTheme.fallback());
+            return;
+        }
+        ColorExtractor.extractColors(requireContext(), coverUrl, new ColorExtractor.ColorExtractionCallback() {
+            @Override
+            public void onColorExtracted(int dominantColor, int vibrantColor) {
+                if (!isAdded()) return;
+                applyTheme(SnippetTheme.from(vibrantColor, dominantColor));
+            }
+
+            @Override
+            public void onError() {
+                if (!isAdded()) return;
+                applyTheme(SnippetTheme.fallback());
+            }
+        });
+    }
+
+    private void applyTheme(SnippetTheme theme) {
+        currentTheme = theme;
+        notesAdapter.setTheme(theme);
+
+        if (addNoteButton != null) {
+            addNoteButton.setBackgroundTintList(
+                    android.content.res.ColorStateList.valueOf(theme.playButton));
+            addNoteButton.setTextColor(SnippetTheme.contrastColor(theme.playButton));
+        }
     }
 
     private void setupNotesList() {
@@ -151,6 +198,7 @@ public class SongNotesFragment extends Fragment {
                 TextView textView = view.findViewById(android.R.id.text1);
                 textView.setTextSize(14f);
                 textView.setPadding(20, 15, 20, 15);
+                textView.setTextColor(Color.WHITE);
                 textView.setBackgroundResource(android.R.drawable.list_selector_background);
                 return view;
             }
@@ -225,10 +273,10 @@ public class SongNotesFragment extends Fragment {
         });
 
         // Show dialog
-        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(requireContext())
                 .setTitle("Add Note")
                 .setView(layout)
-                .setPositiveButton("Save", (dialog, which) -> {
+                .setPositiveButton("Save", (d, which) -> {
                     String noteType = typeInput.getText().toString().trim();
                     String content = contentInput.getText().toString().trim();
 
@@ -253,7 +301,65 @@ public class SongNotesFragment extends Fragment {
                     }
                 })
                 .setNegativeButton("Cancel", null)
-                .show();
+                .create();
+        whitenDialogText(layout);
+        themeDialog(dialog);
+        dialog.show();
+    }
+
+    /**
+     * Recursively set text/hint colours to white-ish on the dialog content so
+     * labels and inputs read against the dark themed background.
+     */
+    private void whitenDialogText(View view) {
+        if (view instanceof EditText) {
+            EditText et = (EditText) view;
+            et.setTextColor(Color.WHITE);
+            et.setHintTextColor(Color.parseColor("#B3FFFFFF"));
+        } else if (view instanceof TextView) {
+            ((TextView) view).setTextColor(Color.WHITE);
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup vg = (ViewGroup) view;
+            for (int i = 0; i < vg.getChildCount(); i++) {
+                whitenDialogText(vg.getChildAt(i));
+            }
+        }
+    }
+
+    /**
+     * Tint an AlertDialog's window background and buttons to the album theme.
+     */
+    private void themeDialog(androidx.appcompat.app.AlertDialog dialog) {
+        if (currentTheme == null) return;
+        int cardColor = androidx.core.graphics.ColorUtils.compositeColors(
+                currentTheme.rowBackground, Color.parseColor("#1A1A1A"));
+        dialog.setOnShowListener(d -> {
+            if (dialog.getWindow() != null) {
+                GradientDrawable bg = new GradientDrawable();
+                bg.setColor(cardColor);
+                bg.setCornerRadius(dpToPx(12));
+                dialog.getWindow().setBackgroundDrawable(bg);
+            }
+            android.widget.Button pos = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE);
+            android.widget.Button neg = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEGATIVE);
+            if (pos != null) pos.setTextColor(currentTheme.seekbarProgress);
+            if (neg != null) neg.setTextColor(currentTheme.primaryText);
+
+            // Whiten the dialog title. AppCompat dialogs use the support
+            // "alertTitle" id, not the framework one.
+            View title = dialog.findViewById(androidx.appcompat.R.id.alertTitle);
+            if (title == null) {
+                int frameworkId = requireContext().getResources()
+                        .getIdentifier("alertTitle", "id", "android");
+                if (frameworkId != 0) title = dialog.findViewById(frameworkId);
+            }
+            if (title instanceof TextView) ((TextView) title).setTextColor(Color.WHITE);
+        });
+    }
+
+    private int dpToPx(int dp) {
+        return Math.round(dp * getResources().getDisplayMetrics().density);
     }
 
     private void updateRecentTypes(String searchTerm, List<String> recentTypes, ArrayAdapter<String> adapter) {
@@ -284,6 +390,7 @@ public class SongNotesFragment extends Fragment {
                 TextView textView = view.findViewById(android.R.id.text1);
                 textView.setTextSize(14f);
                 textView.setPadding(20, 15, 20, 15);
+                textView.setTextColor(Color.WHITE);
                 textView.setBackgroundResource(android.R.drawable.list_selector_background);
                 return view;
             }
@@ -358,10 +465,10 @@ public class SongNotesFragment extends Fragment {
         });
 
         // Show dialog
-        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(requireContext())
                 .setTitle("Edit Note")
                 .setView(layout)
-                .setPositiveButton("Save", (dialog, which) -> {
+                .setPositiveButton("Save", (d, which) -> {
                     String noteType = typeInput.getText().toString().trim();
                     String content = contentInput.getText().toString().trim();
 
@@ -381,14 +488,17 @@ public class SongNotesFragment extends Fragment {
                     loadNotes();
                     showToast("Note updated");
                 })
-                .setNegativeButton("Cancel", (dialog, which) -> {
+                .setNegativeButton("Cancel", (d, which) -> {
                     // Reset the view state by notifying adapter of change
                     int position = notes.indexOf(note);
                     if (position != -1) {
                         notesAdapter.notifyItemChanged(position);
                     }
                 })
-                .show();
+                .create();
+        whitenDialogText(layout);
+        themeDialog(dialog);
+        dialog.show();
     }
 
     private void updateNotesBadge() {

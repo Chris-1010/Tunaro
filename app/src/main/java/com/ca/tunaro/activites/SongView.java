@@ -27,6 +27,7 @@ import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.models.PlaylistModel;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.utils.ColorExtractor;
+import com.ca.tunaro.utils.SnippetTheme;
 import com.ca.tunaro.utils.SelectedPlaylistHolder;
 
 import se.michaelthelin.spotify.model_objects.specification.ArtistSimplified;
@@ -46,6 +47,10 @@ public class SongView extends BaseActivity {
     private TabLayout tabLayout;
     private ViewPager2 viewPager;
     private SongTabAdapter tabAdapter;
+
+    // Themed tab text colours, derived from the album art.
+    private int tabSelectedTextColor = Color.BLACK;
+    private int tabUnselectedTextColor = Color.WHITE;
 
     private boolean playlistPanelVisible = false;
     private static final int PANEL_WIDTH_DP = 56;
@@ -443,9 +448,7 @@ public class SongView extends BaseActivity {
         pill.setBackground(bg);
 
         int midColor = androidx.core.graphics.ColorUtils.blendARGB(invertedStart, invertedEnd, 0.5f);
-        boolean whiteReadable = androidx.core.graphics.ColorUtils.calculateContrast(Color.WHITE, midColor)
-                >= androidx.core.graphics.ColorUtils.calculateContrast(Color.BLACK, midColor);
-        pill.setTextColor(whiteReadable ? Color.WHITE : Color.BLACK);
+        pill.setTextColor(SnippetTheme.contrastColor(midColor));
     }
 
     private static int invertColor(int color) {
@@ -458,11 +461,13 @@ public class SongView extends BaseActivity {
             public void onColorExtracted(int dominantColor, int vibrantColor) {
                 styleNewSongPill(vibrantColor, dominantColor);
                 applyGradientBackground(ColorExtractor.pickBackgroundColor(dominantColor, vibrantColor));
+                applyTabTheme(SnippetTheme.from(vibrantColor, dominantColor));
             }
 
             @Override
             public void onError() {
                 applyGradientBackground(Color.parseColor("#424242"));
+                applyTabTheme(SnippetTheme.fallback());
             }
         });
     }
@@ -476,6 +481,42 @@ public class SongView extends BaseActivity {
             );
             mainLayout.setBackground(gradient);
         }
+    }
+
+    /**
+     * Tint the Details/Notes/Snippets tab pills to match the album theme:
+     * the selected tab uses the vibrant accent, the rest a translucent dark
+     * fill, with text colours chosen for contrast against each.
+     */
+    private void applyTabTheme(SnippetTheme theme) {
+        if (tabLayout == null) return;
+
+        int selectedFill = theme.playButton;
+        int unselectedFill = theme.rowBackground;
+
+        tabSelectedTextColor = SnippetTheme.contrastColor(selectedFill);
+        tabUnselectedTextColor = theme.primaryText;
+
+        for (int i = 0; i < tabLayout.getTabCount(); i++) {
+            TabLayout.Tab tab = tabLayout.getTabAt(i);
+            if (tab == null || tab.getCustomView() == null) continue;
+            View custom = tab.getCustomView();
+
+            android.graphics.drawable.StateListDrawable bg = new android.graphics.drawable.StateListDrawable();
+            bg.addState(new int[]{android.R.attr.state_selected}, pill(selectedFill));
+            bg.addState(new int[]{}, pill(unselectedFill));
+            custom.setBackground(bg);
+
+            TextView title = custom.findViewById(R.id.tab_title);
+            title.setTextColor(tab.isSelected() ? tabSelectedTextColor : tabUnselectedTextColor);
+        }
+    }
+
+    private GradientDrawable pill(int color) {
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(color);
+        d.setCornerRadius(dpToPx(8));
+        return d;
     }
 
     private void setupTabs(boolean isLoading) {
@@ -502,6 +543,14 @@ public class SongView extends BaseActivity {
             tabTitleView.setText(tabTitles[i]);
             tabTitleView.setTextColor(i == 0 ? Color.BLACK : Color.WHITE);
 
+            // "Details" has no count badge, so trim its horizontal padding a little
+            // to keep its pill width visually in line with the badged tabs.
+            if (i == 0) {
+                int padH = (int) (8 * getResources().getDisplayMetrics().density);
+                customView.setPadding(padH, customView.getPaddingTop(),
+                        padH, customView.getPaddingBottom());
+            }
+
             if (i > 0) {
                 DatabaseHelper dbHelper = new DatabaseHelper(this);
                 int count = i == 1
@@ -520,6 +569,17 @@ public class SongView extends BaseActivity {
 
             tab.setCustomView(customView);
             tabLayout.addTab(tab);
+
+            // tabMode="auto": each tab cell sizes to its own content (text + badge)
+            // so "Snippets" shows at full size and never clips. The cells are laid
+            // out left-to-right and centred as a group (tabGravity="center").
+            View tabView = (View) customView.getParent();
+            if (tabView != null && tabView.getLayoutParams() instanceof LinearLayout.LayoutParams) {
+                LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) tabView.getLayoutParams();
+                lp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+                lp.weight = 0f;
+                tabView.setLayoutParams(lp);
+            }
         }
 
         tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
@@ -529,7 +589,7 @@ public class SongView extends BaseActivity {
                 View customView = tab.getCustomView();
                 if (customView != null) {
                     customView.findViewById(R.id.tab_title).performClick();
-                    ((TextView) customView.findViewById(R.id.tab_title)).setTextColor(Color.BLACK);
+                    ((TextView) customView.findViewById(R.id.tab_title)).setTextColor(tabSelectedTextColor);
                 }
             }
 
@@ -537,7 +597,7 @@ public class SongView extends BaseActivity {
             public void onTabUnselected(TabLayout.Tab tab) {
                 View customView = tab.getCustomView();
                 if (customView != null) {
-                    ((TextView) customView.findViewById(R.id.tab_title)).setTextColor(Color.WHITE);
+                    ((TextView) customView.findViewById(R.id.tab_title)).setTextColor(tabUnselectedTextColor);
                 }
             }
 

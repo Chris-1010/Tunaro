@@ -675,6 +675,22 @@ public class PlaybackManager {
         showToast("Playback will continue after snippet end");
     }
 
+    /**
+     * Pause an in-progress snippet. The pending end timer is cancelled so it
+     * can't fire (and stop playback) while paused; tapping play again restarts
+     * the snippet from its start.
+     */
+    public void pauseSnippet() {
+        cancelCurrentSnippetTimer();
+        if (spotifyAppRemote != null && isConnected) {
+            spotifyAppRemote.getPlayerApi().pause()
+                    .setResultCallback(empty -> {
+                        isPlaying = false;
+                        notifyPlaybackStateChanged();
+                    });
+        }
+    }
+
     public boolean isSnippetPlaying() {
         return isSnippetPlaying;
     }
