@@ -39,6 +39,13 @@ public class PlaybackManager {
     private boolean isConnecting = false;
     private boolean isConnected = false;
 
+    // Connection retry / watchdog
+    private static final int MAX_CONNECT_RETRIES = 3;
+    private static final long CONNECT_TIMEOUT_MS = 12000; // give up on a single attempt after this
+    private int connectRetryCount = 0;
+    private final Handler connectHandler = new Handler(Looper.getMainLooper());
+    private Runnable connectTimeoutRunnable;
+
     // Seeking state
     private long currentPositionMs = 0;
     private long durationMs = 0;
@@ -107,16 +114,27 @@ public class PlaybackManager {
     }
 
     public void connectSpotify(Context context, Runnable onSuccess) {
-        // Avoid multiple connection attempts while one is in progress
-        if (isConnecting) {
-            Log.d(TAG, "Connection attempt already in progress, ignoring request");
-            return;
-        }
+        // Fresh user-initiated connection: reset the retry counter.
+        connectRetryCount = 0;
+        attemptConnect(onSuccess);
+    }
 
+    private void attemptConnect(Runnable onSuccess) {
         // Already connected, just run the success callback
         if (isConnected && spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
             Log.d(TAG, "Already connected to Spotify remote");
+            cancelConnectTimeout();
+            isConnecting = false;
             if (onSuccess != null) onSuccess.run();
+            return;
+        }
+
+        // Avoid multiple connection attempts while one is genuinely in progress.
+        // A watchdog (cancelConnectTimeout/connectTimeoutRunnable) guarantees this
+        // flag can never stay stuck true forever, which previously deadlocked all
+        // future connection attempts after the app sat idle.
+        if (isConnecting) {
+            Log.d(TAG, "Connection attempt already in progress, ignoring request");
             return;
         }
 
@@ -127,21 +145,31 @@ public class PlaybackManager {
             spotifyAppRemote = null;
         }
 
+        if (applicationContext == null) {
+            Log.e(TAG, "Cannot connect: PlaybackManager not initialized with a context");
+            return;
+        }
+
         isConnecting = true;
         isConnected = false;
+        startConnectTimeout(onSuccess);
 
         ConnectionParams connectionParams = new ConnectionParams.Builder(clientId)
                 .setRedirectUri(redirectUri)
                 .showAuthView(true)
                 .build();
 
-        Log.d(TAG, "Attempting to connect to Spotify remote");
-        SpotifyAppRemote.connect(context, connectionParams, new Connector.ConnectionListener() {
+        Log.d(TAG, "Attempting to connect to Spotify remote (attempt " + (connectRetryCount + 1) + "/" + (MAX_CONNECT_RETRIES + 1) + ")");
+        // Always connect via the application context so a destroyed Activity can't
+        // leave the binding in a broken state.
+        SpotifyAppRemote.connect(applicationContext, connectionParams, new Connector.ConnectionListener() {
             @Override
             public void onConnected(SpotifyAppRemote spotifyAppRemote) {
+                cancelConnectTimeout();
                 PlaybackManager.this.spotifyAppRemote = spotifyAppRemote;
                 isConnected = true;
                 isConnecting = false;
+                connectRetryCount = 0;
 
                 // Subscribe to player state to monitor playback
                 subscribeToPlayerState();
@@ -159,24 +187,58 @@ public class PlaybackManager {
 
             @Override
             public void onFailure(Throwable throwable) {
+                cancelConnectTimeout();
                 isConnected = false;
                 isConnecting = false;
                 spotifyAppRemote = null;
 
-                Log.d(TAG, "Lost connection to Spotify. Attempting to reconnect...");
-
-                try {
-                    connectSpotify(applicationContext, onSuccess);
-                } catch (Exception e) {
-
-                    Log.e(TAG, "Failed to connect to Spotify: " + throwable.getMessage(), throwable);
-                    showToast("Failed to connect to Spotify. Please ensure the Spotify app is installed.");
-
-                    // Notify listeners
-                    notifyConnectionStateChanged();
-                }
+                Log.w(TAG, "Spotify remote connection failed: " + throwable.getMessage(), throwable);
+                notifyConnectionStateChanged();
+                scheduleRetryOrGiveUp(onSuccess);
             }
         });
+    }
+
+    // Watchdog: if a connection attempt neither succeeds nor fails within the
+    // timeout, treat it as a failure so isConnecting can never stay stuck.
+    private void startConnectTimeout(Runnable onSuccess) {
+        cancelConnectTimeout();
+        connectTimeoutRunnable = () -> {
+            if (isConnecting) {
+                Log.w(TAG, "Connection attempt timed out after " + CONNECT_TIMEOUT_MS + "ms");
+                isConnecting = false;
+                if (spotifyAppRemote != null) {
+                    SpotifyAppRemote.disconnect(spotifyAppRemote);
+                    spotifyAppRemote = null;
+                }
+                isConnected = false;
+                scheduleRetryOrGiveUp(onSuccess);
+            }
+        };
+        connectHandler.postDelayed(connectTimeoutRunnable, CONNECT_TIMEOUT_MS);
+    }
+
+    private void cancelConnectTimeout() {
+        if (connectTimeoutRunnable != null) {
+            connectHandler.removeCallbacks(connectTimeoutRunnable);
+            connectTimeoutRunnable = null;
+        }
+    }
+
+    private void scheduleRetryOrGiveUp(Runnable onSuccess) {
+        if (connectRetryCount < MAX_CONNECT_RETRIES) {
+            connectRetryCount++;
+            // Exponential-ish backoff: 1s, 2s, 4s. Gives the Spotify app time to
+            // wake up instead of hammering it synchronously.
+            long backoff = 1000L * (1L << (connectRetryCount - 1));
+            Log.d(TAG, "Retrying Spotify connection in " + backoff + "ms (retry " + connectRetryCount + "/" + MAX_CONNECT_RETRIES + ")");
+            connectHandler.postDelayed(() -> attemptConnect(onSuccess), backoff);
+        } else {
+            connectRetryCount = 0;
+            Log.e(TAG, "Failed to connect to Spotify after " + (MAX_CONNECT_RETRIES + 1) + " attempts");
+            showToast("Couldn't connect to Spotify. Make sure Spotify is open, then try again.");
+            notifyConnectionStateChanged();
+        }
     }
 
     private void subscribeToPlayerState() {
@@ -752,6 +814,10 @@ public class PlaybackManager {
         stopPositionTracking();
         stopListenTracking();
         cancelCurrentSnippetTimer();
+        cancelConnectTimeout();
+        connectHandler.removeCallbacksAndMessages(null);
+        isConnecting = false;
+        connectRetryCount = 0;
         if (spotifyAppRemote != null) {
             SpotifyAppRemote.disconnect(spotifyAppRemote);
             spotifyAppRemote = null;

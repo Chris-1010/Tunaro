@@ -25,6 +25,7 @@ import com.google.gson.JsonParser;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -130,16 +131,54 @@ public class BackupRestoreActivity extends AppCompatActivity {
             JsonArray archivedArray = root.has("archivedPlaylists")  ? root.getAsJsonArray("archivedPlaylists")  : new JsonArray();
             String lastSyncCursor   = root.has("lastSyncCursor")     ? root.get("lastSyncCursor").getAsString()  : null;
 
-            // Collect every unique track ID across all sections
-            Set<String> allTrackIds = new LinkedHashSet<>();
-            for (JsonElement e : listenArray)   allTrackIds.add(e.getAsJsonObject().get("songId").getAsString());
-            for (JsonElement e : notesArray)    allTrackIds.add(e.getAsJsonObject().get("songId").getAsString());
-            for (JsonElement e : snippetsArray) allTrackIds.add(e.getAsJsonObject().get("songId").getAsString());
+            // Collect every unique songId across all sections. These may be either
+            // raw 22-char Spotify track IDs (current format) or legacy composite keys
+            // of the form "name|artist|durationSeconds" (pre-URI-migration backups).
+            Set<String> allSongIds = new LinkedHashSet<>();
+            for (JsonElement e : listenArray)   allSongIds.add(e.getAsJsonObject().get("songId").getAsString());
+            for (JsonElement e : notesArray)    allSongIds.add(e.getAsJsonObject().get("songId").getAsString());
+            for (JsonElement e : snippetsArray) allSongIds.add(e.getAsJsonObject().get("songId").getAsString());
 
-            // Filter to valid track IDs — invalid ones (local files, podcasts) skip the API call
+            // Resolve legacy composite keys to real track IDs via Spotify search.
+            // compositeToTrackId maps the raw composite songId -> resolved track ID.
+            Map<String, String> compositeToTrackId = new HashMap<>();
+            List<String> compositeIds = new ArrayList<>();
+            for (String id : allSongIds) {
+                if (!isValidSpotifyTrackId(id) && id.contains("|")) compositeIds.add(id);
+            }
+            if (!compositeIds.isEmpty()) {
+                status("Resolving " + compositeIds.size() + " legacy song IDs via Spotify search...");
+                setProgressMax(compositeIds.size());
+                setProgressIndeterminate(false);
+                int searched = 0, searchResolved = 0;
+                for (String composite : compositeIds) {
+                    String trackId = resolveCompositeId(spotifyApi, composite);
+                    if (trackId != null) {
+                        compositeToTrackId.put(composite, trackId);
+                        searchResolved++;
+                    }
+                    searched++;
+                    final int s = searched, r = searchResolved;
+                    runOnUiThread(() -> {
+                        progressBar.setProgress(s);
+                        details("Legacy IDs resolved: " + r + "/" + compositeIds.size());
+                    });
+                }
+                Log.d(TAG, "Resolved " + searchResolved + "/" + compositeIds.size() + " legacy composite IDs");
+            }
+
+            // Build the set of track IDs whose metadata we need to fetch: every valid
+            // raw ID, plus every track ID we just resolved from a composite key.
             Set<String> validTrackIds = new LinkedHashSet<>();
-            for (String id : allTrackIds) {
-                if (isValidSpotifyTrackId(id)) validTrackIds.add(id);
+            int prefilteredInvalid = 0;
+            for (String id : allSongIds) {
+                if (isValidSpotifyTrackId(id)) {
+                    validTrackIds.add(id);
+                } else if (compositeToTrackId.containsKey(id)) {
+                    validTrackIds.add(compositeToTrackId.get(id));
+                } else {
+                    prefilteredInvalid++; // local file, podcast, or unresolvable composite
+                }
             }
 
             int totalTracks = validTrackIds.size();
@@ -153,7 +192,7 @@ public class BackupRestoreActivity extends AppCompatActivity {
             // Batch-fetch track metadata and upsert to DB; song ID is always spotify:track:<trackId>
             List<String> trackIdList = new ArrayList<>(validTrackIds);
             int resolved = 0;
-            int unresolvable = allTrackIds.size() - validTrackIds.size(); // pre-filtered invalid IDs
+            int unresolvable = prefilteredInvalid; // local files, podcasts, unresolvable composites
             int batchsDone = 0;
 
             for (int i = 0; i < trackIdList.size(); i += BATCH_SIZE) {
@@ -208,9 +247,9 @@ public class BackupRestoreActivity extends AppCompatActivity {
             DatabaseHelper.ListenImportBatch listenBatch = dbHelper.beginListenImportBatch();
             for (JsonElement e : listenArray) {
                 JsonObject entry = e.getAsJsonObject();
-                String trackId = entry.get("songId").getAsString();
+                String songId = resolveSongId(entry.get("songId").getAsString(), compositeToTrackId);
+                if (songId == null) continue; // unresolvable composite key — skip
                 String timestamp = entry.get("listenTimestamp").getAsString();
-                String songId = SongModel.SPOTIFY_TRACK_URI_PREFIX + trackId;
                 String uuid = entry.has("uuid") ? entry.get("uuid").getAsString() : null;
 
                 dbHelper.addListenToBatch(listenBatch, uuid, songId, timestamp);
@@ -234,8 +273,8 @@ public class BackupRestoreActivity extends AppCompatActivity {
             int notesAdded = 0;
             for (JsonElement e : notesArray) {
                 JsonObject obj = e.getAsJsonObject();
-                String trackId = obj.get("songId").getAsString();
-                String songId = SongModel.SPOTIFY_TRACK_URI_PREFIX + trackId;
+                String songId = resolveSongId(obj.get("songId").getAsString(), compositeToTrackId);
+                if (songId == null) continue; // unresolvable composite key — skip
                 String uuid = obj.has("uuid") ? obj.get("uuid").getAsString() : null;
                 String noteType = obj.has("noteType") ? obj.get("noteType").getAsString() : "General";
                 String content = obj.has("content") ? obj.get("content").getAsString() : "";
@@ -247,8 +286,8 @@ public class BackupRestoreActivity extends AppCompatActivity {
             int snippetsAdded = 0;
             for (JsonElement e : snippetsArray) {
                 JsonObject obj = e.getAsJsonObject();
-                String trackId = obj.get("songId").getAsString();
-                String songId = SongModel.SPOTIFY_TRACK_URI_PREFIX + trackId;
+                String songId = resolveSongId(obj.get("songId").getAsString(), compositeToTrackId);
+                if (songId == null) continue; // unresolvable composite key — skip
                 String uuid = obj.has("uuid") ? obj.get("uuid").getAsString() : null;
                 long snippetNo = obj.has("snippetNo") ? obj.get("snippetNo").getAsLong() : 1;
                 String title = obj.has("title") ? obj.get("title").getAsString() : "";
@@ -306,6 +345,65 @@ public class BackupRestoreActivity extends AppCompatActivity {
 
     private static boolean isValidSpotifyTrackId(String id) {
         return id != null && id.length() == 22 && id.matches("[0-9A-Za-z]+");
+    }
+
+    /**
+     * Translate a raw backup songId into the canonical "spotify:track:<id>" URI.
+     * Raw 22-char track IDs are prefixed directly; legacy composite keys
+     * ("name|artist|durationSeconds") are looked up in the resolved map. Returns
+     * null when a composite key could not be resolved via search.
+     */
+    private static String resolveSongId(String rawId, Map<String, String> compositeToTrackId) {
+        if (isValidSpotifyTrackId(rawId)) {
+            return SongModel.SPOTIFY_TRACK_URI_PREFIX + rawId;
+        }
+        String resolved = compositeToTrackId.get(rawId);
+        return resolved != null ? SongModel.SPOTIFY_TRACK_URI_PREFIX + resolved : null;
+    }
+
+    /**
+     * Resolve a legacy composite key ("name|artist|durationSeconds") to a Spotify
+     * track ID via search, preferring the candidate whose duration is closest to
+     * the recorded one (within 3s). Returns null if no confident match is found.
+     */
+    private String resolveCompositeId(SpotifyApi spotifyApi, String composite) {
+        String[] parts = composite.split("\\|");
+        if (parts.length < 3) return null;
+        String name = String.join("|", java.util.Arrays.copyOfRange(parts, 0, parts.length - 2));
+        String artist = parts[parts.length - 2];
+        long targetMs;
+        try {
+            targetMs = Long.parseLong(parts[parts.length - 1].trim()) * 1000L;
+        } catch (NumberFormatException ex) {
+            targetMs = -1;
+        }
+
+        try {
+            String query = "track:" + name + " artist:" + artist;
+            Track[] results = spotifyApi.searchTracks(query)
+                    .market(com.neovisionaries.i18n.CountryCode.GB)
+                    .limit(10)
+                    .build()
+                    .execute()
+                    .getItems();
+            if (results == null || results.length == 0) return null;
+
+            Track best = null;
+            long bestDelta = Long.MAX_VALUE;
+            for (Track t : results) {
+                if (targetMs < 0) { best = t; break; }
+                long delta = Math.abs(t.getDurationMs() - targetMs);
+                if (delta < bestDelta) { bestDelta = delta; best = t; }
+            }
+            // Require a duration match within 3s to avoid grabbing the wrong version
+            // (live/remaster/karaoke). With no duration info, accept the top hit.
+            if (best != null && (targetMs < 0 || bestDelta <= 3000)) {
+                return best.getId();
+            }
+        } catch (Exception ex) {
+            Log.w(TAG, "Search failed for composite id '" + composite + "'", ex);
+        }
+        return null;
     }
 
     private void upsertTrackToDb(Track track, String songId) {
