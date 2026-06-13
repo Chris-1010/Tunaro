@@ -510,7 +510,7 @@ public class MainActivity extends AppCompatActivity {
                             }
 
                             Boolean playable = track.getIsPlayable();
-                            dbWrite.upsertSong(new com.ca.tunaro.models.SongModel(
+                            dbWrite.upsertFullTrack(track, new com.ca.tunaro.models.SongModel(
                                     track.getUri(), track.getName(), track.getArtists(),
                                     track.getDurationMs(), track.getUri(), track.getPopularity(),
                                     songAlbum, isrc, null, playable == null || playable));

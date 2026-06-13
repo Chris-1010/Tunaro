@@ -329,7 +329,7 @@ public class BackupRestoreActivity extends AppCompatActivity {
             }
 
             Boolean playable = track.getIsPlayable();
-            dbHelper.upsertSong(new SongModel(
+            dbHelper.upsertFullTrack(track, new SongModel(
                     songId, track.getName(), artists, track.getDurationMs(),
                     track.getUri(), track.getPopularity(), album, isrc, null,
                     playable == null || playable

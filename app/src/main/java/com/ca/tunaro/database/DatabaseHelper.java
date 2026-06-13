@@ -32,6 +32,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import se.michaelthelin.spotify.model_objects.specification.AlbumSimplified;
+import se.michaelthelin.spotify.model_objects.specification.ArtistSimplified;
+import se.michaelthelin.spotify.model_objects.specification.Image;
+import se.michaelthelin.spotify.model_objects.specification.Track;
+
 public class DatabaseHelper extends SQLiteOpenHelper {
 
     //#region Initialisations
@@ -460,6 +465,35 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         // Upsert ISRC link if present
         if (song.getIsrc() != null && !song.getIsrc().isEmpty()) {
             upsertIsrcLink(song.getIsrc(), song.getId());
+        }
+    }
+
+    // Persists a Web API track together with its album row and artist links.
+    // Every writer with full API data must use this rather than upsertSong alone:
+    // upsertSong only stores the album_id column, and SongView relies on the album
+    // join and artist links being present to tell complete songs from stubs.
+    public void upsertFullTrack(Track track, SongModel songModel) {
+        AlbumSimplified trackAlbum = track.getAlbum();
+        if (trackAlbum != null && trackAlbum.getId() != null) {
+            Image[] images = trackAlbum.getImages();
+            String imageUrl = images != null && images.length > 0 ? images[0].getUrl() : null;
+            upsertAlbum(
+                    trackAlbum.getId(),
+                    trackAlbum.getName(),
+                    trackAlbum.getAlbumType() != null ? trackAlbum.getAlbumType().getType() : null,
+                    trackAlbum.getReleaseDate(),
+                    imageUrl
+            );
+        }
+
+        upsertSong(songModel);
+
+        ArtistSimplified[] artists = track.getArtists();
+        if (artists != null) {
+            for (int i = 0; i < artists.length; i++) {
+                upsertArtist(artists[i].getId(), artists[i].getName());
+                upsertSongArtistLink(songModel.getId(), artists[i].getId(), i);
+            }
         }
     }
 

@@ -341,28 +341,7 @@ public class PlaylistSetup {
     }
 
     private static void upsertTrackToDb(DatabaseHelper dbHelper, Track track, SongModel songModel) {
-        AlbumSimplified trackAlbum = track.getAlbum();
-        if (trackAlbum != null && trackAlbum.getId() != null) {
-            Image[] images = trackAlbum.getImages();
-            String imageUrl = images != null && images.length > 0 ? images[0].getUrl() : null;
-            dbHelper.upsertAlbum(
-                    trackAlbum.getId(),
-                    trackAlbum.getName(),
-                    trackAlbum.getAlbumType() != null ? trackAlbum.getAlbumType().getType() : null,
-                    trackAlbum.getReleaseDate(),
-                    imageUrl
-            );
-        }
-
-        dbHelper.upsertSong(songModel);
-
-        ArtistSimplified[] artists = track.getArtists();
-        if (artists != null) {
-            for (int i = 0; i < artists.length; i++) {
-                dbHelper.upsertArtist(artists[i].getId(), artists[i].getName());
-                dbHelper.upsertSongArtistLink(songModel.getId(), artists[i].getId(), i);
-            }
-        }
+        dbHelper.upsertFullTrack(track, songModel);
     }
 
     private static SongModel createSongModelFromTrack(Track track) {

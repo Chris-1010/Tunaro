@@ -87,10 +87,16 @@ public class SongView extends BaseActivity {
             return;
         }
 
-        // Upgrade to full model so Details tab has complete metadata
+        // Upgrade to full model so Details tab has complete metadata.
+        // Rows can be partial stubs: PlaybackManager writes name/duration only on
+        // track change, and older writers stored album_id without the album row or
+        // artist links. Treat any of those as missing so we refetch from the API.
         DatabaseHelper db = new DatabaseHelper(this);
         SongModel fullSong = db.getFullSong(selectedSong.getId());
-        boolean loadingFromApi = fullSong == null;
+        boolean loadingFromApi = fullSong == null
+                || fullSong.getAlbumId() == null
+                || fullSong.getAlbumName() == null
+                || fullSong.getArtist().isEmpty();
         if (!loadingFromApi) {
             selectedSong = fullSong;
             allVariantUris.add(selectedSong.getId());
@@ -168,7 +174,10 @@ public class SongView extends BaseActivity {
 
     private void fetchAndPopulateFromApi(String spotifyUri) {
         MainActivity mainActivity = MainActivity.getInstance();
-        if (mainActivity == null || mainActivity.getSpotifyApi() == null) return;
+        if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
+            stopHeaderShimmer();
+            return;
+        }
 
         String trackId = spotifyUri.substring(spotifyUri.lastIndexOf(":") + 1);
         Log.d(TAG, "API: getTrack trackId=" + trackId + " (song not yet in DB)");
@@ -177,7 +186,10 @@ public class SongView extends BaseActivity {
                 .build()
                 .executeAsync()
                 .thenAccept(track -> {
-                    if (track == null) return;
+                    if (track == null) {
+                        runOnUiThread(this::stopHeaderShimmer);
+                        return;
+                    }
 
                     se.michaelthelin.spotify.model_objects.specification.AlbumSimplified trackAlbum = track.getAlbum();
                     Image[] images = trackAlbum != null ? trackAlbum.getImages() : null;
@@ -212,13 +224,7 @@ public class SongView extends BaseActivity {
                     );
 
                     DatabaseHelper dbHelper = new DatabaseHelper(getApplicationContext());
-                    dbHelper.upsertSong(fullSong);
-                    if (artists != null) {
-                        for (int i = 0; i < artists.length; i++) {
-                            dbHelper.upsertArtist(artists[i].getId(), artists[i].getName());
-                            dbHelper.upsertSongArtistLink(spotifyUri, artists[i].getId(), i);
-                        }
-                    }
+                    dbHelper.upsertFullTrack(track, fullSong);
                     dbHelper.close();
 
                     runOnUiThread(() -> {
@@ -246,6 +252,7 @@ public class SongView extends BaseActivity {
                 })
                 .exceptionally(throwable -> {
                     Log.e(TAG, "Failed to fetch track metadata", throwable);
+                    runOnUiThread(this::stopHeaderShimmer);
                     return null;
                 });
     }
