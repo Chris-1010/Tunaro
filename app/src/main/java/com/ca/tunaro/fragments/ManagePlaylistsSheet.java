@@ -176,27 +176,34 @@ public class ManagePlaylistsSheet extends BottomSheetDialogFragment {
 
         saveButton.setEnabled(false);
 
-        int totalOps = additions.size() + removals.size();
-        AtomicInteger remaining = new AtomicInteger(totalOps);
         AtomicInteger added = new AtomicInteger(0);
         AtomicInteger removed = new AtomicInteger(0);
         AtomicInteger failed = new AtomicInteger(0);
 
+        // The shared SpotifyApi uses a single-connection HTTP manager, so it can only service
+        // one request at a time — firing all operations in parallel makes all but one fail.
+        // Chain them so exactly one request is in flight at any moment.
+        CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
+
         for (DatabaseHelper.ManagablePlaylist playlist : additions) {
-            addToPlaylist(mainActivity, playlist.playlistId)
-                    .whenComplete((ok, err) -> {
-                        if (err == null) added.incrementAndGet(); else failed.incrementAndGet();
-                        if (remaining.decrementAndGet() == 0) finishSave(added.get(), removed.get(), failed.get());
-                    });
+            chain = chain.thenCompose(ignored ->
+                    addToPlaylist(mainActivity, playlist.playlistId)
+                            .handle((ok, err) -> {
+                                if (err == null) added.incrementAndGet(); else failed.incrementAndGet();
+                                return null;
+                            }));
         }
 
         for (DatabaseHelper.ManagablePlaylist playlist : removals) {
-            removeFromPlaylist(mainActivity, playlist.playlistId)
-                    .whenComplete((ok, err) -> {
-                        if (err == null) removed.incrementAndGet(); else failed.incrementAndGet();
-                        if (remaining.decrementAndGet() == 0) finishSave(added.get(), removed.get(), failed.get());
-                    });
+            chain = chain.thenCompose(ignored ->
+                    removeFromPlaylist(mainActivity, playlist.playlistId)
+                            .handle((ok, err) -> {
+                                if (err == null) removed.incrementAndGet(); else failed.incrementAndGet();
+                                return null;
+                            }));
         }
+
+        chain.whenComplete((ignored, err) -> finishSave(added.get(), removed.get(), failed.get()));
     }
 
     /** Adds the displayed song URI to the playlist on Spotify, then mirrors it locally. */
