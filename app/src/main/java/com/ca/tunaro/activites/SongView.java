@@ -24,6 +24,7 @@ import com.ca.tunaro.BaseActivity;
 import com.ca.tunaro.R;
 import com.ca.tunaro.adapters.SongTabAdapter;
 import com.ca.tunaro.database.DatabaseHelper;
+import com.ca.tunaro.fragments.ManagePlaylistsSheet;
 import com.ca.tunaro.models.PlaylistModel;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.utils.ColorExtractor;
@@ -318,10 +319,23 @@ public class SongView extends BaseActivity {
     }
 
     private void setupPlaylistPanel() {
-        LinearLayout panel = findViewById(R.id.playlist_panel);
+        ImageView manageButton = findViewById(R.id.playlist_panel_manage);
+        manageButton.setOnClickListener(v -> openManagePlaylistsSheet());
+        populatePlaylistPanel();
+    }
+
+    private void openManagePlaylistsSheet() {
+        ManagePlaylistsSheet sheet = ManagePlaylistsSheet.newInstance(selectedSong.getId(), allVariantUris);
+        sheet.setOnChangesSavedListener(this::populatePlaylistPanel);
+        sheet.show(getSupportFragmentManager(), "manage_playlists");
+    }
+
+    private void populatePlaylistPanel() {
         LinearLayout iconsContainer = findViewById(R.id.playlist_panel_icons);
         TextView emptyLabel = findViewById(R.id.playlist_panel_empty);
         View scrollView = findViewById(R.id.playlist_panel_scroll);
+
+        iconsContainer.removeAllViews();
 
         DatabaseHelper dbHelper = new DatabaseHelper(this);
         List<DatabaseHelper.PlaylistLink> playlists = allVariantUris.size() > 1

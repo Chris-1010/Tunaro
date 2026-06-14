@@ -174,7 +174,7 @@ public class MainActivity extends AppCompatActivity {
         AuthorizationRequest.Builder builder =
                 new AuthorizationRequest.Builder(CLIENT_ID, AuthorizationResponse.Type.CODE, REDIRECT_URI.toString());
         // Set permissions and scope
-        builder.setScopes(new String[]{"app-remote-control", "streaming", "playlist-read-private", "playlist-modify-private", "user-read-playback-state", "user-read-recently-played", "user-read-private"});
+        builder.setScopes(new String[]{"app-remote-control", "streaming", "playlist-read-private", "playlist-modify-private", "playlist-modify-public", "user-read-playback-state", "user-read-recently-played", "user-read-private"});
         AuthorizationRequest request = builder.build();
 
         AuthorizationClient.openLoginActivity(this, REQUEST_CODE, request);

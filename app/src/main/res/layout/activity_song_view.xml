@@ -91,7 +91,8 @@
                         <TextView
                             android:id="@+id/playlist_panel_empty"
                             android:layout_width="match_parent"
-                            android:layout_height="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
                             android:gravity="center"
                             android:padding="8dp"
                             android:text="Not in any playlists"
@@ -102,7 +103,8 @@
                         <androidx.core.widget.NestedScrollView
                             android:id="@+id/playlist_panel_scroll"
                             android:layout_width="match_parent"
-                            android:layout_height="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
                             android:overScrollMode="never"
                             android:visibility="gone"
                             tools:visibility="visible">
@@ -116,6 +118,23 @@
                                 android:padding="4dp" />
 
                         </androidx.core.widget.NestedScrollView>
+
+                        <!-- Manage: opens the add-to-playlist sheet. Always visible so the
+                             song can be added even when it's in no playlists yet. -->
+                        <ImageView
+                            android:id="@+id/playlist_panel_manage"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:layout_gravity="center_horizontal"
+                            android:layout_marginTop="4dp"
+                            android:background="@drawable/ripple_rounded_background"
+                            android:backgroundTint="#33FFFFFF"
+                            android:clickable="true"
+                            android:contentDescription="@string/add_to_playlist_title"
+                            android:focusable="true"
+                            android:padding="8dp"
+                            android:src="@drawable/ic_add"
+                            app:tint="@color/white" />
 
                     </LinearLayout>
 

@@ -1144,6 +1144,101 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         public boolean isActive() { return removedAt == null; }
     }
 
+    /** A playlist row for the "Add to playlist" manage sheet. */
+    public static class ManagablePlaylist {
+        public final String playlistId;
+        public final String name;
+        public final String imageUrl;
+        public final boolean favourite;
+        /** True if any of the song's variant URIs is actively linked to this playlist. */
+        public final boolean containsSong;
+
+        public ManagablePlaylist(String playlistId, String name, String imageUrl,
+                                 boolean favourite, boolean containsSong) {
+            this.playlistId = playlistId;
+            this.name = name;
+            this.imageUrl = imageUrl;
+            this.favourite = favourite;
+            this.containsSong = containsSong;
+        }
+    }
+
+    /**
+     * Playlists for the manage sheet, ordered favourites first then by most recently
+     * added-to. {@code containsSong} is variant-aware: it's true when any of the given
+     * variant URIs is actively (not removed) in the playlist, matching the panel above.
+     */
+    public List<ManagablePlaylist> getManagablePlaylists(List<String> variantUris, boolean includeArchived) {
+        List<ManagablePlaylist> result = new ArrayList<>();
+        if (variantUris == null || variantUris.isEmpty()) return result;
+        String placeholders = makePlaceholders(variantUris.size());
+
+        String containsCase =
+                "MAX(CASE WHEN sp." + COLUMN_SPOTIFY_URI + " IN (" + placeholders + ")" +
+                " AND sp." + COLUMN_REMOVED_AT + " IS NULL THEN 1 ELSE 0 END)";
+
+        StringBuilder sql = new StringBuilder()
+                .append("SELECT p.").append(COLUMN_PLAYLIST_ID)
+                .append(", p.").append(COLUMN_PLAYLIST_NAME)
+                .append(", p.").append(COLUMN_IMAGE_URL)
+                .append(", p.").append(COLUMN_IS_FAVOURITE)
+                .append(", ").append(containsCase).append(" AS contains_song")
+                .append(", MAX(r.last_added) AS last_added")
+                .append(" FROM ").append(TABLE_PLAYLISTS).append(" p")
+                .append(" LEFT JOIN ").append(TABLE_SONG_PLAYLISTS).append(" sp")
+                .append(" ON sp.").append(COLUMN_PLAYLIST_ID).append(" = p.").append(COLUMN_PLAYLIST_ID)
+                .append(" LEFT JOIN (SELECT ").append(COLUMN_PLAYLIST_ID)
+                .append(", MAX(").append(COLUMN_ADDED_AT).append(") last_added FROM ").append(TABLE_SONG_PLAYLISTS)
+                .append(" GROUP BY ").append(COLUMN_PLAYLIST_ID).append(") r")
+                .append(" ON r.").append(COLUMN_PLAYLIST_ID).append(" = p.").append(COLUMN_PLAYLIST_ID);
+        if (!includeArchived) {
+            sql.append(" WHERE p.").append(COLUMN_IS_ARCHIVED).append(" = 0");
+        }
+        sql.append(" GROUP BY p.").append(COLUMN_PLAYLIST_ID)
+                .append(" ORDER BY p.").append(COLUMN_IS_FAVOURITE).append(" DESC, last_added DESC");
+
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(sql.toString(), variantUris.toArray(new String[0]));
+        if (cursor.moveToFirst()) {
+            do {
+                result.add(new ManagablePlaylist(
+                        cursor.getString(0),
+                        cursor.getString(1),
+                        cursor.getString(2),
+                        cursor.getInt(3) == 1,
+                        cursor.getInt(4) == 1));
+            } while (cursor.moveToNext());
+        }
+        cursor.close();
+        db.close();
+        return result;
+    }
+
+    /**
+     * Of the given variant URIs, the subset that is actively (not removed) linked to the
+     * playlist. Used on untick to remove every variant of the recording that's present.
+     */
+    public List<String> getActiveVariantsInPlaylist(List<String> variantUris, String playlistId) {
+        List<String> result = new ArrayList<>();
+        if (variantUris == null || variantUris.isEmpty()) return result;
+        String placeholders = makePlaceholders(variantUris.size());
+        String[] args = new String[variantUris.size() + 1];
+        for (int i = 0; i < variantUris.size(); i++) args[i] = variantUris.get(i);
+        args[variantUris.size()] = playlistId;
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT " + COLUMN_SPOTIFY_URI + " FROM " + TABLE_SONG_PLAYLISTS +
+                        " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + placeholders + ")" +
+                        " AND " + COLUMN_PLAYLIST_ID + " = ? AND " + COLUMN_REMOVED_AT + " IS NULL",
+                args);
+        if (cursor.moveToFirst()) {
+            do { result.add(cursor.getString(0)); } while (cursor.moveToNext());
+        }
+        cursor.close();
+        db.close();
+        return result;
+    }
+
     public List<PlaylistLink> getPlaylistsForSong(String spotifyUri) {
         List<PlaylistLink> result = new ArrayList<>();
         SQLiteDatabase db = this.getReadableDatabase();

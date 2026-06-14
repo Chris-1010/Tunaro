@@ -1,5 +1,9 @@
 <resources>
     <string name="empty"> </string>
+    <string name="add_to_playlist_title">Add to playlist</string>
+    <string name="show_archived">Show archived</string>
+    <string name="no_playlists_found">No playlists found</string>
+    <string name="save">Save</string>
     <string name="app_name" translatable="false">Tunaro</string>
     <string name="title_home">Home</string>
     <string name="title_dashboard">Dashboard</string>
