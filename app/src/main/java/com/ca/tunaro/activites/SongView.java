@@ -189,9 +189,7 @@ public class SongView extends BaseActivity {
         String trackId = spotifyUri.substring(spotifyUri.lastIndexOf(":") + 1);
         Log.d(TAG, "API: getTrack trackId=" + trackId + " (song not yet in DB)");
 
-        mainActivity.getSpotifyApi().getTrack(trackId)
-                .build()
-                .executeAsync()
+        mainActivity.executeWithTokenRefresh(() -> mainActivity.getSpotifyApi().getTrack(trackId).build())
                 .thenAccept(track -> {
                     if (track == null) {
                         runOnUiThread(this::stopHeaderShimmer);

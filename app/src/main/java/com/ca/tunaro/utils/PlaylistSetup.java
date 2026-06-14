@@ -5,6 +5,7 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
+import com.ca.tunaro.activites.MainActivity;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.models.PlaylistModel;
 import com.ca.tunaro.models.SongModel;
@@ -63,13 +64,33 @@ public class PlaylistSetup {
         return future;
     }
 
+    // Proactively refreshes the access token if it's near expiry and applies it to the given
+    // SpotifyApi, so the (partly synchronous) request chains below don't fail with an expired
+    // token. Returns a future that completes once the token is ready; failures are swallowed so
+    // the work still proceeds with the existing token.
+    private static CompletableFuture<Void> ensureFreshToken(SpotifyApi spotifyApi) {
+        MainActivity mainActivity = MainActivity.getInstance();
+        if (mainActivity == null || spotifyApi == null) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return mainActivity.getValidAccessToken()
+                .thenAccept(token -> {
+                    if (token != null) spotifyApi.setAccessToken(token);
+                })
+                .exceptionally(e -> {
+                    Log.w("PlaylistSetup", "Could not ensure fresh token, proceeding with existing", e);
+                    return null;
+                });
+    }
+
     public static CompletableFuture<ArrayList<PlaylistModel>> getPlaylistData(SpotifyApi spotifyApi) {
         ArrayList<PlaylistModel> cachedPlaylists = playlistCache.getCachedPlaylists();
         if (cachedPlaylists != null) {
             return CompletableFuture.completedFuture(cachedPlaylists);
         }
 
-        return getAllPlaylists(spotifyApi, 0, new ArrayList<>())
+        return ensureFreshToken(spotifyApi)
+                .thenCompose(ignored -> getAllPlaylists(spotifyApi, 0, new ArrayList<>()))
                 .thenApply(playlists -> {
                     synchronized (lock) {
                         playlistCache.cachePlaylists(playlists);
@@ -138,7 +159,7 @@ public class PlaylistSetup {
     public static CompletableFuture<SongLoadResult> getPlaylistSongs(
             String playlistId, SpotifyApi spotifyApi, SongLoadProgressListener progressListener) {
 
-        return CompletableFuture.supplyAsync(() -> {
+        return ensureFreshToken(spotifyApi).thenCompose(ignored -> CompletableFuture.supplyAsync(() -> {
             List<String> cachedSongIds = playlistCache.getCachedPlaylistSongIds(playlistId);
             if (cachedSongIds != null && !cachedSongIds.isEmpty()) {
                 Map<String, SongModel> cachedSongsMap = songCache.getCachedSongsMap(cachedSongIds);
@@ -201,7 +222,7 @@ public class PlaylistSetup {
                 Log.e("PlaylistSetup", "Error getting songs", e);
                 return new SongLoadResult(new ArrayList<>(), false);
             }
-        });
+        }));
     }
 
     private static CompletableFuture<ArrayList<SongModel>> getAllSongs(
@@ -398,7 +419,8 @@ public class PlaylistSetup {
         if (appContext == null || spotifyApi == null) return CompletableFuture.completedFuture(null);
 
         // Fetch fresh remote track counts from Spotify before checking what needs scanning
-        return getAllPlaylists(spotifyApi, 0, new ArrayList<>())
+        return ensureFreshToken(spotifyApi)
+                .thenCompose(ignored -> getAllPlaylists(spotifyApi, 0, new ArrayList<>()))
                 .thenCompose(ignored -> runScan(spotifyApi))
                 .exceptionally(e -> {
                     Log.e("PlaylistSetup", "Failed to fetch remote track counts before scan", e);
@@ -498,7 +520,8 @@ public class PlaylistSetup {
     }
 
     public static CompletableFuture<ArrayList<PlaylistModel>> refreshPlaylists(SpotifyApi spotifyApi) {
-        return getAllPlaylists(spotifyApi, 0, new ArrayList<>())
+        return ensureFreshToken(spotifyApi)
+                .thenCompose(ignored -> getAllPlaylists(spotifyApi, 0, new ArrayList<>()))
                 .thenCompose(playlists -> {
                     synchronized (lock) {
                         playlistCache.cachePlaylists(playlists);

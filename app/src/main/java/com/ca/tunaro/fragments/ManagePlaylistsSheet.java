@@ -201,10 +201,8 @@ public class ManagePlaylistsSheet extends BottomSheetDialogFragment {
 
     /** Adds the displayed song URI to the playlist on Spotify, then mirrors it locally. */
     private CompletableFuture<Void> addToPlaylist(MainActivity mainActivity, String playlistId) {
-        return mainActivity.getSpotifyApi()
-                .addItemsToPlaylist(playlistId, new String[]{songUri})
-                .build()
-                .executeAsync()
+        return mainActivity.executeWithTokenRefresh(
+                () -> mainActivity.getSpotifyApi().addItemsToPlaylist(playlistId, new String[]{songUri}).build())
                 .thenAccept(snapshot -> {
                     DatabaseHelper db = new DatabaseHelper(requireContext().getApplicationContext());
                     db.upsertSongPlaylistLink(songUri, playlistId, utcTimestamp());
@@ -233,10 +231,8 @@ public class ManagePlaylistsSheet extends BottomSheetDialogFragment {
         }
 
         final List<String> removedUris = variantsInPlaylist;
-        return mainActivity.getSpotifyApi()
-                .removeItemsFromPlaylist(playlistId, tracks)
-                .build()
-                .executeAsync()
+        return mainActivity.executeWithTokenRefresh(
+                () -> mainActivity.getSpotifyApi().removeItemsFromPlaylist(playlistId, tracks).build())
                 .thenAccept(snapshot -> {
                     DatabaseHelper db2 = new DatabaseHelper(requireContext().getApplicationContext());
                     for (String uri : removedUris) db2.markSongRemovedFromPlaylist(uri, playlistId);

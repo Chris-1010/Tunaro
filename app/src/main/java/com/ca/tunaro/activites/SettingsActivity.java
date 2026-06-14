@@ -207,9 +207,7 @@ public class SettingsActivity extends BaseActivity {
         }
 
         Log.d(TAG, "API: getUsersAvailableDevices");
-        mainActivity.getSpotifyApi().getUsersAvailableDevices()
-                .build()
-                .executeAsync()
+        mainActivity.executeWithTokenRefresh(() -> mainActivity.getSpotifyApi().getUsersAvailableDevices().build())
                 .thenAccept(devices -> {
                     runOnUiThread(() -> {
                         StringBuilder deviceList = new StringBuilder("Available devices:\n");
