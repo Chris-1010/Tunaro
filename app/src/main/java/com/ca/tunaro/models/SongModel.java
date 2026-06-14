@@ -195,9 +195,8 @@ public class SongModel implements Serializable {
         }
 
         Log.d("SongModel", "API: getTrack trackId=" + parts[2] + " song=" + name);
-        mainActivity.getSpotifyApi().getTrack(parts[2])
-                .build()
-                .executeAsync()
+        final String trackId = parts[2];
+        mainActivity.executeWithTokenRefresh(() -> mainActivity.getSpotifyApi().getTrack(trackId).build())
                 .thenAccept(track -> {
                     this.popularity = track.getPopularity();
                     if (callback != null) callback.onPopularityFetched(this.popularity);

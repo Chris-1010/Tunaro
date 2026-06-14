@@ -3,6 +3,7 @@ package com.ca.tunaro.services;
 import android.content.Context;
 import android.util.Log;
 
+import com.ca.tunaro.activites.MainActivity;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.models.SongModel;
 
@@ -29,6 +30,10 @@ public class SongRefreshService {
     public CompletableFuture<Void> refreshStaleSongs() {
         return CompletableFuture.runAsync(() -> {
             try {
+                // Ensure a non-expired token before the synchronous batch loop below, which
+                // would otherwise throw UnauthorizedException with no retry.
+                ensureFreshToken();
+
                 DatabaseHelper dbHelper = new DatabaseHelper(context);
                 Map<String, String> songsToRefresh = dbHelper.getSongsNeedingRefresh();
 
@@ -97,5 +102,18 @@ public class SongRefreshService {
                 Log.e(TAG, "Song refresh failed", e);
             }
         });
+    }
+
+    // Proactively refresh the access token if it's near expiry, then apply the valid token to
+    // this service's SpotifyApi instance (which may be a separate one from MainActivity's).
+    private void ensureFreshToken() {
+        MainActivity mainActivity = MainActivity.getInstance();
+        if (mainActivity == null) return;
+        try {
+            String token = mainActivity.getValidAccessToken().get();
+            if (token != null) spotifyApi.setAccessToken(token);
+        } catch (Exception e) {
+            Log.w(TAG, "Could not ensure fresh token before refresh, proceeding with existing", e);
+        }
     }
 }

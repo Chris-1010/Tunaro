@@ -35,11 +35,15 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Supplier;
 
 import se.michaelthelin.spotify.SpotifyApi;
 import se.michaelthelin.spotify.SpotifyHttpManager;
+import se.michaelthelin.spotify.exceptions.detailed.UnauthorizedException;
+import se.michaelthelin.spotify.requests.AbstractRequest;
 import se.michaelthelin.spotify.requests.data.users_profile.GetCurrentUsersProfileRequest;
 
 public class MainActivity extends AppCompatActivity {
@@ -600,6 +604,7 @@ public class MainActivity extends AppCompatActivity {
                             prefs.edit()
                                 .putString("spotify_access_token", newAccessToken)
                                 .putInt("spotify_expires_in", expiresIn)
+                                .putLong("spotify_expires_at", expiryTimestamp(expiresIn))
                                 .apply();
                         }
 
@@ -634,18 +639,64 @@ public class MainActivity extends AppCompatActivity {
     public CompletableFuture<String> getValidAccessToken() {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                if (spotifyApi != null && spotifyApi.getAccessToken() != null) {
-                    // Try using current token first
-                    return spotifyApi.getAccessToken();
-                } else {
-                    // Need to refresh
+                String currentToken = spotifyApi != null ? spotifyApi.getAccessToken() : null;
+                // Refresh if there's no token, or if the stored deadline has (nearly) passed.
+                if (currentToken == null || isAccessTokenExpired()) {
                     return refreshAccessToken().get();
                 }
+                return currentToken;
             } catch (Exception e) {
                 Log.e(TAG, "Error getting valid access token", e);
                 throw new RuntimeException(e);
             }
         }, executor);
+    }
+
+    /**
+     * Executes a Spotify Web API request, transparently refreshing the access token when needed.
+     *
+     * <p>Proactive: if the stored expiry deadline has (nearly) passed, the token is refreshed
+     * before the request is built. Reactive: if the request still fails with an expired-token
+     * error (e.g. the token was revoked early), it refreshes and retries once.
+     *
+     * <p>The request is supplied as a factory rather than a pre-built request because the
+     * {@code Authorization: Bearer <token>} header is baked in at build time. After a refresh we
+     * must rebuild the request so it picks up the new token from {@link #spotifyApi}.
+     *
+     * @param requestFactory builds a fresh request using the current access token (e.g.
+     *                       {@code () -> getSpotifyApi().getTrack(id).build()})
+     */
+    public <T> CompletableFuture<T> executeWithTokenRefresh(Supplier<? extends AbstractRequest<T>> requestFactory) {
+        CompletableFuture<Void> ready = isAccessTokenExpired()
+                ? refreshAccessToken().thenApply(token -> null)
+                : CompletableFuture.completedFuture(null);
+
+        return ready
+                .thenCompose(ignored -> requestFactory.get().executeAsync())
+                .handle((result, throwable) -> {
+                    if (throwable == null) {
+                        return CompletableFuture.completedFuture(result);
+                    }
+                    if (!isTokenExpired(throwable)) {
+                        return MainActivity.<T>failedFuture(throwable);
+                    }
+                    Log.d(TAG, "Access token expired during API call — refreshing and retrying once");
+                    // Refresh, then rebuild the request (new token) and try again.
+                    return refreshAccessToken().thenCompose(token -> requestFactory.get().executeAsync());
+                })
+                .thenCompose(future -> future);
+    }
+
+    private static boolean isTokenExpired(Throwable throwable) {
+        Throwable cause = (throwable instanceof CompletionException && throwable.getCause() != null)
+                ? throwable.getCause() : throwable;
+        return cause instanceof UnauthorizedException;
+    }
+
+    private static <T> CompletableFuture<T> failedFuture(Throwable throwable) {
+        CompletableFuture<T> future = new CompletableFuture<>();
+        future.completeExceptionally(throwable);
+        return future;
     }
 
     private void saveTokens(String accessToken, String refreshToken, int expiresIn) {
@@ -654,9 +705,28 @@ public class MainActivity extends AppCompatActivity {
             .putString("spotify_access_token", accessToken)
             .putString("spotify_refresh_token", refreshToken)
             .putInt("spotify_expires_in", expiresIn)
+            .putLong("spotify_expires_at", expiryTimestamp(expiresIn))
             .apply();
 
         Log.d(TAG, "Saved access token and refresh token to SharedPreferences (expires in " + expiresIn + " seconds)");
+    }
+
+    // Spotify returns expires_in (a duration in seconds); convert it to an absolute
+    // wall-clock deadline so we can tell later whether the token is still valid.
+    private static long expiryTimestamp(int expiresIn) {
+        return System.currentTimeMillis() + (expiresIn * 1000L);
+    }
+
+    // Refresh a little before the real deadline to absorb clock skew and request latency.
+    private static final long TOKEN_EXPIRY_SKEW_MS = 60_000L;
+
+    private boolean isAccessTokenExpired() {
+        SharedPreferences prefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
+        long expiresAt = prefs.getLong("spotify_expires_at", 0L);
+        // No recorded expiry (e.g. token saved by an older app version) — treat as expired
+        // so we refresh once and start tracking the deadline.
+        if (expiresAt == 0L) return true;
+        return System.currentTimeMillis() >= (expiresAt - TOKEN_EXPIRY_SKEW_MS);
     }
 
     // Overload for backward compatibility when expires_in is not provided
