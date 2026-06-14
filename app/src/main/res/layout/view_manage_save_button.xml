@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Floating Save button for the manage-playlists sheet. Added to the dialog window
+     decor (not the sheet content) so it stays pinned to the screen. -->
+<com.google.android.material.button.MaterialButton xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/manage_save"
+    android:layout_width="wrap_content"
+    android:layout_height="64dp"
+    android:backgroundTint="#32CD32"
+    android:text="@string/save"
+    android:textColor="@android:color/black"
+    android:textSize="20sp"
+    android:textStyle="bold"
+    android:visibility="gone"
+    app:cornerRadius="14dp" />

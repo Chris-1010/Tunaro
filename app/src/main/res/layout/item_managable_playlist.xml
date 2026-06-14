@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="6dp"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:orientation="vertical">
+
+    <!-- Square image + selection chrome. clipChildren=false lets the tick badge
+         overflow slightly beyond the image's bottom-right corner. The frame's
+         height is set to match its width in the adapter to keep it square. -->
+    <FrameLayout
+        android:id="@+id/managable_image_frame"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:clipChildren="false"
+        android:clipToPadding="false">
+
+        <ImageView
+            android:id="@+id/managable_image"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/rounded_md"
+            android:clipToOutline="true"
+            android:contentDescription="@string/empty"
+            android:scaleType="centerCrop" />
+
+        <!-- Green border overlay, shown only when selected -->
+        <View
+            android:id="@+id/managable_border"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/playlist_selected_border"
+            android:visibility="gone" />
+
+        <!-- Green tick, overflowing the bottom-right corner, shown only when selected -->
+        <ImageView
+            android:id="@+id/managable_tick"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:layout_gravity="bottom|end"
+            android:layout_marginEnd="-6dp"
+            android:layout_marginBottom="-6dp"
+            android:contentDescription="@string/empty"
+            android:src="@drawable/ic_check_circle_green"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/managable_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:maxLines="2"
+        android:textColor="@android:color/white"
+        android:textSize="12sp"
+        tools:text="My Playlist Name" />
+
+</LinearLayout>
