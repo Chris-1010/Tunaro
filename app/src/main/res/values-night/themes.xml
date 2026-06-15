@@ -15,4 +15,12 @@
         <item name="android:navigationBarColor">@color/transparent_black</item>
         <item name="android:windowTranslucentStatus">true</item>
     </style>
+
+    <!-- Launch theme: the system draws this as the starting window before
+         MainActivity inflates, eliminating the blank/white frame on cold start. -->
+    <style name="Theme.Tunaro.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/dark_blue</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.Tunaro</item>
+    </style>
 </resources>
