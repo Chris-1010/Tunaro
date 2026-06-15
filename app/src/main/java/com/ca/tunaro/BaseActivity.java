@@ -1,6 +1,7 @@
 package com.ca.tunaro;
 
 import android.content.Intent;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -23,6 +24,7 @@ import com.ca.tunaro.activites.PlaylistView;
 import com.ca.tunaro.activites.SongView;
 import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.models.SongModel;
+import com.ca.tunaro.utils.ColorExtractor;
 import com.ca.tunaro.utils.SelectedSongHolder;
 
 import java.util.Locale;
@@ -38,6 +40,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
 
     // Playback bar views
     protected View playbackBar;
+    protected View playbackBarBackground;
     protected SeekBar playbackSeekbar;
     private boolean isSeeking = false;
     protected ImageView albumCover;
@@ -141,6 +144,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     private void setupPlaybackBar() {
         // Find playback bar views
         playbackBar = findViewById(R.id.playback_bar);
+        playbackBarBackground = findViewById(R.id.frameLayout);
         playbackSeekbar = findViewById(R.id.playback_seekbar);
         if (playbackBar == null) return;
 
@@ -435,6 +439,50 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
                     .transition(DrawableTransitionOptions.withCrossFade())
                     .into(albumCover);
         }
+
+        // Tint the bar with a left-to-right gradient: the album's vibrant colour on the
+        // left, fading into the base colour by 25% and holding it to the right.
+        applyPlaybackBarGradient(song.getAlbumCoverUrl());
+    }
+
+    private void applyPlaybackBarGradient(String albumCoverUrl) {
+        if (playbackBarBackground == null) return;
+
+        if (albumCoverUrl == null || albumCoverUrl.isEmpty()) {
+            setPlaybackBarGradient(getColor(R.color.playback_bar_base));
+            return;
+        }
+
+        ColorExtractor.extractColors(this, albumCoverUrl, new ColorExtractor.ColorExtractionCallback() {
+            @Override
+            public void onColorExtracted(int dominantColor, int vibrantColor) {
+                if (isDestroyed() || isFinishing()) return;
+                setPlaybackBarGradient(vibrantColor);
+            }
+
+            @Override
+            public void onError() {
+                if (isDestroyed() || isFinishing()) return;
+                setPlaybackBarGradient(getColor(R.color.playback_bar_base));
+            }
+        });
+    }
+
+    private void setPlaybackBarGradient(int startColor) {
+        if (playbackBarBackground == null) return;
+
+        int baseColor = getColor(R.color.playback_bar_base);
+        // Vibrant at the left edge, reaching the base colour by 25% and holding it across
+        // the rest of the bar.
+        GradientDrawable gradient = new GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{startColor, baseColor, baseColor});
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            gradient.setColors(new int[]{startColor, baseColor, baseColor},
+                    new float[]{0f, 0.25f, 1f});
+        }
+        gradient.setCornerRadius(0f);
+        playbackBarBackground.setBackground(gradient);
     }
 
     @Override
