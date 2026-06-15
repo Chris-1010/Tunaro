@@ -248,10 +248,12 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 .transition(DrawableTransitionOptions.withCrossFade())
                 .into(collapsedImage);
 
-        // Add AppBarLayout offset listener to fade in/out the collapsed image
+        // Add AppBarLayout offset listener to fade in/out the collapsed image. The card
+        // wraps the image for rounded corners + border, so fade the card to keep them in sync.
+        View collapsedImageCard = findViewById(R.id.collapsed_playlist_image_card);
         appBarLayout.addOnOffsetChangedListener((appBar, verticalOffset) -> {
             float percentage = Math.abs(verticalOffset) / (float) appBar.getTotalScrollRange();
-            collapsedImage.setAlpha(percentage);
+            collapsedImageCard.setAlpha(percentage);
         });
 
         // Extract colors from the playlist image and apply dynamic background
