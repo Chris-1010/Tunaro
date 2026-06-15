@@ -167,8 +167,8 @@ public class BackupRestoreActivity extends AppCompatActivity {
                 Log.d(TAG, "Resolved " + searchResolved + "/" + compositeIds.size() + " legacy composite IDs");
             }
 
-            // Build the set of track IDs whose metadata we need to fetch: every valid
-            // raw ID, plus every track ID we just resolved from a composite key.
+            // Build the set of track IDs whose metadata needs fetching: every valid
+            // raw ID, plus every track ID resolved above from a composite key.
             Set<String> validTrackIds = new LinkedHashSet<>();
             int prefilteredInvalid = 0;
             for (String id : allSongIds) {
