@@ -34,19 +34,29 @@
                 android:padding="24dp"
                 app:layout_collapseMode="parallax">
 
-                <ImageView
-                    android:id="@+id/detailed_playlistCover"
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/detailed_playlistCover_card"
                     android:layout_width="250dp"
                     android:layout_height="250dp"
-                    android:contentDescription="@string/playlistCoverImage"
-                    android:scaleType="centerCrop"
-                    tools:srcCompat="@tools:sample/backgrounds/scenic" />
+                    android:foreground="@drawable/image_border"
+                    app:cardCornerRadius="12dp"
+                    app:cardElevation="8dp">
+
+                    <ImageView
+                        android:id="@+id/detailed_playlistCover"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:contentDescription="@string/playlistCoverImage"
+                        android:scaleType="centerCrop"
+                        tools:srcCompat="@tools:sample/backgrounds/scenic" />
+                </androidx.cardview.widget.CardView>
 
                 <TextView
                     android:id="@+id/detailed_playlistName"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="-25dp"
+                    android:layout_marginTop="1px"
+                    android:elevation="9dp"
                     android:ellipsize="marquee"
                     android:focusable="true"
                     android:focusableInTouchMode="true"
@@ -78,15 +88,24 @@
                 app:navigationIcon="@drawable/ic_arrow_back">
 
                 <!-- Small playlist image for collapsed state -->
-                <ImageView
-                    android:id="@+id/collapsed_playlist_image"
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/collapsed_playlist_image_card"
                     android:layout_width="45dp"
                     android:layout_height="45dp"
                     android:layout_marginEnd="8dp"
                     android:alpha="0"
-                    android:contentDescription="@string/playlistCoverImage"
-                    android:scaleType="centerCrop"
-                    tools:srcCompat="@tools:sample/backgrounds/scenic" />
+                    android:foreground="@drawable/image_border_small"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="4dp">
+
+                    <ImageView
+                        android:id="@+id/collapsed_playlist_image"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:contentDescription="@string/playlistCoverImage"
+                        android:scaleType="centerCrop"
+                        tools:srcCompat="@tools:sample/backgrounds/scenic" />
+                </androidx.cardview.widget.CardView>
 
                 <!-- Filter toggle icon -->
                 <ImageView
