@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Diagonal gradient: dark blue at the bottom-left, lighter blue/green at the top-right. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="45"
+        android:startColor="@color/splash_gradient_start"
+        android:centerColor="@color/splash_gradient_center"
+        android:endColor="@color/splash_gradient_end"
+        android:type="linear" />
+</shape>

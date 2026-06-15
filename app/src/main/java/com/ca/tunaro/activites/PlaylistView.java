@@ -641,6 +641,13 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         Intent intent = new Intent(this, SongView.class);
         intent.putExtra("playlist_name", selectedPlaylist.getPlaylistName());
         startActivity(intent);
+        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+    }
+
+    @Override
+    public void finish() {
+        super.finish();
+        overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
     }
 
     @Override

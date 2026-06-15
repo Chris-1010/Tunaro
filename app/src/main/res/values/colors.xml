@@ -16,4 +16,8 @@
     <color name="purpleTheme">#4C00B7</color>
     <color name="shimmer_placeholder">#6F6F6F</color>
     <color name="playback_bar_base">#00012E</color>
+    <!-- Splash gradient: dark blue (bottom-left) -> lighter blue/green (top-right) -->
+    <color name="splash_gradient_start">#00116A</color>
+    <color name="splash_gradient_center">#0B3C7A</color>
+    <color name="splash_gradient_end">#1FB5A0</color>
 </resources>

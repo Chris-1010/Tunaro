@@ -3,11 +3,16 @@ package com.ca.tunaro.activites;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
+import android.view.View;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.splashscreen.SplashScreen;
 
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.managers.PlaybackManager;
@@ -49,6 +54,9 @@ import se.michaelthelin.spotify.requests.data.users_profile.GetCurrentUsersProfi
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
 
+    // Minimum time the spinner splash stays visible on the fast (already-logged-in) path.
+    private static final long SPLASH_MIN_DISPLAY_MS = 1200;
+
     // Singleton instance
     private static MainActivity instance;
 
@@ -72,8 +80,12 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Must be called before super.onCreate(); installs the system splash and
+        // swaps to postSplashScreenTheme (Theme.Tunaro) once the app is ready.
+        SplashScreen.installSplashScreen(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main_splash);
+        applyRandomSplashGradient();
 
         // Set the singleton instance
         instance = this;
@@ -120,8 +132,13 @@ public class MainActivity extends AppCompatActivity {
                         return null;
                     });
 
-            Intent intent = new Intent(MainActivity.this, HomeActivity.class);
-            startActivity(intent);
+            // Keep the spinner splash visible briefly so it doesn't flash past on
+            // the fast (already-logged-in) path, then navigate to Home.
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                Intent intent = new Intent(MainActivity.this, HomeActivity.class);
+                startActivity(intent);
+            }, SPLASH_MIN_DISPLAY_MS);
             return;
         }
 
@@ -138,6 +155,7 @@ public class MainActivity extends AppCompatActivity {
                         }
                         Intent intent = new Intent(MainActivity.this, HomeActivity.class);
                         startActivity(intent);
+                        overridePendingTransition(R.anim.fade_in, R.anim.fade_out);
                     });
                 }, executor)
                 .exceptionally(throwable -> {
@@ -151,6 +169,30 @@ public class MainActivity extends AppCompatActivity {
                     return null;
                 });
 
+    }
+
+    // Curated cool-toned gradient pairs (bottom-left -> top-right) that stay
+    // harmonious with the blue/green app icon. One is chosen at random per launch.
+    private static final int[][] SPLASH_GRADIENTS = {
+            {0xFF00116A, 0xFF1FB5A0}, // dark blue -> teal/green
+            {0xFF0A0A3C, 0xFF2D7DD2}, // navy -> bright blue
+            {0xFF06283D, 0xFF1FA2A0}, // deep teal-blue -> teal
+            {0xFF12005E, 0xFF6C4BC4}, // indigo -> violet-blue
+            {0xFF003B46, 0xFF2DD4A8}, // dark teal -> mint green
+            {0xFF001B3A, 0xFF4A90E2}, // midnight blue -> sky blue
+            {0xFF0B1D51, 0xFF18C6B0}, // royal navy -> aqua
+    };
+
+    private void applyRandomSplashGradient() {
+        View root = findViewById(R.id.splash_root);
+        if (root == null) return;
+
+        int[] pair = SPLASH_GRADIENTS[(int) (Math.random() * SPLASH_GRADIENTS.length)];
+        GradientDrawable gradient = new GradientDrawable(
+                GradientDrawable.Orientation.BL_TR,
+                new int[]{pair[0], pair[1]});
+        gradient.setGradientType(GradientDrawable.LINEAR_GRADIENT);
+        root.setBackground(gradient);
     }
 
     @Override
