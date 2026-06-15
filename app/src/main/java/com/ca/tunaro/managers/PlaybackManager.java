@@ -292,13 +292,20 @@ public class PlaybackManager {
                 stopPositionTracking();
             }
         } else {
-            // No track playing
-
+            // No track reported. This happens transiently during track transitions
+            // (manual switch or queue auto-advance) as well as on a genuine stop.
+            // The playback bar is never torn down here: a transient null would blank
+            // the bar mid-transition, and on a real stop keeping the last song visible
+            // (so it can be resumed) is better UX than an empty gap. The bar only
+            // changes when a real track arrives to replace the current one.
+            //
+            // Tracking, however, should stop — there is no live track to poll.
             stopListenTracking();
 
-            if (isPlaying || currentSong != null) {
+            if (isPlaying) {
                 isPlaying = false;
-                currentSong = null;
+                // Keep currentSong; just reflect that nothing is actively playing so
+                // the bar shows a resumable (paused) state.
                 notifyPlaybackStateChanged();
             }
 

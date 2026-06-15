@@ -712,7 +712,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // Spotify returns expires_in (a duration in seconds); convert it to an absolute
-    // wall-clock deadline so we can tell later whether the token is still valid.
+    // wall-clock deadline to allow later checks of whether the token is still valid.
     private static long expiryTimestamp(int expiresIn) {
         return System.currentTimeMillis() + (expiresIn * 1000L);
     }
@@ -724,7 +724,7 @@ public class MainActivity extends AppCompatActivity {
         SharedPreferences prefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
         long expiresAt = prefs.getLong("spotify_expires_at", 0L);
         // No recorded expiry (e.g. token saved by an older app version) — treat as expired
-        // so we refresh once and start tracking the deadline.
+        // to force one refresh and start tracking the deadline.
         if (expiresAt == 0L) return true;
         return System.currentTimeMillis() >= (expiresAt - TOKEN_EXPIRY_SKEW_MS);
     }

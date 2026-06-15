@@ -220,7 +220,7 @@ public class ManagePlaylistsSheet extends BottomSheetDialogFragment {
         List<String> variantsInPlaylist = db.getActiveVariantsInPlaylist(variantUris, playlistId);
         db.close();
 
-        // Fall back to the displayed URI if we have no record of which variants are linked.
+        // Fall back to the displayed URI when there is no record of which variants are linked.
         if (variantsInPlaylist.isEmpty()) variantsInPlaylist.add(songUri);
 
         JsonArray tracks = new JsonArray();

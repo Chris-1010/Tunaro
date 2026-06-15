@@ -242,9 +242,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             // Only runs from v11 — earlier versions lack the spotify_uri column on songs and fall
             // through to the drop-and-recreate path below.
             //
-            // Ordering is critical: listen_history rows use the old composite song_id, so we
-            // need the songs table (which maps song_id → spotify_uri) available during that step.
-            // All child tables are kept as _old until we have everything we need, then swapped.
+            // Ordering is critical: listen_history rows use the old composite song_id, so the
+            // songs table (which maps song_id → spotify_uri) must stay available during that step.
+            // All child tables are kept as _old until everything needed is in place, then swapped.
             //
             // Steps:
             //  1. Merge duplicate songs that share a spotify_uri into the oldest row
@@ -837,7 +837,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     public void updatePlaylistTrackCount(String playlistId, int trackCount) {
         SQLiteDatabase db = this.getWritableDatabase();
-        // Read the current remote_track_count so we can stamp track_count to match it.
+        // Read the current remote_track_count to stamp track_count to match it.
         // This way the skip check (track_count == remote_track_count) will pass on the next
         // launch even when the playlist has duplicates (remote=1143, distinct=1128).
         int remoteCount = trackCount;

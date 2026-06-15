@@ -96,7 +96,7 @@ public class SongView extends BaseActivity {
         // Upgrade to full model so Details tab has complete metadata.
         // Rows can be partial stubs: PlaybackManager writes name/duration only on
         // track change, and older writers stored album_id without the album row or
-        // artist links. Treat any of those as missing so we refetch from the API.
+        // artist links. Treat any of those as missing to force a refetch from the API.
         DatabaseHelper db = new DatabaseHelper(this);
         SongModel fullSong = db.getFullSong(selectedSong.getId());
         boolean loadingFromApi = fullSong == null
