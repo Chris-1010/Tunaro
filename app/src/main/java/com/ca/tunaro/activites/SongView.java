@@ -48,6 +48,7 @@ public class SongView extends BaseActivity {
     private TabLayout tabLayout;
     private ViewPager2 viewPager;
     private SongTabAdapter tabAdapter;
+    private boolean openedFromPlaybackBar;
 
     // Themed tab text colours, derived from the album art.
     private int tabSelectedTextColor = Color.BLACK;
@@ -62,6 +63,7 @@ public class SongView extends BaseActivity {
 
         if (checkForRecovery()) return;
 
+        openedFromPlaybackBar = getIntent().getBooleanExtra("from_playback_bar", false);
         setContentView(R.layout.activity_song_view);
 
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
@@ -675,6 +677,16 @@ public class SongView extends BaseActivity {
     protected void onDestroy() {
         super.onDestroy();
         SelectedSongHolder.getInstance().clearSelectedSong();
+    }
+
+    @Override
+    public void finish() {
+        super.finish();
+        if (openedFromPlaybackBar) {
+            overridePendingTransition(R.anim.no_animation, R.anim.slide_down_out);
+        } else {
+            overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
+        }
     }
 
     private void showToast(String message) {

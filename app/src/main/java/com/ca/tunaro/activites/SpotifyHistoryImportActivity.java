@@ -236,6 +236,12 @@ public class SpotifyHistoryImportActivity extends AppCompatActivity {
     }
 
     @Override
+    public void finish() {
+        super.finish();
+        overridePendingTransition(R.anim.no_animation, R.anim.slide_down_out);
+    }
+
+    @Override
     protected void onDestroy() {
         super.onDestroy();
         if (executorService != null && !executorService.isShutdown()) {

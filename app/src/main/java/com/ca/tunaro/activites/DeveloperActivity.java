@@ -43,4 +43,10 @@ public class DeveloperActivity extends BaseActivity {
         new TabLayoutMediator(tabLayout, viewPager,
                 (tab, position) -> tab.setText(position == 0 ? "SQL" : "API")).attach();
     }
+
+    @Override
+    public void finish() {
+        super.finish();
+        overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out);
+    }
 }

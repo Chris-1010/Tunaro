@@ -21,4 +21,10 @@ public class RankingsActivity extends AppCompatActivity {
 
         backButton.setOnClickListener(v -> finish());
     }
+
+    @Override
+    public void finish() {
+        super.finish();
+        overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out);
+    }
 }

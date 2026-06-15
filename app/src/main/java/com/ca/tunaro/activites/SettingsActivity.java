@@ -395,6 +395,7 @@ public class SettingsActivity extends BaseActivity {
     private void openSpotifyHistoryImport() {
         android.content.Intent intent = new android.content.Intent(this, SpotifyHistoryImportActivity.class);
         startActivity(intent);
+        overridePendingTransition(R.anim.slide_up_in, R.anim.no_animation);
     }
 
     private void clearAllCaches() {
@@ -417,6 +418,12 @@ public class SettingsActivity extends BaseActivity {
     }
 
     //#endregion
+
+    @Override
+    public void finish() {
+        super.finish();
+        overridePendingTransition(R.anim.no_animation, R.anim.slide_down_out);
+    }
 
     @Override
     public boolean onSupportNavigateUp() {

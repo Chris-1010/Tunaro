@@ -184,7 +184,9 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
 
                         // Open SongView activity
                         Intent intent = new Intent(this, SongView.class);
+                        intent.putExtra("from_playback_bar", true);
                         startActivity(intent);
+                        overridePendingTransition(R.anim.slide_up_in, R.anim.no_animation);
                     } else {
                         // Handle the case where no MainActivity reference is found
                         showToast("Unable to open song view");

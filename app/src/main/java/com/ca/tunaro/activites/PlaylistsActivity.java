@@ -259,6 +259,13 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
         // Start the PlaylistView activity
         Intent intent = new Intent(this, PlaylistView.class);
         startActivity(intent);
+        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+    }
+
+    @Override
+    public void finish() {
+        super.finish();
+        overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out);
     }
 
     private void showToast(String message) {
