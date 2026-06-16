@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Plain lime vertical bar. The host cover container clips it to the cover's
+     rounded outline, so the top and bottom are cut by the corner curve. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/limeGreen" />
+</shape>

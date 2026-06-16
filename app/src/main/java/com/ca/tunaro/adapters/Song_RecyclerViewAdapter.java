@@ -1,14 +1,20 @@
 package com.ca.tunaro.adapters;
 
 import android.content.Context;
+import android.graphics.Outline;
+import android.graphics.Rect;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.cardview.widget.CardView;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
@@ -47,7 +53,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(context).inflate(R.layout.song_recycler_view_row, parent, false);
-        return new ViewHolder(view, recyclerViewInterface);
+        return new ViewHolder(view, recyclerViewInterface, this);
     }
 
     @Override
@@ -68,6 +74,17 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         holder.cardView.setCardBackgroundColor(isPlaying
                 ? 0xFF162B1E  // dark green tint over blueBlack
                 : 0xFF111f28);
+
+        // Lime-green left edge on the album cover for songs queued (upcoming).
+        boolean queued = pm.isInQueue(model);
+        holder.showQueuedEdge(queued);
+
+        // Reset any in-progress swipe visuals when the row is (re)bound.
+        holder.swipeConsumedClick = false;
+        holder.queueSwipeOverlay.setVisibility(View.GONE);
+        holder.queueSwipeOverlay.setClipBounds(null);
+        holder.queueSwipeOverlay.setAlpha(1f);
+        holder.queueSwipeIcon.setVisibility(View.GONE);
 
 
         // Load image using Glide
@@ -149,23 +166,50 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
     public static class ViewHolder extends RecyclerView.ViewHolder {
         CardView cardView;
         ImageView imageCoverView;
+        View coverClip;
+        View queuedEdge;
+        View queueSwipeOverlay;
+        ImageView queueSwipeIcon;
         ImageView hasNotesIcon;
         ImageView hasSnippetsIcon;
         TextView songNameView, artistView;
         TextView contextualInfoView;
+        final Song_RecyclerViewAdapter adapter;
+        // Set true when a swipe gesture ends so the trailing click is ignored.
+        boolean swipeConsumedClick;
 
-        public ViewHolder(@NonNull View itemView, Song_RecyclerViewInterface recyclerViewInterface) {
+        public ViewHolder(@NonNull View itemView, Song_RecyclerViewInterface recyclerViewInterface,
+                          Song_RecyclerViewAdapter adapter) {
             super(itemView);
+            this.adapter = adapter;
             cardView = itemView.findViewById(R.id.cardView);
             songNameView = itemView.findViewById(R.id.songNameView);
             artistView = itemView.findViewById(R.id.artistView);
             imageCoverView = itemView.findViewById(R.id.albumCoverView);
+            coverClip = itemView.findViewById(R.id.coverClip);
+            queuedEdge = itemView.findViewById(R.id.queuedEdge);
+            queueSwipeOverlay = itemView.findViewById(R.id.queueSwipeOverlay);
+            queueSwipeIcon = itemView.findViewById(R.id.queueSwipeIcon);
             hasNotesIcon = itemView.findViewById(R.id.hasNotesIcon);
             hasSnippetsIcon = itemView.findViewById(R.id.hasSnippetsIcon);
             contextualInfoView = itemView.findViewById(R.id.contextualInfoView);
 
+            // Clip overlays (lime edge, swipe overlay) to the cover's rounded
+            // corners so nothing can draw outside the album art's bounds.
+            final float radius = 8 * coverClip.getResources().getDisplayMetrics().density;
+            coverClip.setOutlineProvider(new ViewOutlineProvider() {
+                @Override
+                public void getOutline(View view, Outline outline) {
+                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
+                }
+            });
+            coverClip.setClipToOutline(true);
+
+            attachQueueSwipe();
+
             // Open SongView on click
             itemView.setOnClickListener(view -> {
+                if (swipeConsumedClick) { swipeConsumedClick = false; return; }
                 if (recyclerViewInterface != null) {
                     int position = getAdapterPosition();
 
@@ -177,6 +221,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
 
             // Tap on album cover — start queue from this position
             imageCoverView.setOnClickListener(view -> {
+                if (swipeConsumedClick) { swipeConsumedClick = false; return; }
                 if (recyclerViewInterface != null) {
                     int position = getAdapterPosition();
                     if (position != RecyclerView.NO_POSITION) {
@@ -199,6 +244,142 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
                 return false;
             });
         }
+
+        // Swipe anywhere on the row to the right to toggle the song in the
+        // queue. The album cover stays put; a green/red overlay wipes in from
+        // the cover's left edge, tracking the swipe distance. The action
+        // commits once the swipe passes a threshold, then the overlay eases out.
+        private void attachQueueSwipe() {
+            final int touchSlop = ViewConfiguration.get(itemView.getContext()).getScaledTouchSlop();
+            final int addColor = ContextCompat.getColor(itemView.getContext(), R.color.queueAddGreen);
+            final int removeColor = ContextCompat.getColor(itemView.getContext(), R.color.queueRemoveRed);
+
+            View.OnTouchListener swipeListener = new View.OnTouchListener() {
+                float downX, downY;
+                boolean swiping;
+                int rowWidth;
+
+                @Override
+                public boolean onTouch(View v, MotionEvent e) {
+                    switch (e.getActionMasked()) {
+                        case MotionEvent.ACTION_DOWN:
+                            downX = e.getRawX();
+                            downY = e.getRawY();
+                            swiping = false;
+                            rowWidth = itemView.getWidth();
+                            return false; // let click/long-press detection proceed
+
+                        case MotionEvent.ACTION_MOVE: {
+                            float dx = e.getRawX() - downX;
+                            float dy = e.getRawY() - downY;
+                            if (!swiping) {
+                                if (dx > touchSlop && Math.abs(dx) > Math.abs(dy)) {
+                                    swiping = true;
+                                    SongModel song = songAt();
+                                    boolean removing = song != null
+                                            && PlaybackManager.getInstance().isInQueue(song);
+                                    queueSwipeOverlay.getBackground().setTint(removing ? removeColor : addColor);
+                                    queueSwipeIcon.setImageResource(removing
+                                            ? R.drawable.ic_queue_remove : R.drawable.ic_queue_add);
+                                    queueSwipeOverlay.setAlpha(1f);
+                                    // Start fully clipped so the overlay never
+                                    // flashes across the whole cover on frame one.
+                                    queueSwipeOverlay.setClipBounds(new Rect(0, 0, 0,
+                                            queueSwipeOverlay.getHeight()));
+                                    queueSwipeOverlay.setVisibility(View.VISIBLE);
+                                    // Block the RecyclerView from stealing the gesture.
+                                    v.getParent().requestDisallowInterceptTouchEvent(true);
+                                } else {
+                                    return false;
+                                }
+                            }
+                            // Map the swipe distance across the row onto a 0..1
+                            // reveal of the (stationary) cover-sized overlay.
+                            float reveal = rowWidth > 0 ? Math.max(0f, Math.min(1f, dx / (rowWidth * 0.18f))) : 0f;
+                            applyReveal(reveal);
+                            return true;
+                        }
+
+                        case MotionEvent.ACTION_UP:
+                        case MotionEvent.ACTION_CANCEL: {
+                            if (!swiping) return false;
+                            swipeConsumedClick = true; // swallow the click this gesture would fire
+                            float dx = e.getRawX() - downX;
+                            boolean committed = rowWidth > 0 && dx >= rowWidth * 0.18f
+                                    && e.getActionMasked() == MotionEvent.ACTION_UP;
+                            if (committed) {
+                                SongModel song = songAt();
+                                if (song != null) {
+                                    PlaybackManager pm = PlaybackManager.getInstance();
+                                    boolean added;
+                                    if (pm.isInQueue(song)) {
+                                        pm.removeFromQueue(song);
+                                        added = false;
+                                    } else {
+                                        added = pm.addToQueue(song);
+                                    }
+                                    notifyQueueChange(added);
+                                }
+                            }
+                            resetSwipe();
+                            swiping = false;
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+            };
+            // Attach to the whole row and to the cover, so a swipe starting
+            // anywhere (cover included) is captured while taps still work.
+            itemView.setOnTouchListener(swipeListener);
+            imageCoverView.setOnTouchListener(swipeListener);
+        }
+
+        private void showQueuedEdge(boolean show) {
+            queuedEdge.setVisibility(show ? View.VISIBLE : View.GONE);
+        }
+
+        // Reveal the overlay over the cover from the left, clipped to `progress`
+        // of the cover's width. The cover itself never moves.
+        private void applyReveal(float progress) {
+            int w = queueSwipeOverlay.getWidth();
+            int h = queueSwipeOverlay.getHeight();
+            if (w == 0 || h == 0) return;
+            int revealW = (int) (w * progress);
+            queueSwipeOverlay.setClipBounds(new Rect(0, 0, revealW, h));
+            // Fade the icon in across the swipe: 0% opacity at the start, full
+            // opacity once the overlay covers half the cover.
+            queueSwipeIcon.setVisibility(View.VISIBLE);
+            queueSwipeIcon.setAlpha(Math.min(1f, progress / 0.5f));
+        }
+
+        private SongModel songAt() {
+            int pos = getAdapterPosition();
+            if (adapter == null || pos == RecyclerView.NO_POSITION) return null;
+            ArrayList<SongModel> songs = adapter.getSongs();
+            return pos < songs.size() ? songs.get(pos) : null;
+        }
+
+        private void notifyQueueChange(boolean added) {
+            if (adapter != null) adapter.onQueueChanged(getAdapterPosition(), added);
+        }
+
+        // Fade the overlay out and refresh the queued indicator. The cover
+        // never moved, so nothing to translate back.
+        private void resetSwipe() {
+            queueSwipeIcon.animate().alpha(0f).setDuration(150).withEndAction(() -> {
+                queueSwipeIcon.setVisibility(View.GONE);
+                queueSwipeIcon.setAlpha(1f);
+            }).start();
+            queueSwipeOverlay.animate().alpha(0f).setDuration(150).withEndAction(() -> {
+                queueSwipeOverlay.setVisibility(View.GONE);
+                queueSwipeOverlay.setAlpha(1f);
+                queueSwipeOverlay.setClipBounds(null);
+                SongModel song = songAt();
+                boolean queued = song != null && PlaybackManager.getInstance().isInQueue(song);
+                showQueuedEdge(queued);
+            }).start();
+        }
     }
 
     public void updateSongs(ArrayList<SongModel> newSongs) {
@@ -212,6 +393,39 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
 
     public ArrayList<SongModel> getSongs() {
         return getSongModels();
+    }
+
+    public Context getContext() {
+        return context;
+    }
+
+    // Rebind only the rows matching the given URIs (used to move the
+    // "now playing" highlight without refreshing the whole list).
+    public void refreshRowsForUris(String... uris) {
+        for (String uri : uris) {
+            if (uri == null) continue;
+            for (int i = 0; i < songModels.size(); i++) {
+                if (uri.equals(songModels.get(i).getUri())) {
+                    notifyItemChanged(i);
+                    break;
+                }
+            }
+        }
+    }
+
+    // Notified after a swipe toggles a song in the queue.
+    public interface OnQueueChangeListener {
+        void onQueueChanged(int position, boolean added);
+    }
+
+    private OnQueueChangeListener queueChangeListener;
+
+    public void setOnQueueChangeListener(OnQueueChangeListener listener) {
+        this.queueChangeListener = listener;
+    }
+
+    void onQueueChanged(int position, boolean added) {
+        if (queueChangeListener != null) queueChangeListener.onQueueChanged(position, added);
     }
 
     public void updateSortContext(int sortOption) {

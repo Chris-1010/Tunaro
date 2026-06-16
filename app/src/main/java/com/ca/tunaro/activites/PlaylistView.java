@@ -59,6 +59,9 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     private PlaylistModel selectedPlaylist;
     private Song_RecyclerViewAdapter adapter;
     private QueueLineDecoration queueLineDecoration;
+    // URI of the song currently highlighted as "now playing", to avoid
+    // refreshing rows on every play/pause when the song hasn't changed.
+    private String highlightedUri;
 
     // Searching
     private EditText searchBar;
@@ -113,6 +116,12 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         recyclerView.setAdapter(adapter);
         queueLineDecoration = new QueueLineDecoration(adapter);
         recyclerView.addItemDecoration(queueLineDecoration);
+
+        // Swipe an album cover right to add/remove the song from the queue.
+        adapter.setOnQueueChangeListener((position, added) -> {
+            showToast(added ? "Added to queue" : "Removed from queue");
+            recyclerView.invalidateItemDecorations();
+        });
 
         // Show loading state while fetching songs
         showShimmerLoading(true);
@@ -209,12 +218,12 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 showToast("Connecting to Spotify...");
                 playbackManager.connectSpotify(this, () -> {
                     playbackManager.playQueue(currentList, 0);
-                    queueLineDecoration.setQueueMatchesDisplay(true);
+                    onQueueCreated();
                     showToast("Playing from " + currentList.get(0).getName());
                 });
             } else {
                 playbackManager.playQueue(currentList, 0);
-                queueLineDecoration.setQueueMatchesDisplay(true);
+                onQueueCreated();
                 showToast("Playing from " + currentList.get(0).getName());
             }
         });
@@ -650,10 +659,27 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
     }
 
+    // A queue was just created from this screen: queued rows need their lime
+    // edge, so refresh the whole list once and reset the highlight tracker.
+    private void onQueueCreated() {
+        queueLineDecoration.setQueueMatchesDisplay(true);
+        if (adapter != null) adapter.notifyDataSetChanged();
+        SongModel current = playbackManager.getCurrentSong();
+        highlightedUri = current != null ? current.getUri() : null;
+    }
+
     @Override
     public void onPlaybackStateChanged(boolean isPlaying, SongModel currentSong) {
         super.onPlaybackStateChanged(isPlaying, currentSong);
-        if (adapter != null) adapter.notifyDataSetChanged();
+        if (adapter == null) return;
+        // The row highlight only depends on which song is current, not on the
+        // play/paused state. A pure play<->pause toggle needs no rebind; only
+        // when the current song changes do the old and new rows update.
+        String newUri = currentSong != null ? currentSong.getUri() : null;
+        if (!java.util.Objects.equals(newUri, highlightedUri)) {
+            adapter.refreshRowsForUris(highlightedUri, newUri);
+            highlightedUri = newUri;
+        }
     }
 
     // Start queue from this position
@@ -664,11 +690,11 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             showToast("Connecting to Spotify...");
             playbackManager.connectSpotify(this, () -> {
                 playbackManager.playQueue(currentList, position);
-                queueLineDecoration.setQueueMatchesDisplay(true);
+                onQueueCreated();
             });
         } else {
             playbackManager.playQueue(currentList, position);
-            queueLineDecoration.setQueueMatchesDisplay(true);
+            onQueueCreated();
         }
     }
 

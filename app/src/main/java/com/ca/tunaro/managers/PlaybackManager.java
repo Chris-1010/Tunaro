@@ -406,6 +406,63 @@ public class PlaybackManager {
         queueAdvancePending = false;
     }
 
+    // Append a song to the end of the queue. If no queue is active, seed one
+    // anchored at the currently-playing song (or the new song if nothing plays).
+    // No-op if the song is already upcoming in the queue.
+    public boolean addToQueue(SongModel song) {
+        if (song == null) return false;
+        if (isInQueue(song)) return false;
+
+        if (queue.isEmpty()) {
+            queue = new ArrayList<>();
+            if (currentSong != null && !currentSong.getUri().equals(song.getUri())) {
+                queue.add(currentSong);
+                queueIndex = 0;
+            } else {
+                queueIndex = -1;
+            }
+            queue.add(song);
+        } else {
+            queue.add(song);
+        }
+        Log.i(TAG, "addToQueue: '" + song.getName() + "' (queue size " + queue.size() + ")");
+        return true;
+    }
+
+    // Remove a song from the queue by URI. The currently-playing song cannot be
+    // removed. queueIndex is shifted to keep pointing at the current song.
+    public boolean removeFromQueue(SongModel song) {
+        if (song == null || queue.isEmpty()) return false;
+        if (currentSong != null && currentSong.getUri().equals(song.getUri())) return false;
+
+        for (int i = 0; i < queue.size(); i++) {
+            if (queue.get(i).getUri().equals(song.getUri())) {
+                queue.remove(i);
+                if (i < queueIndex) queueIndex--;
+                if (queue.isEmpty()) {
+                    queueIndex = -1;
+                    queueAdvancePending = false;
+                }
+                Log.i(TAG, "removeFromQueue: '" + song.getName() + "' (queue size " + queue.size() + ")");
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // True when the song is upcoming in the queue (at or after the current
+    // position). The currently-playing song is not considered "in queue" for
+    // the purposes of the swipe-to-remove affordance.
+    public boolean isInQueue(SongModel song) {
+        if (song == null || queue.isEmpty() || queueIndex < 0) return false;
+        for (int i = queueIndex; i < queue.size(); i++) {
+            if (queue.get(i).getUri().equals(song.getUri())) {
+                return !(currentSong != null && currentSong.getUri().equals(song.getUri()));
+            }
+        }
+        return false;
+    }
+
     public boolean hasActiveQueue() {
         return !queue.isEmpty();
     }
