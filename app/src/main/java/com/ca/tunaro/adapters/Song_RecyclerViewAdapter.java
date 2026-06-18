@@ -274,8 +274,13 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
                             float dy = e.getRawY() - downY;
                             if (!swiping) {
                                 if (dx > touchSlop && Math.abs(dx) > Math.abs(dy)) {
-                                    swiping = true;
                                     SongModel song = songAt();
+                                    // The currently-playing song can't be queued or
+                                    // removed, so ignore swipes on its row entirely.
+                                    if (song != null && isCurrentSong(song)) {
+                                        return false;
+                                    }
+                                    swiping = true;
                                     boolean removing = song != null
                                             && PlaybackManager.getInstance().isInQueue(song);
                                     queueSwipeOverlay.getBackground().setTint(removing ? removeColor : addColor);
@@ -358,6 +363,12 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
             if (adapter == null || pos == RecyclerView.NO_POSITION) return null;
             ArrayList<SongModel> songs = adapter.getSongs();
             return pos < songs.size() ? songs.get(pos) : null;
+        }
+
+        private boolean isCurrentSong(SongModel song) {
+            SongModel current = PlaybackManager.getInstance().getCurrentSong();
+            return current != null && song != null
+                    && current.getUri().equals(song.getUri());
         }
 
         private void notifyQueueChange(boolean added) {

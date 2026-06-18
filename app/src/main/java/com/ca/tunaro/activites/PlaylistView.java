@@ -58,6 +58,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
     private PlaylistModel selectedPlaylist;
     private Song_RecyclerViewAdapter adapter;
+    private RecyclerView recyclerView;
     private QueueLineDecoration queueLineDecoration;
     // URI of the song currently highlighted as "now playing", to avoid
     // refreshing rows on every play/pause when the song hasn't changed.
@@ -108,7 +109,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         setupInitialUI();
 
         // Set up RecyclerView
-        RecyclerView recyclerView = findViewById(R.id.song_recycler_view);
+        recyclerView = findViewById(R.id.song_recycler_view);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
 
         // Initialize adapter, empty for now
@@ -677,7 +678,13 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         // when the current song changes do the old and new rows update.
         String newUri = currentSong != null ? currentSong.getUri() : null;
         if (!java.util.Objects.equals(newUri, highlightedUri)) {
-            adapter.refreshRowsForUris(highlightedUri, newUri);
+            // The now-playing highlight moved, but the queue membership of rows
+            // shifts too: the song that just started playing is no longer
+            // "upcoming", so its lime queued edge must clear. Rebind the whole
+            // list so every row re-evaluates its queued state, and refresh the
+            // connecting line decoration to match.
+            adapter.notifyDataSetChanged();
+            recyclerView.invalidateItemDecorations();
             highlightedUri = newUri;
         }
     }
