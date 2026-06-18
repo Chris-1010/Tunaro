@@ -61,7 +61,7 @@ public class PlaybackManager {
 
     // Track Listening
     private boolean isTrackingListen = false;
-    private final long LISTEN_THRESHOLD_MS = 10000; // 10 seconds
+    private final long LISTEN_THRESHOLD_MS = 10000; // fallback when duration unknown
     private String currentListenTrackId = null;
     private boolean hasRecordedListen = false;
     private boolean isDeviceWarningActive = false;
@@ -268,6 +268,11 @@ public class PlaybackManager {
                 }
             }
 
+            // Set duration before listen tracking starts: the listen threshold
+            // is a third of the track duration, so it must reflect the new track.
+            currentPositionMs = playerState.playbackPosition;
+            durationMs = remoteTrack.duration;
+
             handleListenTracking(currentSong.getId(), !playerState.isPaused);
 
             // Update playing state
@@ -278,9 +283,6 @@ public class PlaybackManager {
             if (wasPlaying != isPlaying || trackChanged) {
                 notifyPlaybackStateChanged();
             }
-
-            currentPositionMs = playerState.playbackPosition;
-            durationMs = remoteTrack.duration;
 
             // Always notify position change when getting player state
             notifyPlaybackPositionChanged();
@@ -608,7 +610,11 @@ public class PlaybackManager {
                 }
             };
 
-            listenHandler.postDelayed(listenRunnable, LISTEN_THRESHOLD_MS);
+            // Register a listen once a third of the song has played. This scales
+            // with the track and avoids counting accidental skim-throughs. Fall
+            // back to a fixed threshold when the duration isn't known yet.
+            long thresholdMs = durationMs > 0 ? durationMs / 3 : LISTEN_THRESHOLD_MS;
+            listenHandler.postDelayed(listenRunnable, thresholdMs);
         }
     }
 
