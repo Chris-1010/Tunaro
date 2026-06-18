@@ -68,9 +68,19 @@ public class PlaybackManager {
     private final Handler listenHandler = new Handler(Looper.getMainLooper());
     private Runnable listenRunnable;
 
-    // Queue
-    private List<SongModel> queue = new ArrayList<>();
-    private int queueIndex = -1;
+    // Queues, Spotify-style:
+    //  - primaryQueue: songs the user explicitly added (swipe-to-queue). FIFO.
+    //    Played before the playlist flow and removed once consumed.
+    //  - secondaryQueue + secondaryIndex: the playlist flow seeded by tapping a
+    //    song. secondaryIndex points at the playlist song the playback is
+    //    anchored to; it only advances when a secondary song actually plays, so
+    //    primary tracks slot in "between" playlist songs.
+    //  - history: every song that finished or was advanced past, newest last.
+    //    Plumbing for a future previous-song control.
+    private List<SongModel> primaryQueue = new ArrayList<>();
+    private List<SongModel> secondaryQueue = new ArrayList<>();
+    private int secondaryIndex = -1;
+    private final List<SongModel> history = new ArrayList<>();
     // Guard: only fire advanceQueue() once per song-end
     private boolean queueAdvancePending = false;
     // Timestamp of last advance — suppress end-of-song check for 3s after an advance
@@ -361,40 +371,45 @@ public class PlaybackManager {
         }
     }
 
+    // Seed the secondary (playlist) queue from a tapped position and start
+    // playing it. Leaves the primary (explicit) queue untouched, so explicit
+    // adds survive switching playlists and still play next.
     public void playQueue(List<SongModel> songs, int startIndex) {
         if (songs == null || songs.isEmpty() || startIndex < 0 || startIndex >= songs.size())
             return;
-        queue = new ArrayList<>(songs);
+        secondaryQueue = new ArrayList<>(songs);
 
         // Skip unplayable songs at the start of the queue
-        while (startIndex < queue.size() && !queue.get(startIndex).isPlayable()) {
-            Log.w(TAG, "playQueue: Skipping unplayable song '" + queue.get(startIndex).getName() + "' at index " + startIndex);
+        while (startIndex < secondaryQueue.size() && !secondaryQueue.get(startIndex).isPlayable()) {
+            Log.w(TAG, "playQueue: Skipping unplayable song '" + secondaryQueue.get(startIndex).getName() + "' at index " + startIndex);
             startIndex++;
         }
 
-        if (startIndex >= queue.size()) {
+        if (startIndex >= secondaryQueue.size()) {
             Log.w(TAG, "playQueue: No playable songs in queue");
-            queue.clear();
-            queueIndex = -1;
+            secondaryQueue.clear();
+            secondaryIndex = -1;
             queueAdvancePending = false;
             return;
         }
 
-        queueIndex = startIndex;
-        Log.i(TAG, "Created queue with " + songs.size() + " songs. Starting at index " + startIndex + ": " + queue.get(queueIndex).getName());
-        playSong(queue.get(queueIndex));
+        secondaryIndex = startIndex;
+        Log.i(TAG, "Created secondary queue with " + songs.size() + " songs. Starting at index " + startIndex + ": " + secondaryQueue.get(secondaryIndex).getName());
+        pushHistory(currentSong);
+        playSong(secondaryQueue.get(secondaryIndex));
     }
 
     public void skipToSong(SongModel song) {
-        if (queue.isEmpty()) {
-            // No active queue — play individually
+        if (secondaryQueue.isEmpty()) {
+            // No active playlist queue — play individually
             playSong(song);
             return;
         }
-        for (int i = 0; i < queue.size(); i++) {
-            if (queue.get(i).getUri().equals(song.getUri())) {
-                queueIndex = i;
-                playSong(queue.get(queueIndex));
+        for (int i = 0; i < secondaryQueue.size(); i++) {
+            if (secondaryQueue.get(i).getUri().equals(song.getUri())) {
+                secondaryIndex = i;
+                pushHistory(currentSong);
+                playSong(secondaryQueue.get(secondaryIndex));
                 return;
             }
         }
@@ -403,78 +418,88 @@ public class PlaybackManager {
     }
 
     public void clearQueue() {
-        queue.clear();
-        queueIndex = -1;
+        primaryQueue.clear();
+        secondaryQueue.clear();
+        secondaryIndex = -1;
         queueAdvancePending = false;
     }
 
-    // Append a song to the end of the queue. If no queue is active, seed one
-    // anchored at the currently-playing song (or the new song if nothing plays).
-    // No-op if the song is already upcoming in the queue.
+    // Add a song to the primary (explicit) queue. With nothing playing, start it
+    // immediately. No-op if the song is already queued.
     public boolean addToQueue(SongModel song) {
         if (song == null) return false;
         if (isInQueue(song)) return false;
+        if (currentSong != null && currentSong.getUri().equals(song.getUri())) return false;
 
-        if (queue.isEmpty()) {
-            queue = new ArrayList<>();
-            if (currentSong != null && !currentSong.getUri().equals(song.getUri())) {
-                queue.add(currentSong);
-                queueIndex = 0;
-            } else {
-                queueIndex = -1;
-            }
-            queue.add(song);
-        } else {
-            queue.add(song);
+        if (currentSong == null) {
+            // Nothing playing yet — just play it.
+            playSong(song);
+            Log.i(TAG, "addToQueue: nothing playing, starting '" + song.getName() + "'");
+            return true;
         }
-        Log.i(TAG, "addToQueue: '" + song.getName() + "' (queue size " + queue.size() + ")");
+
+        primaryQueue.add(song);
+        Log.i(TAG, "addToQueue: '" + song.getName() + "' (primary queue size " + primaryQueue.size() + ")");
         return true;
     }
 
-    // Remove a song from the queue by URI. The currently-playing song cannot be
-    // removed. queueIndex is shifted to keep pointing at the current song.
+    // Remove a song from whichever queue holds it. The currently-playing song
+    // cannot be removed. secondaryIndex is fixed up to stay anchored.
     public boolean removeFromQueue(SongModel song) {
-        if (song == null || queue.isEmpty()) return false;
+        if (song == null) return false;
         if (currentSong != null && currentSong.getUri().equals(song.getUri())) return false;
 
-        for (int i = 0; i < queue.size(); i++) {
-            if (queue.get(i).getUri().equals(song.getUri())) {
-                queue.remove(i);
-                if (i < queueIndex) queueIndex--;
-                if (queue.isEmpty()) {
-                    queueIndex = -1;
+        for (int i = 0; i < primaryQueue.size(); i++) {
+            if (primaryQueue.get(i).getUri().equals(song.getUri())) {
+                primaryQueue.remove(i);
+                Log.i(TAG, "removeFromQueue: '" + song.getName() + "' from primary (size " + primaryQueue.size() + ")");
+                return true;
+            }
+        }
+
+        for (int i = 0; i < secondaryQueue.size(); i++) {
+            if (secondaryQueue.get(i).getUri().equals(song.getUri())) {
+                secondaryQueue.remove(i);
+                if (i < secondaryIndex) secondaryIndex--;
+                if (secondaryQueue.isEmpty()) {
+                    secondaryIndex = -1;
                     queueAdvancePending = false;
                 }
-                Log.i(TAG, "removeFromQueue: '" + song.getName() + "' (queue size " + queue.size() + ")");
+                Log.i(TAG, "removeFromQueue: '" + song.getName() + "' from secondary (size " + secondaryQueue.size() + ")");
                 return true;
             }
         }
         return false;
     }
 
-    // True when the song is upcoming in the queue (at or after the current
-    // position). The currently-playing song is not considered "in queue" for
-    // the purposes of the swipe-to-remove affordance.
+    // True when the song is upcoming: queued in the primary queue, or ahead of
+    // the anchor in the secondary (playlist) queue. The currently-playing song
+    // is never "in queue".
     public boolean isInQueue(SongModel song) {
-        if (song == null || queue.isEmpty() || queueIndex < 0) return false;
-        for (int i = queueIndex; i < queue.size(); i++) {
-            if (queue.get(i).getUri().equals(song.getUri())) {
-                return !(currentSong != null && currentSong.getUri().equals(song.getUri()));
-            }
+        if (song == null) return false;
+        if (currentSong != null && currentSong.getUri().equals(song.getUri())) return false;
+
+        for (SongModel s : primaryQueue) {
+            if (s.getUri().equals(song.getUri())) return true;
+        }
+        for (int i = secondaryIndex + 1; i >= 0 && i < secondaryQueue.size(); i++) {
+            if (secondaryQueue.get(i).getUri().equals(song.getUri())) return true;
         }
         return false;
     }
 
     public boolean hasActiveQueue() {
-        return !queue.isEmpty();
+        return !primaryQueue.isEmpty() || !secondaryQueue.isEmpty();
     }
 
+    // The secondary (playlist) queue and its anchor, used by QueueLineDecoration
+    // to draw the connecting line down upcoming playlist songs.
     public int getQueueIndex() {
-        return queueIndex;
+        return secondaryIndex;
     }
 
     public List<SongModel> getQueue() {
-        return queue;
+        return secondaryQueue;
     }
 
     public void togglePlayPause() {
@@ -518,25 +543,69 @@ public class PlaybackManager {
         }
     }
 
+    // Whether advancing would land on a real next song (primary or secondary).
+    private boolean hasNextSong() {
+        for (SongModel s : primaryQueue) {
+            if (s.isPlayable()) return true;
+        }
+        for (int i = secondaryIndex + 1; i >= 0 && i < secondaryQueue.size(); i++) {
+            if (secondaryQueue.get(i).isPlayable()) return true;
+        }
+        return false;
+    }
+
+    // Advance to the next song: explicit (primary) adds take priority, then the
+    // playlist (secondary) flow. The song just finished is pushed to history.
     private void advanceQueue() {
-        if (queue.isEmpty()) return;
-        int nextIndex = queueIndex + 1;
-        while (nextIndex < queue.size() && !queue.get(nextIndex).isPlayable()) {
-            Log.w(TAG, "advanceQueue: Skipping unplayable song '" + queue.get(nextIndex).getName() + "' at index " + nextIndex);
+        // Primary queue first: pull the next playable explicit add off the front.
+        while (!primaryQueue.isEmpty() && !primaryQueue.get(0).isPlayable()) {
+            Log.w(TAG, "advanceQueue: Skipping unplayable primary song '" + primaryQueue.get(0).getName() + "'");
+            primaryQueue.remove(0);
+        }
+        if (!primaryQueue.isEmpty()) {
+            SongModel next = primaryQueue.remove(0);
+            lastAdvanceTimeMs = System.currentTimeMillis();
+            pushHistory(currentSong);
+            Log.i(TAG, "advanceQueue: Last Song: " + (currentSong != null ? currentSong.getName() : "none") + ", Current Song (primary): " + next.getName());
+            playSong(next);
+            return;
+        }
+
+        // Otherwise advance the playlist flow.
+        if (secondaryQueue.isEmpty()) return;
+        int nextIndex = secondaryIndex + 1;
+        while (nextIndex < secondaryQueue.size() && !secondaryQueue.get(nextIndex).isPlayable()) {
+            Log.w(TAG, "advanceQueue: Skipping unplayable song '" + secondaryQueue.get(nextIndex).getName() + "' at index " + nextIndex);
             nextIndex++;
         }
-        if (nextIndex < queue.size()) {
-            queueIndex = nextIndex;
-            SongModel next = queue.get(queueIndex);
+        if (nextIndex < secondaryQueue.size()) {
+            secondaryIndex = nextIndex;
+            SongModel next = secondaryQueue.get(secondaryIndex);
             lastAdvanceTimeMs = System.currentTimeMillis();
-            Log.i(TAG, "advanceQueue: Last Song: " + (currentSong != null ? currentSong.getName() : "none") + ", Current Song: " + next.getName() + ", Queue Position: " + (queueIndex + 1) + "/" + queue.size());
+            pushHistory(currentSong);
+            Log.i(TAG, "advanceQueue: Last Song: " + (currentSong != null ? currentSong.getName() : "none") + ", Current Song: " + next.getName() + ", Queue Position: " + (secondaryIndex + 1) + "/" + secondaryQueue.size());
             playSong(next);
         } else {
-            // End of queue
-            queue.clear();
-            queueIndex = -1;
+            // End of playlist flow.
+            pushHistory(currentSong);
+            secondaryQueue.clear();
+            secondaryIndex = -1;
             queueAdvancePending = false;
         }
+    }
+
+    // Record a song as played, for a future previous-song control. Collapses
+    // consecutive duplicates so repeated state callbacks don't bloat history.
+    private void pushHistory(SongModel song) {
+        if (song == null) return;
+        if (!history.isEmpty() && history.get(history.size() - 1).getUri().equals(song.getUri())) {
+            return;
+        }
+        history.add(song);
+    }
+
+    public List<SongModel> getHistory() {
+        return history;
     }
 
     //#region Listeners
@@ -813,9 +882,8 @@ public class PlaybackManager {
 
                             // Queue auto-advance: when within 1500ms of the end, wait a bit before advancing so can be closer to the actual finish without cutting it off.
                             boolean inGracePeriod = (System.currentTimeMillis() - lastAdvanceTimeMs) < 3000;
-                            if (!queue.isEmpty() && !isSnippetMode && !playerState.isPaused
+                            if (hasNextSong() && !isSnippetMode && !playerState.isPaused
                                     && durationMs > 0 && !queueAdvancePending && !inGracePeriod
-                                    && queueIndex + 1 < queue.size()
                                     && (durationMs - currentPositionMs) <= 1500) {
                                 Log.d(TAG, "updatePlaybackPosition: Caught end of song at " + (durationMs - currentPositionMs) + "ms remaining. Queueing advance.");
                                 queueAdvancePending = true;
