@@ -267,6 +267,9 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
                             downY = e.getRawY();
                             swiping = false;
                             rowWidth = itemView.getWidth();
+                            // A new touch begins: clear any stale suppression flag
+                            // so it can never outlive the gesture that set it.
+                            swipeConsumedClick = false;
                             return false; // let click/long-press detection proceed
 
                         case MotionEvent.ACTION_MOVE: {
