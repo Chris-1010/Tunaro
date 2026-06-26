@@ -81,6 +81,7 @@ public class PlaybackManager {
     private List<SongModel> secondaryQueue = new ArrayList<>();
     private int secondaryIndex = -1;
     private final List<SongModel> history = new ArrayList<>();
+    private static final int MAX_HISTORY = 200;
     // Guard: only fire advanceQueue() once per song-end
     private boolean queueAdvancePending = false;
     // Timestamp of last advance — suppress end-of-song check for 3s after an advance
@@ -602,6 +603,10 @@ public class PlaybackManager {
             return;
         }
         history.add(song);
+        // Cap the stack so a long session can't grow it without bound.
+        if (history.size() > MAX_HISTORY) {
+            history.remove(0);
+        }
     }
 
     public List<SongModel> getHistory() {

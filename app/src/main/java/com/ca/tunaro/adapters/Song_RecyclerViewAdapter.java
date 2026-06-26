@@ -283,7 +283,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
                                     swiping = true;
                                     boolean removing = song != null
                                             && PlaybackManager.getInstance().isInQueue(song);
-                                    queueSwipeOverlay.getBackground().setTint(removing ? removeColor : addColor);
+                                    queueSwipeOverlay.getBackground().mutate().setTint(removing ? removeColor : addColor);
                                     queueSwipeIcon.setImageResource(removing
                                             ? R.drawable.ic_queue_remove : R.drawable.ic_queue_add);
                                     queueSwipeOverlay.setAlpha(1f);
@@ -308,7 +308,12 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
                         case MotionEvent.ACTION_UP:
                         case MotionEvent.ACTION_CANCEL: {
                             if (!swiping) return false;
-                            swipeConsumedClick = true; // swallow the click this gesture would fire
+                            // Only a real UP fires a trailing click to swallow;
+                            // CANCEL produces no click, so leaving the flag set
+                            // would silently eat the next genuine tap.
+                            if (e.getActionMasked() == MotionEvent.ACTION_UP) {
+                                swipeConsumedClick = true;
+                            }
                             float dx = e.getRawX() - downX;
                             boolean committed = rowWidth > 0 && dx >= rowWidth * 0.18f
                                     && e.getActionMasked() == MotionEvent.ACTION_UP;
@@ -410,8 +415,11 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         return context;
     }
 
-    // Rebind only the rows matching the given URIs (used to move the
-    // "now playing" highlight without refreshing the whole list).
+    // Rebind only the rows matching the given URIs, without refreshing the whole
+    // list. Currently unused: onPlaybackStateChanged falls back to
+    // notifyDataSetChanged because queue membership shifts across many rows on a
+    // track change. TODO: use this as a targeted optimisation once the queued
+    // state is cheap to recompute per-row.
     public void refreshRowsForUris(String... uris) {
         for (String uri : uris) {
             if (uri == null) continue;
