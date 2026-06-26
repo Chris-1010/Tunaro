@@ -1164,8 +1164,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     /**
-     * Playlists for the manage sheet, ordered favourites first then by most recently
-     * added-to. {@code containsSong} is variant-aware: it's true when any of the given
+     * Playlists for the manage sheet, ordered: playlists the song is currently in first,
+     * then favourites, then the rest by most recently added-to. {@code containsSong} is
+     * variant-aware: it's true when any of the given
      * variant URIs is actively (not removed) in the playlist, matching the panel above.
      */
     public List<ManagablePlaylist> getManagablePlaylists(List<String> variantUris, boolean includeArchived) {
@@ -1195,7 +1196,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             sql.append(" WHERE p.").append(COLUMN_IS_ARCHIVED).append(" = 0");
         }
         sql.append(" GROUP BY p.").append(COLUMN_PLAYLIST_ID)
-                .append(" ORDER BY p.").append(COLUMN_IS_FAVOURITE).append(" DESC, last_added DESC");
+                .append(" ORDER BY contains_song DESC, p.").append(COLUMN_IS_FAVOURITE).append(" DESC, last_added DESC");
 
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(sql.toString(), variantUris.toArray(new String[0]));

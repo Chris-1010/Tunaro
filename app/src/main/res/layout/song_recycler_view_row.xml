@@ -26,19 +26,62 @@
             android:paddingTop="3dp"
             android:paddingBottom="3dp">
 
-            <com.google.android.material.imageview.ShapeableImageView
-                android:id="@+id/albumCoverView"
+            <FrameLayout
+                android:id="@+id/albumCoverContainer"
                 android:layout_width="70dp"
                 android:layout_height="70dp"
-                android:contentDescription="@string/songAlbumCoverImage"
-                android:padding="5dp"
-                android:background="?attr/selectableItemBackground"
-                android:longClickable="true"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:shapeAppearanceOverlay="@style/roundedImageView"
-                tools:srcCompat="@tools:sample/avatars" />
+                app:layout_constraintTop_toTopOf="parent">
+
+                <com.google.android.material.imageview.ShapeableImageView
+                    android:id="@+id/albumCoverView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="@string/songAlbumCoverImage"
+                    android:padding="5dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:longClickable="true"
+                    app:shapeAppearanceOverlay="@style/roundedImageView"
+                    tools:srcCompat="@tools:sample/avatars" />
+
+                <!-- Sized to the album art and clipped to its rounded outline
+                     in code, so anything inside is cut by the cover's corners. -->
+                <FrameLayout
+                    android:id="@+id/coverClip"
+                    android:layout_width="60dp"
+                    android:layout_height="60dp"
+                    android:layout_gravity="center">
+
+                    <!-- Plain vertical lime bar on the cover's left edge; the
+                         clip cuts its top and bottom along the corner curve. -->
+                    <View
+                        android:id="@+id/queuedEdge"
+                        android:layout_width="3dp"
+                        android:layout_height="match_parent"
+                        android:layout_gravity="start"
+                        android:background="@drawable/queue_left_edge"
+                        android:visibility="gone" />
+
+                    <!-- Wipe-in overlay + icon shown while swiping the cover. -->
+                    <View
+                        android:id="@+id/queueSwipeOverlay"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@color/limeGreen"
+                        android:visibility="gone" />
+
+                    <ImageView
+                        android:id="@+id/queueSwipeIcon"
+                        android:layout_width="30dp"
+                        android:layout_height="30dp"
+                        android:layout_gravity="center"
+                        android:visibility="gone"
+                        tools:src="@drawable/ic_queue_add" />
+
+                </FrameLayout>
+
+            </FrameLayout>
 
             <LinearLayout
                 android:id="@+id/textColumn"
@@ -48,10 +91,10 @@
                 android:layout_marginEnd="34dp"
                 android:gravity="center_vertical"
                 android:orientation="vertical"
-                app:layout_constraintBottom_toBottomOf="@+id/albumCoverView"
+                app:layout_constraintBottom_toBottomOf="@+id/albumCoverContainer"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toEndOf="@+id/albumCoverView"
-                app:layout_constraintTop_toTopOf="@+id/albumCoverView">
+                app:layout_constraintStart_toEndOf="@+id/albumCoverContainer"
+                app:layout_constraintTop_toTopOf="@+id/albumCoverContainer">
 
                 <TextView
                     android:id="@+id/songNameView"
