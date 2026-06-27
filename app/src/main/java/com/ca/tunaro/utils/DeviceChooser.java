@@ -31,12 +31,22 @@ public class DeviceChooser {
 
         Log.d(TAG, "API: getUsersAvailableDevices");
         mainActivity.executeWithTokenRefresh(() -> mainActivity.getSpotifyApi().getUsersAvailableDevices().build())
-                .thenAccept(devices -> activity.runOnUiThread(() -> showDeviceDialog(activity, mainActivity, devices)))
+                .thenAccept(devices -> runIfAlive(activity, () -> showDeviceDialog(activity, mainActivity, devices)))
                 .exceptionally(throwable -> {
-                    activity.runOnUiThread(() ->
+                    runIfAlive(activity, () ->
                             Toast.makeText(activity, "Error getting devices: " + throwable.getMessage(), Toast.LENGTH_SHORT).show());
                     return null;
                 });
+    }
+
+    // Runs the action on the UI thread only if the Activity is still alive, avoiding
+    // BadTokenException when an async callback returns after the screen is gone.
+    private static void runIfAlive(Activity activity, Runnable action) {
+        activity.runOnUiThread(() -> {
+            if (!activity.isFinishing() && !activity.isDestroyed()) {
+                action.run();
+            }
+        });
     }
 
     private static void showDeviceDialog(Activity activity, MainActivity mainActivity, Device[] devices) {
@@ -71,8 +81,14 @@ public class DeviceChooser {
             return;
         }
 
+        String deviceId = device.getId();
+        if (deviceId == null) {
+            Toast.makeText(activity, "Could not identify this device", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         JsonArray deviceIds = new JsonArray();
-        deviceIds.add(device.getId());
+        deviceIds.add(deviceId);
 
         attemptTransfer(activity, mainActivity, device, deviceIds, 1);
     }
@@ -81,17 +97,17 @@ public class DeviceChooser {
                                         JsonArray deviceIds, int attempt) {
         Log.d(TAG, "API: transferUsersPlayback -> " + device.getName() + " (attempt " + attempt + "/" + MAX_TRANSFER_ATTEMPTS + ")");
         mainActivity.executeWithTokenRefresh(
-                () -> mainActivity.getSpotifyApi().transferUsersPlayback(deviceIds).build())
-                .thenRun(() -> activity.runOnUiThread(() ->
+                () -> mainActivity.getSpotifyApi().transferUsersPlayback(deviceIds).play(true).build())
+                .thenRun(() -> runIfAlive(activity, () ->
                         Toast.makeText(activity, "Switched playback to " + device.getName(), Toast.LENGTH_SHORT).show()))
                 .exceptionally(throwable -> {
                     Log.w(TAG, "Transfer attempt " + attempt + " failed: " + throwable.getMessage());
                     if (attempt < MAX_TRANSFER_ATTEMPTS) {
-                        activity.runOnUiThread(() -> new android.os.Handler(android.os.Looper.getMainLooper())
+                        runIfAlive(activity, () -> new android.os.Handler(android.os.Looper.getMainLooper())
                                 .postDelayed(() -> attemptTransfer(activity, mainActivity, device, deviceIds, attempt + 1),
                                         RETRY_DELAY_MS));
                     } else {
-                        activity.runOnUiThread(() ->
+                        runIfAlive(activity, () ->
                                 Toast.makeText(activity, "Couldn't switch device: " + throwable.getMessage(), Toast.LENGTH_SHORT).show());
                     }
                     return null;
