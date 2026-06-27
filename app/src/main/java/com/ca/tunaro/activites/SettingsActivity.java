@@ -22,6 +22,7 @@ import com.ca.tunaro.BaseActivity;
 import com.ca.tunaro.R;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.services.AutomaticFetcher;
+import com.ca.tunaro.utils.DeviceChooser;
 import com.ca.tunaro.utils.PlaylistCache;
 import com.ca.tunaro.utils.SongCache;
 
@@ -47,6 +48,7 @@ public class SettingsActivity extends BaseActivity {
 
         setupBackButton();
         setupImportExportButtons();
+        setupDeviceChooser();
         setupDeviceCheckSettings();
         setupAutomaticFetcherSettings();
     }
@@ -143,6 +145,16 @@ public class SettingsActivity extends BaseActivity {
                 }
             }
     );
+
+    //#endregion
+
+    //#region Device Chooser Option
+
+    private void setupDeviceChooser() {
+        Button chooseDeviceButton = findViewById(R.id.choose_device_button);
+        chooseDeviceButton.setOnClickListener(v ->
+                DeviceChooser.showDeviceChooser(this, MainActivity.getInstance()));
+    }
 
     //#endregion
 
