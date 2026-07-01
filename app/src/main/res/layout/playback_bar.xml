@@ -26,6 +26,21 @@
 
     </FrameLayout>
 
+    <!--
+      Carousel viewport: hosts the incoming neighbour panel during a Previous/Next
+      drag. Spans the content region (start → play/pause) and clips its children so
+      a sliding panel never overlaps the fixed play/pause button. Empty and unseen
+      at rest, beneath the resting cover/title/artist which sit directly on top.
+    -->
+    <FrameLayout
+        android:id="@+id/playback_carousel_viewport"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/playback_play_pause"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <ImageView
         android:id="@+id/playback_album_cover"
         android:layout_width="60dp"
