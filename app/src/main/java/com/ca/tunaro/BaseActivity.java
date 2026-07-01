@@ -195,6 +195,10 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
             });
         }
         if (playbackSeekbar != null) {
+            // Block seeking while a snippet is playing: the snippet owns the
+            // playhead (its range + end-timer), so a manual drag would fight it.
+            playbackSeekbar.setOnTouchListener((v, e) ->
+                    playbackManager != null && playbackManager.isSnippetMode());
             playbackSeekbar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override
                 public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
