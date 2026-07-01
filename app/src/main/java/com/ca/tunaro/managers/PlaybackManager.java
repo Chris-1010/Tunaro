@@ -542,6 +542,32 @@ public class PlaybackManager {
         applyDecision(model.previous());
     }
 
+    // --- Carousel lookahead (view layer) ---
+    // Whether a right-swipe would replay an earlier song (vs. restart the current
+    // one). The carousel rubber-bands when this is false.
+    public boolean hasPrevious() {
+        return model.hasPrevious();
+    }
+
+    // Whether a left-swipe would advance to another track under the current
+    // boundary policy. False only in Stop mode at the end of the queue, where the
+    // carousel rubber-bands.
+    public boolean hasNext() {
+        return model.hasNext(currentBoundaryMode());
+    }
+
+    // The song a right-swipe would land on, or null at the start of Play History.
+    // Lets the carousel show the incoming panel before the commit.
+    public SongModel peekPreviousSong() {
+        return model.peekPrevious();
+    }
+
+    // The song a left-swipe would land on, or null when the incoming track is
+    // unknown (end of queue in Recommendations mode → show a neutral placeholder).
+    public SongModel peekNextSong() {
+        return model.peekNext();
+    }
+
     // Translate a navigation decision into the matching Spotify action. Every
     // transition arms the end-of-song grace window and clears any stale pending
     // auto-advance so the position poller can't double-fire mid-transition.

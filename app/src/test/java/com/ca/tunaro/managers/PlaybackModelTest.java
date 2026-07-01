@@ -358,4 +358,88 @@ public class PlaybackModelTest {
         model.clearQueue();
         assertFalse(model.hasActiveQueue());
     }
+
+    // --- Lookahead (peek) used to render the carousel's incoming panel ---
+
+    @Test
+    public void peekPreviousReturnsThePrecedingEntryWithoutMovingTheCursor() {
+        PlaybackModel<Song> model = new PlaybackModel<>();
+        Song a = song("a");
+        Song b = song("b");
+        model.onTrackConfirmed(a, PlayReason.FRESH);
+        model.onTrackConfirmed(b, PlayReason.FRESH);
+
+        assertSame(a, model.peekPrevious());
+        assertSame(b, model.getCurrentSong());
+    }
+
+    @Test
+    public void peekPreviousIsNullAtStartOfHistory() {
+        PlaybackModel<Song> model = new PlaybackModel<>();
+        model.onTrackConfirmed(song("a"), PlayReason.FRESH);
+
+        assertNull(model.peekPrevious());
+    }
+
+    @Test
+    public void peekNextReturnsTheForwardReplayWithoutMovingTheCursor() {
+        PlaybackModel<Song> model = new PlaybackModel<>();
+        Song a = song("a");
+        Song b = song("b");
+        model.onTrackConfirmed(a, PlayReason.FRESH);
+        model.onTrackConfirmed(b, PlayReason.FRESH);
+        model.previous();
+
+        assertSame(b, model.peekNext());
+        assertSame(a, model.getCurrentSong());
+    }
+
+    @Test
+    public void peekNextReturnsThePrimaryQueueHeadWithoutConsumingIt() {
+        PlaybackModel<Song> model = new PlaybackModel<>();
+        Song a = song("a");
+        Song b = song("b");
+        model.onTrackConfirmed(a, PlayReason.FRESH);
+        model.addToQueue(b);
+
+        assertSame(b, model.peekNext());
+        // Non-destructive: a repeat peek and the eventual next() still yield b.
+        assertSame(b, model.peekNext());
+        assertSame(b, model.next(BoundaryMode.RECOMMENDATIONS).song);
+    }
+
+    @Test
+    public void peekNextSkipsUnplayablePrimaryWithoutMutatingTheQueue() {
+        PlaybackModel<Song> model = new PlaybackModel<>();
+        Song a = song("a");
+        Song good = song("good");
+        model.onTrackConfirmed(a, PlayReason.FRESH);
+        model.addToQueue(new Song("spotify:track:bad", false));
+        model.addToQueue(good);
+
+        assertSame(good, model.peekNext());
+        assertSame(good, model.peekNext());
+    }
+
+    @Test
+    public void peekNextReturnsTheSecondaryHeadWhenPrimaryEmpty() {
+        PlaybackModel<Song> model = new PlaybackModel<>();
+        Song a = song("a");
+        Song b = song("b");
+        model.seedSecondary(Arrays.asList(a, b, song("c")), 0);
+        model.onTrackConfirmed(a, PlayReason.FRESH);
+
+        assertSame(b, model.peekNext());
+        assertEquals(0, model.getAnchor());
+    }
+
+    @Test
+    public void peekNextIsNullAtTheEndOfTheQueue() {
+        PlaybackModel<Song> model = new PlaybackModel<>();
+        model.onTrackConfirmed(song("a"), PlayReason.FRESH);
+
+        // The incoming song is unknown at the boundary regardless of boundary
+        // mode; hasNext() decides whether the swipe may commit.
+        assertNull(model.peekNext());
+    }
 }

@@ -233,6 +233,39 @@ public class PlaybackModel<T extends Playable> {
         return mode == BoundaryMode.RECOMMENDATIONS;
     }
 
+    /**
+     * The song {@link #previous} would replay, without moving the cursor. Null at
+     * the start of Play History (where Previous restarts the current song instead).
+     * Used to render the carousel's incoming panel during a drag.
+     */
+    public T peekPrevious() {
+        return cursor > 0 ? history.get(cursor - 1) : null;
+    }
+
+    /**
+     * The song {@link #next} would land on, without mutating the cursor or queues.
+     * Mirrors {@code next()}'s search order (forward replay, then Primary, then
+     * Secondary) but skips unplayables non-destructively. Null at the end of the
+     * queue, where the incoming track is unknown (Recommendations) or absent
+     * (Stop) — {@link #hasNext} decides whether the swipe may commit.
+     */
+    public T peekNext() {
+        if (cursor < history.size() - 1) {
+            return history.get(cursor + 1);
+        }
+        for (T s : primaryQueue) {
+            if (s.isPlayable()) {
+                return s;
+            }
+        }
+        for (int i = secondaryIndex + 1; i >= 0 && i < secondaryQueue.size(); i++) {
+            if (secondaryQueue.get(i).isPlayable()) {
+                return secondaryQueue.get(i);
+            }
+        }
+        return null;
+    }
+
     // Whether advancing at the Live Edge would land on a real next queued song.
     private boolean hasPlayableInQueues() {
         for (T s : primaryQueue) {
