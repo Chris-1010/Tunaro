@@ -179,6 +179,63 @@
 
             <!--#endregion -->
 
+            <!--#region Snippet Playback Section -->
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="32dp"
+                android:layout_marginBottom="8dp"
+                android:text="Snippet Playback"
+                android:textColor="@color/white"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:text="What happens when a snippet reaches its end by default"
+                android:textColor="@color/white"
+                android:textSize="14sp" />
+
+            <RadioGroup
+                android:id="@+id/snippet_default_mode_group"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="24dp"
+                android:orientation="vertical">
+
+                <RadioButton
+                    android:id="@+id/snippet_mode_stop"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:buttonTint="@color/white"
+                    android:text="Stop — pause at the snippet's end"
+                    android:textColor="@color/white"
+                    android:textSize="16sp" />
+
+                <RadioButton
+                    android:id="@+id/snippet_mode_loop"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:buttonTint="@color/white"
+                    android:text="Loop — replay the snippet range"
+                    android:textColor="@color/white"
+                    android:textSize="16sp" />
+
+                <RadioButton
+                    android:id="@+id/snippet_mode_detach"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:buttonTint="@color/white"
+                    android:text="Continue — play on into the rest of the song"
+                    android:textColor="@color/white"
+                    android:textSize="16sp" />
+            </RadioGroup>
+
+            <!--#endregion-->
+
             <!--#region Device Check Section -->
 
             <TextView
