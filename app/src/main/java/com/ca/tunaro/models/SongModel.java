@@ -9,7 +9,7 @@ import java.util.Date;
 
 import se.michaelthelin.spotify.model_objects.specification.ArtistSimplified;
 
-public class SongModel implements Serializable {
+public class SongModel implements Serializable, Playable {
 
     // --- Core fields (always populated) ---
     String id;           // Spotify URI (spotify:track:XXXX)
