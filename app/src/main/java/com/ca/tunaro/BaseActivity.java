@@ -384,11 +384,8 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         carouselDragging = false;
 
         if (carouselDeadEnd) {
-            // Previous at the start of history restarts the current song (seekTo 0);
-            // a Next dead-end (Stop mode, end of queue) simply springs back.
-            if (commit && carouselDirection > 0) {
-                playbackManager.previous();
-            }
+            // No neighbour to reveal (start of history, or Stop mode at the end of
+            // the queue): rubber-band back with no action.
             springCurrentPanelHome();
             return;
         }
