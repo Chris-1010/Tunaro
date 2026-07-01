@@ -89,12 +89,25 @@ public class PlaybackManager {
     private long lastAdvanceTimeMs = 0;
 
     //#region Snippet Playback Fields
+    // The behaviour applied when a snippet's end-timer fires. Transient: held in
+    // memory for the live session only, never persisted. See ADR 0001.
+    public enum SnippetEndMode { STOP, LOOP, DETACH }
+
+    // The persisted default mode a snippet starts in (set in SettingsActivity).
+    public static final String PREFS_NAME = "TunaroPrefs";
+    public static final String PREF_SNIPPET_DEFAULT_MODE = "snippet_default_end_mode";
+
     private boolean isSnippetMode = false;
     private boolean isSnippetPlaying = false;
     private SongSnippet currentSnippet;
+    private SnippetEndMode snippetEndMode = SnippetEndMode.STOP;
     private final Handler snippetHandler = new Handler(Looper.getMainLooper());
     private Runnable snippetEndRunnable;
     private int activeSnippetTimers = 0;
+    // Wall-clock bookkeeping so the end-timer can be paused with the song and
+    // resumed from the time that was left, instead of firing while paused.
+    private long snippetTimerDueAtMs = 0;   // when the pending timer would fire
+    private long snippetTimerRemainingMs = 0; // time left while paused; 0 = running
     //#endregion
 
     // Listeners
@@ -357,6 +370,11 @@ public class PlaybackManager {
 
     public void playSong(SongModel song) {
         if (spotifyAppRemote != null && isConnected) {
+            // Starting a normal song leaves any active snippet: tear down snippet
+            // state so listen-tracking, auto-advance and seekbar seeking all resume.
+            if (isSnippetPlaying || isSnippetMode) {
+                stopSnippetPlayback();
+            }
             spotifyAppRemote.getPlayerApi().play(song.getUri())
                     .setResultCallback(empty -> {
                         currentSong = song;
@@ -507,6 +525,11 @@ public class PlaybackManager {
         if (spotifyAppRemote != null && isConnected) {
             checkPlaybackDevice();
             if (isPlaying) {
+                // Pausing mid-snippet holds the end-timer so it can't fire while
+                // the song is paused; resuming continues from the time that was left.
+                if (isSnippetMode) {
+                    holdSnippetEndTimer();
+                }
                 spotifyAppRemote.getPlayerApi().pause()
                         .setResultCallback(empty -> {
                             isPlaying = false;
@@ -516,6 +539,9 @@ public class PlaybackManager {
                 spotifyAppRemote.getPlayerApi().resume()
                         .setResultCallback(empty -> {
                             isPlaying = true;
+                            if (isSnippetMode) {
+                                resumeSnippetEndTimer();
+                            }
                             notifyPlaybackStateChanged();
                         });
             }
@@ -734,6 +760,13 @@ public class PlaybackManager {
         // Cancel any existing snippet timer
         cancelCurrentSnippetTimer();
 
+        // Starting a (different) snippet resets the end-mode to the user's
+        // configured default. Replaying the same snippet — e.g. resuming after a
+        // pause — preserves the mode the user had selected.
+        if (currentSnippet == null || snippet != currentSnippet) {
+            snippetEndMode = getDefaultSnippetEndMode(applicationContext);
+        }
+
         isSnippetPlaying = true;
         currentSnippet = snippet;
         setSnippetMode(true);
@@ -782,20 +815,77 @@ public class PlaybackManager {
 
     private void startSnippetEndTimer(long duration) {
         activeSnippetTimers++;
+        snippetTimerRemainingMs = 0;
+        snippetTimerDueAtMs = System.currentTimeMillis() + duration;
 
         snippetEndRunnable = () -> {
             activeSnippetTimers--;
 
             if (activeSnippetTimers <= 0) {
                 activeSnippetTimers = 0;
-                if (spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
-                    spotifyAppRemote.getPlayerApi().pause();
-                }
-                stopSnippetPlayback();
+                handleSnippetEnd();
             }
         };
 
         snippetHandler.postDelayed(snippetEndRunnable, duration);
+    }
+
+    // Hold the end-timer while the song is paused mid-snippet: cancel the pending
+    // callback and remember how much of the snippet was left so resuming can pick
+    // up from there rather than restarting or firing during the pause.
+    private void holdSnippetEndTimer() {
+        if (snippetEndRunnable == null || snippetTimerRemainingMs > 0) {
+            return; // nothing pending, or already held
+        }
+        snippetTimerRemainingMs = Math.max(0, snippetTimerDueAtMs - System.currentTimeMillis());
+        snippetHandler.removeCallbacks(snippetEndRunnable);
+        snippetEndRunnable = null;
+        activeSnippetTimers = Math.max(0, activeSnippetTimers - 1);
+    }
+
+    // Re-arm the held end-timer for the remaining slice of the snippet.
+    private void resumeSnippetEndTimer() {
+        if (snippetTimerRemainingMs <= 0) {
+            return; // not held
+        }
+        long remaining = snippetTimerRemainingMs;
+        snippetTimerRemainingMs = 0;
+        startSnippetEndTimer(remaining);
+    }
+
+    // Evaluate the end-behaviour when the snippet's end-timer fires. The mode is
+    // the single source of truth, read here at fire-time (ADR 0001).
+    private void handleSnippetEnd() {
+        SongSnippet snippet = currentSnippet;
+
+        switch (snippetEndMode) {
+            case LOOP:
+                // Seek back to the snippet start and re-arm a fresh timer.
+                // Playback is already running, so seeking keeps it playing.
+                if (snippet != null && spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
+                    long start = snippet.getStartTime();
+                    spotifyAppRemote.getPlayerApi().seekTo(start)
+                            .setResultCallback(seekResult ->
+                                    startSnippetEndTimer(snippet.getEndTime() - start));
+                }
+                break;
+
+            case DETACH:
+                // Let playback continue into the rest of the song. Clearing
+                // snippet mode resumes listen-tracking and queue auto-advance.
+                isSnippetPlaying = false;
+                currentSnippet = null;
+                setSnippetMode(false);
+                break;
+
+            case STOP:
+            default:
+                if (spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
+                    spotifyAppRemote.getPlayerApi().pause();
+                }
+                stopSnippetPlayback();
+                break;
+        }
     }
 
     private void cancelCurrentSnippetTimer() {
@@ -804,6 +894,8 @@ public class PlaybackManager {
             snippetEndRunnable = null;
         }
         activeSnippetTimers = 0;
+        snippetTimerRemainingMs = 0;
+        snippetTimerDueAtMs = 0;
     }
 
     public void stopSnippetPlayback() {
@@ -813,10 +905,45 @@ public class PlaybackManager {
         cancelCurrentSnippetTimer();
     }
 
-    public void detachSnippet() {
-        setSnippetMode(false);
-        cancelCurrentSnippetTimer();
-        showToast("Playback will continue after snippet end");
+    /**
+     * Set the end-behaviour for the snippet currently playing/paused. The timer
+     * is NOT cancelled — the mode is just a flag read when the end-timer fires
+     * (ADR 0001), so switching modes mid-play stays coherent.
+     */
+    public void setSnippetEndMode(SnippetEndMode mode) {
+        if (mode != null) {
+            snippetEndMode = mode;
+        }
+    }
+
+    public SnippetEndMode getSnippetEndMode() {
+        return snippetEndMode;
+    }
+
+    /**
+     * The user's configured default end-mode for a freshly-started snippet,
+     * from TunaroPrefs. Falls back to STOP when unset or unrecognised.
+     */
+    public static SnippetEndMode getDefaultSnippetEndMode(Context context) {
+        if (context == null) return SnippetEndMode.STOP;
+        String name = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(PREF_SNIPPET_DEFAULT_MODE, SnippetEndMode.STOP.name());
+        try {
+            return SnippetEndMode.valueOf(name);
+        } catch (IllegalArgumentException e) {
+            return SnippetEndMode.STOP;
+        }
+    }
+
+    /** Advance the end-mode one step: STOP → LOOP → DETACH → STOP. */
+    public SnippetEndMode cycleSnippetEndMode() {
+        switch (snippetEndMode) {
+            case STOP:   snippetEndMode = SnippetEndMode.LOOP;   break;
+            case LOOP:   snippetEndMode = SnippetEndMode.DETACH; break;
+            case DETACH:
+            default:     snippetEndMode = SnippetEndMode.STOP;   break;
+        }
+        return snippetEndMode;
     }
 
     /**

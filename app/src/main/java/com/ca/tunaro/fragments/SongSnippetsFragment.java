@@ -261,12 +261,6 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
             }
 
             @Override
-            public void onDetachSnippet(SongSnippet snippet) {
-                // Detach logic
-                detachSnippet();
-            }
-
-            @Override
             public void onEditSnippet(SongSnippet snippet) {
                 // Edit logic
                 showEditSnippetDialog(snippet);
@@ -283,10 +277,6 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
 
     private void playSnippet(SongSnippet snippet) {
         PlaybackManager.getInstance().playSnippet(snippet);
-    }
-
-    private void detachSnippet() {
-        PlaybackManager.getInstance().detachSnippet();
     }
 
     private void showSnippetCreationOverlay() {
