@@ -68,21 +68,21 @@ public class PlaybackManager {
     private final Handler listenHandler = new Handler(Looper.getMainLooper());
     private Runnable listenRunnable;
 
-    // Queues, Spotify-style:
-    //  - primaryQueue: songs the user explicitly added (swipe-to-queue). FIFO.
-    //    Played before the playlist flow and removed once consumed.
-    //  - secondaryQueue + secondaryIndex: the playlist flow seeded by tapping a
-    //    song. secondaryIndex points at the playlist song the playback is
-    //    anchored to; it only advances when a secondary song actually plays, so
-    //    primary tracks slot in "between" playlist songs.
-    //  - history: every song that finished or was advanced past, newest last.
-    //    Plumbing for a future previous-song control.
-    private List<SongModel> primaryQueue = new ArrayList<>();
-    private List<SongModel> secondaryQueue = new ArrayList<>();
-    private int secondaryIndex = -1;
-    private final List<SongModel> history = new ArrayList<>();
-    private static final int MAX_HISTORY = 200;
-    // Guard: only fire advanceQueue() once per song-end
+    // All queue + history + navigation state lives in the pure PlaybackModel:
+    //  - Primary Queue: songs the user explicitly added (swipe-to-queue), FIFO.
+    //  - Secondary Queue + Anchor: the playlist flow seeded by tapping a song.
+    //  - Play History + Navigation Cursor: the source of truth for Previous/Next.
+    // PlaybackManager translates the model's navigation decisions into Spotify
+    // calls. See docs/adr/0001-cursor-based-prev-next-navigation.md.
+    private final PlaybackModel<SongModel> model = new PlaybackModel<>();
+    // Why the next confirmed track change started playing. Consumed by the
+    // centralized history recorder in processPlayerState; defaults to FRESH so an
+    // unsolicited Spotify recommendation track joins the timeline as a new play.
+    private PlaybackModel.PlayReason pendingReason = PlaybackModel.PlayReason.FRESH;
+    // URI of the last track recorded into Play History, so the recorder fires once
+    // per real track change regardless of optimistic currentSong updates.
+    private String lastRecordedUri = null;
+    // Guard: only fire an auto-advance once per song-end
     private boolean queueAdvancePending = false;
     // Timestamp of last advance — suppress end-of-song check for 3s after an advance
     // to avoid Spotify returning stale position data for the newly-started track.
@@ -292,6 +292,19 @@ public class PlaybackManager {
                 }
             }
 
+            // Centralized Play History recording (ADR-0001): every track change —
+            // app-initiated or a Spotify recommendation — is recorded here. Keyed
+            // on its own lastRecordedUri (not currentSong) so an optimistic
+            // currentSong set by playSong() can't suppress it. The pending reason
+            // distinguishes a fresh play from a navigation replay; it resets to
+            // FRESH so the next unsolicited change (e.g. autoplay) records.
+            if (!remoteTrack.uri.equals(lastRecordedUri)) {
+                lastRecordedUri = remoteTrack.uri;
+                PlaybackModel.PlayReason reason = pendingReason;
+                pendingReason = PlaybackModel.PlayReason.FRESH;
+                model.onTrackConfirmed(currentSong, reason);
+            }
+
             // Set duration before listen tracking starts: the listen threshold
             // is a third of the track duration, so it must reflect the new track.
             currentPositionMs = playerState.playbackPosition;
@@ -396,129 +409,71 @@ public class PlaybackManager {
     public void playQueue(List<SongModel> songs, int startIndex) {
         if (songs == null || songs.isEmpty() || startIndex < 0 || startIndex >= songs.size())
             return;
-        secondaryQueue = new ArrayList<>(songs);
 
-        // Skip unplayable songs at the start of the queue
-        while (startIndex < secondaryQueue.size() && !secondaryQueue.get(startIndex).isPlayable()) {
-            Log.w(TAG, "playQueue: Skipping unplayable song '" + secondaryQueue.get(startIndex).getName() + "' at index " + startIndex);
-            startIndex++;
-        }
-
-        if (startIndex >= secondaryQueue.size()) {
+        SongModel start = model.seedSecondary(songs, startIndex);
+        if (start == null) {
             Log.w(TAG, "playQueue: No playable songs in queue");
-            secondaryQueue.clear();
-            secondaryIndex = -1;
             queueAdvancePending = false;
             return;
         }
 
-        secondaryIndex = startIndex;
-        Log.i(TAG, "Created secondary queue with " + songs.size() + " songs. Starting at index " + startIndex + ": " + secondaryQueue.get(secondaryIndex).getName());
-        pushHistory(currentSong);
-        playSong(secondaryQueue.get(secondaryIndex));
+        Log.i(TAG, "Created secondary queue with " + songs.size() + " songs. Anchored at: " + start.getName());
+        playFresh(start);
     }
 
     public void skipToSong(SongModel song) {
-        if (secondaryQueue.isEmpty()) {
-            // No active playlist queue — play individually
-            playSong(song);
-            return;
-        }
-        for (int i = 0; i < secondaryQueue.size(); i++) {
-            if (secondaryQueue.get(i).getUri().equals(song.getUri())) {
-                secondaryIndex = i;
-                pushHistory(currentSong);
-                playSong(secondaryQueue.get(secondaryIndex));
-                return;
-            }
-        }
-        // Song not found in queue — play individually without touching the queue
-        playSong(song);
+        SongModel found = model.skipToSecondary(song);
+        // Found in the playlist flow → anchor and play it; otherwise play
+        // individually without touching the queue.
+        playFresh(found != null ? found : song);
     }
 
     public void clearQueue() {
-        primaryQueue.clear();
-        secondaryQueue.clear();
-        secondaryIndex = -1;
+        model.clearQueue();
         queueAdvancePending = false;
     }
 
     // Add a song to the primary (explicit) queue. With nothing playing, start it
-    // immediately. No-op if the song is already queued.
+    // immediately. No-op if the song is already current or already queued.
     public boolean addToQueue(SongModel song) {
-        if (song == null) return false;
-        if (isInQueue(song)) return false;
-        if (currentSong != null && currentSong.getUri().equals(song.getUri())) return false;
-
-        if (currentSong == null) {
-            // Nothing playing yet — just play it.
-            playSong(song);
-            Log.i(TAG, "addToQueue: nothing playing, starting '" + song.getName() + "'");
-            return true;
+        switch (model.addToQueue(song)) {
+            case PLAY_NOW:
+                Log.i(TAG, "addToQueue: nothing playing, starting '" + song.getName() + "'");
+                playFresh(song);
+                return true;
+            case ENQUEUED:
+                Log.i(TAG, "addToQueue: '" + song.getName() + "' enqueued");
+                return true;
+            default:
+                return false;
         }
-
-        primaryQueue.add(song);
-        Log.i(TAG, "addToQueue: '" + song.getName() + "' (primary queue size " + primaryQueue.size() + ")");
-        return true;
     }
 
     // Remove a song from whichever queue holds it. The currently-playing song
-    // cannot be removed. secondaryIndex is fixed up to stay anchored.
+    // cannot be removed; the Anchor is fixed up to stay anchored.
     public boolean removeFromQueue(SongModel song) {
-        if (song == null) return false;
-        if (currentSong != null && currentSong.getUri().equals(song.getUri())) return false;
-
-        for (int i = 0; i < primaryQueue.size(); i++) {
-            if (primaryQueue.get(i).getUri().equals(song.getUri())) {
-                primaryQueue.remove(i);
-                Log.i(TAG, "removeFromQueue: '" + song.getName() + "' from primary (size " + primaryQueue.size() + ")");
-                return true;
-            }
-        }
-
-        for (int i = 0; i < secondaryQueue.size(); i++) {
-            if (secondaryQueue.get(i).getUri().equals(song.getUri())) {
-                secondaryQueue.remove(i);
-                if (i < secondaryIndex) secondaryIndex--;
-                if (secondaryQueue.isEmpty()) {
-                    secondaryIndex = -1;
-                    queueAdvancePending = false;
-                }
-                Log.i(TAG, "removeFromQueue: '" + song.getName() + "' from secondary (size " + secondaryQueue.size() + ")");
-                return true;
-            }
-        }
-        return false;
+        return model.removeFromQueue(song);
     }
 
     // True when the song is upcoming: queued in the primary queue, or ahead of
     // the anchor in the secondary (playlist) queue. The currently-playing song
     // is never "in queue".
     public boolean isInQueue(SongModel song) {
-        if (song == null) return false;
-        if (currentSong != null && currentSong.getUri().equals(song.getUri())) return false;
-
-        for (SongModel s : primaryQueue) {
-            if (s.getUri().equals(song.getUri())) return true;
-        }
-        for (int i = secondaryIndex + 1; i >= 0 && i < secondaryQueue.size(); i++) {
-            if (secondaryQueue.get(i).getUri().equals(song.getUri())) return true;
-        }
-        return false;
+        return model.isInQueue(song);
     }
 
     public boolean hasActiveQueue() {
-        return !primaryQueue.isEmpty() || !secondaryQueue.isEmpty();
+        return model.hasActiveQueue();
     }
 
     // The secondary (playlist) queue and its anchor, used by QueueLineDecoration
     // to draw the connecting line down upcoming playlist songs.
     public int getQueueIndex() {
-        return secondaryIndex;
+        return model.getAnchor();
     }
 
     public List<SongModel> getQueue() {
-        return secondaryQueue;
+        return model.getSecondaryQueue();
     }
 
     public void togglePlayPause() {
@@ -571,73 +526,85 @@ public class PlaybackManager {
         }
     }
 
-    // Whether advancing would land on a real next song (primary or secondary).
-    private boolean hasNextSong() {
-        for (SongModel s : primaryQueue) {
-            if (s.isPlayable()) return true;
-        }
-        for (int i = secondaryIndex + 1; i >= 0 && i < secondaryQueue.size(); i++) {
-            if (secondaryQueue.get(i).isPlayable()) return true;
-        }
-        return false;
+    // Advance forward over Play History. Manual swipe-next and natural
+    // end-of-song share this one operation (ADR-0001): behind the Live Edge it
+    // replays history, at the Live Edge it consumes the queues, and at the end of
+    // the queue it follows the boundary policy (ADR-0002).
+    public void next() {
+        if (isSnippetMode) stopSnippetPlayback();
+        applyDecision(model.next(currentBoundaryMode()));
     }
 
-    // Advance to the next song: explicit (primary) adds take priority, then the
-    // playlist (secondary) flow. The song just finished is pushed to history.
-    private void advanceQueue() {
-        // Primary queue first: pull the next playable explicit add off the front.
-        while (!primaryQueue.isEmpty() && !primaryQueue.get(0).isPlayable()) {
-            Log.w(TAG, "advanceQueue: Skipping unplayable primary song '" + primaryQueue.get(0).getName() + "'");
-            primaryQueue.remove(0);
-        }
-        if (!primaryQueue.isEmpty()) {
-            SongModel next = primaryQueue.remove(0);
-            lastAdvanceTimeMs = System.currentTimeMillis();
-            pushHistory(currentSong);
-            Log.i(TAG, "advanceQueue: Last Song: " + (currentSong != null ? currentSong.getName() : "none") + ", Current Song (primary): " + next.getName());
-            playSong(next);
-            return;
-        }
+    // Move back over Play History (non-destructive); at the start, restart the
+    // current song.
+    public void previous() {
+        if (isSnippetMode) stopSnippetPlayback();
+        applyDecision(model.previous());
+    }
 
-        // Otherwise advance the playlist flow.
-        if (secondaryQueue.isEmpty()) return;
-        int nextIndex = secondaryIndex + 1;
-        while (nextIndex < secondaryQueue.size() && !secondaryQueue.get(nextIndex).isPlayable()) {
-            Log.w(TAG, "advanceQueue: Skipping unplayable song '" + secondaryQueue.get(nextIndex).getName() + "' at index " + nextIndex);
-            nextIndex++;
-        }
-        if (nextIndex < secondaryQueue.size()) {
-            secondaryIndex = nextIndex;
-            SongModel next = secondaryQueue.get(secondaryIndex);
-            lastAdvanceTimeMs = System.currentTimeMillis();
-            pushHistory(currentSong);
-            Log.i(TAG, "advanceQueue: Last Song: " + (currentSong != null ? currentSong.getName() : "none") + ", Current Song: " + next.getName() + ", Queue Position: " + (secondaryIndex + 1) + "/" + secondaryQueue.size());
-            playSong(next);
-        } else {
-            // End of playlist flow.
-            pushHistory(currentSong);
-            secondaryQueue.clear();
-            secondaryIndex = -1;
-            queueAdvancePending = false;
+    // Translate a navigation decision into the matching Spotify action. Every
+    // transition arms the end-of-song grace window and clears any stale pending
+    // auto-advance so the position poller can't double-fire mid-transition.
+    private void applyDecision(PlaybackModel.NavDecision<SongModel> decision) {
+        lastAdvanceTimeMs = System.currentTimeMillis();
+        queueAdvancePending = false;
+        switch (decision.action) {
+            case PLAY:
+                pendingReason = decision.reason;
+                Log.i(TAG, "nav: playing '" + decision.song.getName() + "' (" + decision.reason + ")");
+                playSong(decision.song);
+                break;
+            case SEEK_TO_START:
+                Log.i(TAG, "nav: at start of history, restarting current song");
+                seekTo(0);
+                break;
+            case SKIP_TO_NEXT:
+                Log.i(TAG, "nav: end of queue, delegating to Spotify (recommendations)");
+                skipToNextOnSpotify();
+                break;
+            case PAUSE:
+                Log.i(TAG, "nav: end of queue, pausing (stop mode)");
+                pauseAtBoundary();
+                break;
         }
     }
 
-    // Record a song as played, for a future previous-song control. Collapses
-    // consecutive duplicates so repeated state callbacks don't bloat history.
-    private void pushHistory(SongModel song) {
-        if (song == null) return;
-        if (!history.isEmpty() && history.get(history.size() - 1).getUri().equals(song.getUri())) {
-            return;
+    // Play a brand-new selection: tag it FRESH so the centralized recorder
+    // appends it at the Live Edge (truncating any forward history).
+    private void playFresh(SongModel song) {
+        pendingReason = PlaybackModel.PlayReason.FRESH;
+        playSong(song);
+    }
+
+    private void skipToNextOnSpotify() {
+        if (spotifyAppRemote != null && isConnected) {
+            spotifyAppRemote.getPlayerApi().skipNext();
         }
-        history.add(song);
-        // Cap the stack so a long session can't grow it without bound.
-        if (history.size() > MAX_HISTORY) {
-            history.remove(0);
+    }
+
+    private void pauseAtBoundary() {
+        if (spotifyAppRemote != null && isConnected) {
+            spotifyAppRemote.getPlayerApi().pause()
+                    .setResultCallback(empty -> {
+                        isPlaying = false;
+                        notifyPlaybackStateChanged();
+                    });
         }
+    }
+
+    // The end-of-queue boundary policy, mirroring SettingsActivity's prefs file.
+    // Default = Recommendations (delegate forward to Spotify).
+    private PlaybackModel.BoundaryMode currentBoundaryMode() {
+        if (applicationContext != null
+                && applicationContext.getSharedPreferences("TunaroPrefs", Context.MODE_PRIVATE)
+                .getBoolean("stop_at_queue_end", false)) {
+            return PlaybackModel.BoundaryMode.STOP;
+        }
+        return PlaybackModel.BoundaryMode.RECOMMENDATIONS;
     }
 
     public List<SongModel> getHistory() {
-        return history;
+        return model.getHistory();
     }
 
     //#region Listeners
@@ -1018,14 +985,22 @@ public class PlaybackManager {
                             // Notify listeners with updated position
                             notifyPlaybackPositionChanged();
 
-                            // Queue auto-advance: when within 1500ms of the end, wait a bit before advancing so can be closer to the actual finish without cutting it off.
+                            // End-of-song auto-advance: within 1500ms of the end,
+                            // wait briefly so the advance lands close to the real
+                            // finish without cutting it off. Intercept when there
+                            // is a real next song, or — in Stop mode — to pause at
+                            // the boundary before Spotify autoplay bleeds in. In
+                            // Recommendations mode the boundary is left to Spotify
+                            // autoplay (ADR-0002), so no interception is needed.
                             boolean inGracePeriod = (System.currentTimeMillis() - lastAdvanceTimeMs) < 3000;
-                            if (hasNextSong() && !isSnippetMode && !playerState.isPaused
+                            boolean shouldIntercept = model.hasNextSong()
+                                    || currentBoundaryMode() == PlaybackModel.BoundaryMode.STOP;
+                            if (shouldIntercept && !isSnippetMode && !playerState.isPaused
                                     && durationMs > 0 && !queueAdvancePending && !inGracePeriod
                                     && (durationMs - currentPositionMs) <= 1500) {
                                 Log.d(TAG, "updatePlaybackPosition: Caught end of song at " + (durationMs - currentPositionMs) + "ms remaining. Queueing advance.");
                                 queueAdvancePending = true;
-                                positionHandler.postDelayed(PlaybackManager.this::advanceQueue, 300);
+                                positionHandler.postDelayed(PlaybackManager.this::next, 300);
                             }
                         }
                     });
