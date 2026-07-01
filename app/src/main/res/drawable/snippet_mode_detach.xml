@@ -1,0 +1,43 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="@android:color/white">
+    <!-- Continue-past-end: a vertical boundary line (the snippet end) with a
+         horizontal line through it and three chevrons marching rightward past
+         it, signalling "release the snippet boundary and play on". -->
+    <group>
+        <!-- vertical boundary line -->
+        <path
+            android:strokeColor="@android:color/white"
+            android:strokeWidth="1.6"
+            android:strokeLineCap="round"
+            android:pathData="M5,4 V20" />
+        <!-- horizontal line through it -->
+        <path
+            android:strokeColor="@android:color/white"
+            android:strokeWidth="1.6"
+            android:strokeLineCap="round"
+            android:pathData="M3,12 H20" />
+        <!-- marching chevrons -->
+        <path
+            android:strokeColor="@android:color/white"
+            android:strokeWidth="1.6"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M9.5,9.5 L12,12 L9.5,14.5" />
+        <path
+            android:strokeColor="@android:color/white"
+            android:strokeWidth="1.6"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M13.5,9.5 L16,12 L13.5,14.5" />
+        <path
+            android:strokeColor="@android:color/white"
+            android:strokeWidth="1.6"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M17.5,9.5 L20,12 L17.5,14.5" />
+    </group>
+</vector>

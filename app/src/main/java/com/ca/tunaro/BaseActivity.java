@@ -1,5 +1,6 @@
 package com.ca.tunaro;
 
+import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -141,6 +142,9 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         setupPlaybackBar();
     }
 
+    // Seekbar touch is consumed (returns true, no performClick) to block seeking
+    // during snippet playback; the accessibility warning does not apply here.
+    @SuppressLint("ClickableViewAccessibility")
     private void setupPlaybackBar() {
         // Find playback bar views
         playbackBar = findViewById(R.id.playback_bar);
@@ -195,6 +199,10 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
             });
         }
         if (playbackSeekbar != null) {
+            // Block seeking while a snippet is playing: the snippet owns the
+            // playhead (its range + end-timer), so a manual drag would fight it.
+            playbackSeekbar.setOnTouchListener((v, e) ->
+                    playbackManager != null && playbackManager.isSnippetMode());
             playbackSeekbar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override
                 public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {

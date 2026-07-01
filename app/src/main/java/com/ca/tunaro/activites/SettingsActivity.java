@@ -21,6 +21,7 @@ import androidx.appcompat.widget.SwitchCompat;
 import com.ca.tunaro.BaseActivity;
 import com.ca.tunaro.R;
 import com.ca.tunaro.database.DatabaseHelper;
+import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.services.AutomaticFetcher;
 import com.ca.tunaro.utils.DeviceChooser;
 import com.ca.tunaro.utils.PlaylistCache;
@@ -48,8 +49,12 @@ public class SettingsActivity extends BaseActivity {
 
         setupBackButton();
         setupImportExportButtons();
+
+        setupSnippetPlaybackSettings();
+      
         setupDeviceChooser();
         setupDeviceCheckSettings();
+      
         setupAutomaticFetcherSettings();
     }
 
@@ -148,6 +153,41 @@ public class SettingsActivity extends BaseActivity {
 
     //#endregion
 
+    //#region Snippet Playback Option
+
+    private void setupSnippetPlaybackSettings() {
+        android.widget.RadioGroup group = findViewById(R.id.snippet_default_mode_group);
+
+        // Reflect the saved default in the radio selection.
+        switch (PlaybackManager.getDefaultSnippetEndMode(this)) {
+            case LOOP:
+                group.check(R.id.snippet_mode_loop);
+                break;
+            case DETACH:
+                group.check(R.id.snippet_mode_detach);
+                break;
+            case STOP:
+            default:
+                group.check(R.id.snippet_mode_stop);
+                break;
+        }
+
+        group.setOnCheckedChangeListener((g, checkedId) -> {
+            PlaybackManager.SnippetEndMode mode;
+            if (checkedId == R.id.snippet_mode_loop) {
+                mode = PlaybackManager.SnippetEndMode.LOOP;
+            } else if (checkedId == R.id.snippet_mode_detach) {
+                mode = PlaybackManager.SnippetEndMode.DETACH;
+            } else {
+                mode = PlaybackManager.SnippetEndMode.STOP;
+            }
+            prefs.edit().putString(
+                    PlaybackManager.PREF_SNIPPET_DEFAULT_MODE, mode.name()).apply();
+        });
+    }
+  
+    //#endregion
+  
     //#region Device Chooser Option
 
     private void setupDeviceChooser() {

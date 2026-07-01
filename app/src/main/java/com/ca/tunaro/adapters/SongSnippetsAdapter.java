@@ -14,6 +14,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.ca.tunaro.R;
+import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.models.SongSnippet;
 import com.ca.tunaro.utils.SnippetTheme;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
@@ -42,7 +43,6 @@ public class SongSnippetsAdapter extends RecyclerView.Adapter<SongSnippetsAdapte
     public interface OnSnippetActionListener {
         void onPlaySnippet(SongSnippet snippet);
         void onPauseSnippet(SongSnippet snippet);
-        void onDetachSnippet(SongSnippet snippet);
         void onEditSnippet(SongSnippet snippet);
     }
 
@@ -101,11 +101,11 @@ public class SongSnippetsAdapter extends RecyclerView.Adapter<SongSnippetsAdapte
             }
         });
 
-        // Set up detach button click listener
-        holder.detachButton.setOnClickListener(v -> {
-            if (listener != null) {
-                listener.onDetachSnippet(snippet);
-            }
+        // Mode button: cycles the end-behaviour of the currently-playing snippet
+        // (Stop → Loop → Detach → Stop) and reflects the new mode immediately.
+        holder.modeButton.setOnClickListener(v -> {
+            PlaybackManager.getInstance().cycleSnippetEndMode();
+            bindModeButton(holder, snippet);
         });
 
         // Set up long click for editing
@@ -154,6 +154,8 @@ public class SongSnippetsAdapter extends RecyclerView.Adapter<SongSnippetsAdapte
         holder.snippetPlayButton.setImageResource(
                 active ? R.drawable.stop_circle_filled : R.drawable.play_circle_filled);
 
+        bindModeButton(holder, snippet);
+
         if (!isThisSong || playbackPositionMs < 0) {
             // Not the playing song: leave whatever position the bar holds.
             cancelAnimator(holder);
@@ -180,6 +182,66 @@ public class SongSnippetsAdapter extends RecyclerView.Adapter<SongSnippetsAdapte
         cancelAnimator(holder);
         int target = (int) Math.min(max, playbackPositionMs - start);
         bar.setProgress(target);
+    }
+
+    /**
+     * Drive the mode button. Two cases show it:
+     *   - the snippet currently playing/paused: glyph reflects the live end-mode;
+     *   - a natural passthrough — a normal song playing through this snippet's
+     *     range (not snippet playback): show the continue/passthrough glyph,
+     *     since that is exactly what is happening.
+     * Otherwise it is hidden. At most one row shows it.
+     */
+    private void bindModeButton(SnippetViewHolder holder, SongSnippet snippet) {
+        PlaybackManager pm = PlaybackManager.getInstance();
+        SongSnippet current = pm.getCurrentSnippet();
+        // Match on uuid rather than object reference: a snippet can be re-fetched
+        // into a fresh instance between the play call and this bind, and every
+        // snippet (including unsaved/preview ones) carries a stable uuid.
+        boolean isCurrentRow = pm.isSnippetPlaying() && current != null
+                && current.getUuid() != null && current.getUuid().equals(snippet.getUuid());
+
+        int glyph;
+        if (isCurrentRow) {
+            switch (pm.getSnippetEndMode()) {
+                case LOOP:
+                    glyph = R.drawable.snippet_mode_loop;
+                    break;
+                case DETACH:
+                    glyph = R.drawable.snippet_mode_detach;
+                    break;
+                case STOP:
+                default:
+                    glyph = R.drawable.snippet_mode_stop;
+                    break;
+            }
+        } else if (isNaturalPassthrough(snippet)) {
+            glyph = R.drawable.snippet_mode_detach;
+        } else {
+            holder.modeButton.setVisibility(View.GONE);
+            return;
+        }
+
+        // Only the active row's button cycles the mode; a passthrough glyph is
+        // purely informational, so it stays visible but non-interactive.
+        holder.modeButton.setEnabled(isCurrentRow);
+        holder.modeButton.setVisibility(View.VISIBLE);
+        holder.modeButton.setImageResource(glyph);
+        // The glyph itself distinguishes the mode; keep it a constant white so
+        // the mode isn't also signalled by colour.
+        holder.modeButton.setColorFilter(android.graphics.Color.WHITE);
+    }
+
+    // True when a normal (non-snippet) playhead is currently inside this
+    // snippet's range — the song is naturally passing through the snippet.
+    private boolean isNaturalPassthrough(SongSnippet snippet) {
+        if (PlaybackManager.getInstance().isSnippetMode()) return false;
+        boolean isThisSong = playingSongId != null
+                && (playingSongId.equals(snippet.getSongId())
+                    || (variantUris != null && variantUris.contains(playingSongId)));
+        return isThisSong && isPlaying
+                && playbackPositionMs >= snippet.getStartTime()
+                && playbackPositionMs <= snippet.getEndTime();
     }
 
     private void cancelAnimator(SnippetViewHolder holder) {
@@ -221,8 +283,7 @@ public class SongSnippetsAdapter extends RecyclerView.Adapter<SongSnippetsAdapte
         holder.snippetSeekBar.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(theme.seekbarTrack));
         holder.snippetSeekBar.setThumbTintList(android.content.res.ColorStateList.valueOf(theme.seekbarThumb));
 
-        // Icons + play button.
-        holder.detachButton.setColorFilter(theme.icon);
+        // Mode button tint is set per-mode in bindModeButton; play button below.
         holder.snippetPlayButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(theme.playButton));
         // Play/stop glyph: black or white depending on the play button's brightness.
         holder.snippetPlayButton.setImageTintList(android.content.res.ColorStateList.valueOf(theme.playButtonIcon));
@@ -283,7 +344,7 @@ public class SongSnippetsAdapter extends RecyclerView.Adapter<SongSnippetsAdapte
         TextView snippetTimeRange;
         SeekBar snippetSeekBar;
         FloatingActionButton snippetPlayButton;
-        ImageButton detachButton;
+        ImageButton modeButton;
         ValueAnimator seekAnimator;
         boolean active;
 
@@ -295,7 +356,7 @@ public class SongSnippetsAdapter extends RecyclerView.Adapter<SongSnippetsAdapte
             snippetTimeRange = itemView.findViewById(R.id.snippetTimeRange);
             snippetSeekBar = itemView.findViewById(R.id.snippetSeekBar);
             snippetPlayButton = itemView.findViewById(R.id.snippetPlayButton);
-            detachButton = itemView.findViewById(R.id.detachButton);
+            modeButton = itemView.findViewById(R.id.modeButton);
         }
     }
 }
