@@ -51,7 +51,9 @@ public class SettingsActivity extends BaseActivity {
         setupImportExportButtons();
 
         setupSnippetPlaybackSettings();
-      
+
+        setupEndOfQueueSettings();
+
         setupDeviceChooser();
         setupDeviceCheckSettings();
       
@@ -187,7 +189,21 @@ public class SettingsActivity extends BaseActivity {
     }
   
     //#endregion
-  
+
+    //#region End of Queue Option
+
+    // The end-of-queue boundary policy (ADR-0002). Default false = Recommendations
+    // (let Spotify autoplay continue); true = Stop (pause at the boundary). Read by
+    // PlaybackManager.currentBoundaryMode() from the same TunaroPrefs key.
+    private void setupEndOfQueueSettings() {
+        SwitchCompat stopAtQueueEndSwitch = findViewById(R.id.stop_at_queue_end_switch);
+        stopAtQueueEndSwitch.setChecked(prefs.getBoolean("stop_at_queue_end", false));
+        stopAtQueueEndSwitch.setOnCheckedChangeListener((buttonView, isChecked) ->
+                prefs.edit().putBoolean("stop_at_queue_end", isChecked).apply());
+    }
+
+    //#endregion
+
     //#region Device Chooser Option
 
     private void setupDeviceChooser() {
