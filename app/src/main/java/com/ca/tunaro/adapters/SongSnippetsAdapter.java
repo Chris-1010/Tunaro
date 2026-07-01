@@ -195,7 +195,11 @@ public class SongSnippetsAdapter extends RecyclerView.Adapter<SongSnippetsAdapte
     private void bindModeButton(SnippetViewHolder holder, SongSnippet snippet) {
         PlaybackManager pm = PlaybackManager.getInstance();
         SongSnippet current = pm.getCurrentSnippet();
-        boolean isCurrentRow = pm.isSnippetPlaying() && current != null && current == snippet;
+        // Match on uuid rather than object reference: a snippet can be re-fetched
+        // into a fresh instance between the play call and this bind, and every
+        // snippet (including unsaved/preview ones) carries a stable uuid.
+        boolean isCurrentRow = pm.isSnippetPlaying() && current != null
+                && current.getUuid() != null && current.getUuid().equals(snippet.getUuid());
 
         int glyph;
         if (isCurrentRow) {
@@ -218,6 +222,9 @@ public class SongSnippetsAdapter extends RecyclerView.Adapter<SongSnippetsAdapte
             return;
         }
 
+        // Only the active row's button cycles the mode; a passthrough glyph is
+        // purely informational, so it stays visible but non-interactive.
+        holder.modeButton.setEnabled(isCurrentRow);
         holder.modeButton.setVisibility(View.VISIBLE);
         holder.modeButton.setImageResource(glyph);
         // The glyph itself distinguishes the mode; keep it a constant white so

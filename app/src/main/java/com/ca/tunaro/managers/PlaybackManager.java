@@ -525,14 +525,15 @@ public class PlaybackManager {
         if (spotifyAppRemote != null && isConnected) {
             checkPlaybackDevice();
             if (isPlaying) {
-                // Pausing mid-snippet holds the end-timer so it can't fire while
-                // the song is paused; resuming continues from the time that was left.
-                if (isSnippetMode) {
-                    holdSnippetEndTimer();
-                }
                 spotifyAppRemote.getPlayerApi().pause()
                         .setResultCallback(empty -> {
                             isPlaying = false;
+                            // Hold the end-timer once the pause has actually taken effect,
+                            // so it can't fire while paused; resuming continues from the
+                            // time that was left.
+                            if (isSnippetMode) {
+                                holdSnippetEndTimer();
+                            }
                             notifyPlaybackStateChanged();
                         });
             } else {
@@ -865,8 +866,13 @@ public class PlaybackManager {
                 if (snippet != null && spotifyAppRemote != null && spotifyAppRemote.isConnected()) {
                     long start = snippet.getStartTime();
                     spotifyAppRemote.getPlayerApi().seekTo(start)
-                            .setResultCallback(seekResult ->
-                                    startSnippetEndTimer(snippet.getEndTime() - start));
+                            .setResultCallback(seekResult -> {
+                                // Guard against a stale seek callback: the snippet may have
+                                // been stopped or swapped out while the seek was in flight.
+                                if (isSnippetMode && currentSnippet == snippet) {
+                                    startSnippetEndTimer(snippet.getEndTime() - start);
+                                }
+                            });
                 }
                 break;
 
