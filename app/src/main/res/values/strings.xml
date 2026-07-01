@@ -34,6 +34,7 @@
     <string name="snippets_tab">Snippets</string>
     <string name="notes">Notes</string>
     <string name="toggle_snippet_playback">Toggle Snippet Playback</string>
+    <string name="cycle_snippet_end_mode">Cycle snippet end behaviour: stop, loop, continue</string>
 
     <string name="popularity_value">%d%%</string>
     <string name="more_details_url">https://songstats.com/</string>
