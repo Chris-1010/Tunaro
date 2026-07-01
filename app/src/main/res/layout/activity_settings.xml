@@ -243,10 +243,18 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="32dp"
                 android:layout_marginBottom="16dp"
-                android:text="Playback Device Check"
+                android:text="Playback Device"
                 android:textColor="@color/white"
                 android:textSize="20sp"
                 android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/choose_device_button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="24dp"
+                android:text="Choose Playback Device"
+                android:textSize="16sp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
