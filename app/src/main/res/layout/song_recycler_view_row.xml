@@ -152,6 +152,16 @@
                 app:layout_constraintTop_toTopOf="parent">
 
                 <ImageView
+                    android:id="@+id/addedIcon"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_marginBottom="4dp"
+                    android:contentDescription="@string/empty"
+                    android:src="@drawable/ic_check_circle_green"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
+
+                <ImageView
                     android:id="@+id/hasNotesIcon"
                     android:layout_width="18dp"
                     android:layout_height="18dp"

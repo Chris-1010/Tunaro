@@ -43,7 +43,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     private static final String TAG = "DatabaseHelper";
     private static final String DATABASE_NAME = "TunaroDB";
-    private static final int DATABASE_VERSION = 13;
+    private static final int DATABASE_VERSION = 14;
 
     // Table names
     private static final String TABLE_ARTISTS = "artists";
@@ -64,6 +64,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     // Artists columns
     private static final String COLUMN_ARTIST_ID = "artist_id";
     private static final String COLUMN_ARTIST_NAME = "name";
+    private static final String COLUMN_ARTIST_IMAGE_URL = "image_url";
+    private static final String COLUMN_ARTIST_FOLLOWERS = "followers";
+    private static final String COLUMN_ARTIST_POPULARITY = "popularity";
+    private static final String COLUMN_ARTIST_GENRES = "genres";
+    private static final String COLUMN_ARTIST_FETCHED_AT = "fetched_at";
 
     // Albums columns
     private static final String COLUMN_ALBUM_ID = "album_id";
@@ -123,7 +128,12 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String CREATE_TABLE_ARTISTS =
             "CREATE TABLE " + TABLE_ARTISTS + "("
                     + COLUMN_ARTIST_ID + " TEXT PRIMARY KEY,"
-                    + COLUMN_ARTIST_NAME + " TEXT NOT NULL"
+                    + COLUMN_ARTIST_NAME + " TEXT NOT NULL,"
+                    + COLUMN_ARTIST_IMAGE_URL + " TEXT,"
+                    + COLUMN_ARTIST_FOLLOWERS + " INTEGER,"
+                    + COLUMN_ARTIST_POPULARITY + " INTEGER,"
+                    + COLUMN_ARTIST_GENRES + " TEXT,"
+                    + COLUMN_ARTIST_FETCHED_AT + " TEXT"
                     + ")";
 
     private static final String CREATE_TABLE_ALBUMS =
@@ -386,6 +396,19 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             oldVersion = 13;
         }
 
+        if (oldVersion == 13) {
+            // v13→v14: cache ArtistView header stats on the artists table so a revisit can render
+            // instantly while a fresh getArtist call refreshes in the background. fetched_at marks
+            // when the stats were last written so first-ever visits can be told apart (NULL) and shimmer.
+            db.execSQL("ALTER TABLE " + TABLE_ARTISTS + " ADD COLUMN " + COLUMN_ARTIST_IMAGE_URL + " TEXT");
+            db.execSQL("ALTER TABLE " + TABLE_ARTISTS + " ADD COLUMN " + COLUMN_ARTIST_FOLLOWERS + " INTEGER");
+            db.execSQL("ALTER TABLE " + TABLE_ARTISTS + " ADD COLUMN " + COLUMN_ARTIST_POPULARITY + " INTEGER");
+            db.execSQL("ALTER TABLE " + TABLE_ARTISTS + " ADD COLUMN " + COLUMN_ARTIST_GENRES + " TEXT");
+            db.execSQL("ALTER TABLE " + TABLE_ARTISTS + " ADD COLUMN " + COLUMN_ARTIST_FETCHED_AT + " TEXT");
+            Log.i(TAG, "DB v14 migration complete");
+            oldVersion = 14;
+        }
+
         if (oldVersion < newVersion) {
             db.execSQL("DROP TABLE IF EXISTS favourite_playlists");
             db.execSQL("DROP TABLE IF EXISTS archived_playlists");
@@ -411,11 +434,142 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     public void upsertArtist(String artistId, String name) {
         SQLiteDatabase db = this.getWritableDatabase();
+        // Insert the id/name pair without clobbering any cached stats an earlier ArtistView
+        // visit may have written. CONFLICT_REPLACE would wipe followers/popularity/etc here.
         ContentValues values = new ContentValues();
         values.put(COLUMN_ARTIST_ID, artistId);
         values.put(COLUMN_ARTIST_NAME, name);
-        db.insertWithOnConflict(TABLE_ARTISTS, null, values, SQLiteDatabase.CONFLICT_REPLACE);
+        long result = db.insertWithOnConflict(TABLE_ARTISTS, null, values, SQLiteDatabase.CONFLICT_IGNORE);
+        if (result == -1) {
+            ContentValues update = new ContentValues();
+            update.put(COLUMN_ARTIST_NAME, name);
+            db.update(TABLE_ARTISTS, update, COLUMN_ARTIST_ID + " = ?", new String[]{artistId});
+        }
         db.close();
+    }
+
+    /** Cached ArtistView header stats. {@code fetchedAt} is null only on a first-ever visit. */
+    public static class ArtistStats {
+        public final String artistId;
+        public final String name;
+        public final String imageUrl;
+        public final Integer followers;
+        public final Integer popularity;
+        public final List<String> genres;
+        public final String fetchedAt;
+
+        public ArtistStats(String artistId, String name, String imageUrl, Integer followers,
+                           Integer popularity, List<String> genres, String fetchedAt) {
+            this.artistId = artistId;
+            this.name = name;
+            this.imageUrl = imageUrl;
+            this.followers = followers;
+            this.popularity = popularity;
+            this.genres = genres;
+            this.fetchedAt = fetchedAt;
+        }
+    }
+
+    // Persist the header stats fetched from getArtist so a later revisit renders instantly.
+    public void upsertArtistStats(String artistId, String name, String imageUrl, Integer followers,
+                                  Integer popularity, List<String> genres) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_ARTIST_ID, artistId);
+        if (name != null) values.put(COLUMN_ARTIST_NAME, name);
+        values.put(COLUMN_ARTIST_IMAGE_URL, imageUrl);
+        values.put(COLUMN_ARTIST_FOLLOWERS, followers);
+        values.put(COLUMN_ARTIST_POPULARITY, popularity);
+        values.put(COLUMN_ARTIST_GENRES, genres != null ? String.join(",", genres) : null);
+        values.put(COLUMN_ARTIST_FETCHED_AT, utcNow());
+
+        long result = db.insertWithOnConflict(TABLE_ARTISTS, null, values, SQLiteDatabase.CONFLICT_IGNORE);
+        if (result == -1) {
+            db.update(TABLE_ARTISTS, values, COLUMN_ARTIST_ID + " = ?", new String[]{artistId});
+        }
+        db.close();
+    }
+
+    // Returns cached header stats, or null if the artist row doesn't exist yet.
+    public ArtistStats getArtistStats(String artistId) {
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT " + COLUMN_ARTIST_ID + ", " + COLUMN_ARTIST_NAME + ", " + COLUMN_ARTIST_IMAGE_URL +
+                        ", " + COLUMN_ARTIST_FOLLOWERS + ", " + COLUMN_ARTIST_POPULARITY +
+                        ", " + COLUMN_ARTIST_GENRES + ", " + COLUMN_ARTIST_FETCHED_AT +
+                        " FROM " + TABLE_ARTISTS + " WHERE " + COLUMN_ARTIST_ID + " = ?",
+                new String[]{artistId});
+        ArtistStats stats = null;
+        if (cursor.moveToFirst()) {
+            String genresRaw = cursor.getString(5);
+            List<String> genres = new ArrayList<>();
+            if (genresRaw != null && !genresRaw.isEmpty()) {
+                for (String g : genresRaw.split(",")) {
+                    if (!g.isEmpty()) genres.add(g);
+                }
+            }
+            stats = new ArtistStats(
+                    cursor.getString(0),
+                    cursor.getString(1),
+                    cursor.getString(2),
+                    cursor.isNull(3) ? null : cursor.getInt(3),
+                    cursor.isNull(4) ? null : cursor.getInt(4),
+                    genres,
+                    cursor.getString(6));
+        }
+        cursor.close();
+        db.close();
+        return stats;
+    }
+
+    /**
+     * The artist's locally-known songs that are actively in a favourite OR archived playlist.
+     * Backs the ArtistView "added songs" sheet. Deduplicated by URI and ordered by name.
+     */
+    public List<SongModel> getArtistSongsInFavOrArchivedPlaylists(String artistId) {
+        List<SongModel> songs = new ArrayList<>();
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT DISTINCT s." + COLUMN_SPOTIFY_URI + ", s." + COLUMN_SONG_NAME +
+                        ", s." + COLUMN_DURATION_MS + ", s." + COLUMN_SPOTIFY_URI +
+                        ", s." + COLUMN_POPULARITY + ", a." + COLUMN_COVER_IMAGE_URL +
+                        ", a." + COLUMN_ALBUM_NAME + ", a." + COLUMN_RELEASE_DATE +
+                        ", ar." + COLUMN_ARTIST_NAME +
+                        " FROM " + TABLE_SONG_ARTISTS + " tgt" +
+                        " JOIN " + TABLE_SONGS + " s ON s." + COLUMN_SPOTIFY_URI + " = tgt." + COLUMN_SPOTIFY_URI +
+                        " JOIN " + TABLE_SONG_PLAYLISTS + " sp ON sp." + COLUMN_SPOTIFY_URI + " = s." + COLUMN_SPOTIFY_URI +
+                        " AND sp." + COLUMN_REMOVED_AT + " IS NULL" +
+                        " JOIN " + TABLE_PLAYLISTS + " p ON p." + COLUMN_PLAYLIST_ID + " = sp." + COLUMN_PLAYLIST_ID +
+                        " AND (p." + COLUMN_IS_FAVOURITE + " = 1 OR p." + COLUMN_IS_ARCHIVED + " = 1)" +
+                        " LEFT JOIN " + TABLE_ALBUMS + " a ON s." + COLUMN_ALBUM_ID + " = a." + COLUMN_ALBUM_ID +
+                        " LEFT JOIN " + TABLE_SONG_ARTISTS + " sa ON s." + COLUMN_SPOTIFY_URI + " = sa." + COLUMN_SPOTIFY_URI + " AND sa." + COLUMN_POSITION + " = 0" +
+                        " LEFT JOIN " + TABLE_ARTISTS + " ar ON sa." + COLUMN_ARTIST_ID + " = ar." + COLUMN_ARTIST_ID +
+                        " WHERE tgt." + COLUMN_ARTIST_ID + " = ?" +
+                        " ORDER BY s." + COLUMN_SONG_NAME + " ASC",
+                new String[]{artistId});
+        if (cursor.moveToFirst()) {
+            do { songs.add(leanSongFromCursor(cursor)); } while (cursor.moveToNext());
+        }
+        cursor.close();
+        db.close();
+        return songs;
+    }
+
+    /** URIs of the artist's locally-known songs, regardless of playlist membership. Used to flag
+     *  "added" songs in the discography Songs tab. */
+    public java.util.Set<String> getArtistLocalSongUris(String artistId) {
+        java.util.Set<String> uris = new java.util.HashSet<>();
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT " + COLUMN_SPOTIFY_URI + " FROM " + TABLE_SONG_ARTISTS +
+                        " WHERE " + COLUMN_ARTIST_ID + " = ?",
+                new String[]{artistId});
+        if (cursor.moveToFirst()) {
+            do { uris.add(cursor.getString(0)); } while (cursor.moveToNext());
+        }
+        cursor.close();
+        db.close();
+        return uris;
     }
 
     //#endregion
