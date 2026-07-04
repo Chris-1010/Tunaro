@@ -19,6 +19,7 @@ import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.services.AutomaticFetcher;
 import com.ca.tunaro.services.SongRefreshService;
 import com.ca.tunaro.utils.DeviceChecker;
+import com.ca.tunaro.utils.SecurePrefs;
 import com.ca.tunaro.utils.PlaylistSetup;
 import com.ca.tunaro.utils.PoolingSpotifyHttpManager;
 import com.ca.tunaro.R;
@@ -242,7 +243,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean tryRestoreSession() {
-        SharedPreferences spotifyPrefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
+        SharedPreferences spotifyPrefs = SecurePrefs.get(getApplicationContext(), "SpotifyPrefs");
         String accessToken = spotifyPrefs.getString("spotify_access_token", null);
         String refreshToken = spotifyPrefs.getString("spotify_refresh_token", null);
 
@@ -284,7 +285,7 @@ public class MainActivity extends AppCompatActivity {
 
                     // Save profile info to SharedPreferences for use by other activities
                     String imageUrl = user.getImages().length > 0 ? user.getImages()[0].getUrl() : null;
-                    SharedPreferences prefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
+                    SharedPreferences prefs = SecurePrefs.get(getApplicationContext(), "SpotifyPrefs");
                     prefs.edit()
                             .putString("spotify_display_name", userDisplayName)
                             .putString("spotify_profile_image_url", imageUrl)
@@ -588,7 +589,7 @@ public class MainActivity extends AppCompatActivity {
     public CompletableFuture<String> refreshAccessToken() {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                SharedPreferences prefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
+                SharedPreferences prefs = SecurePrefs.get(getApplicationContext(), "SpotifyPrefs");
                 String refreshToken = prefs.getString("spotify_refresh_token", null);
 
                 if (refreshToken == null) {
@@ -742,7 +743,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void saveTokens(String accessToken, String refreshToken, int expiresIn) {
-        SharedPreferences prefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
+        SharedPreferences prefs = SecurePrefs.get(getApplicationContext(), "SpotifyPrefs");
         prefs.edit()
             .putString("spotify_access_token", accessToken)
             .putString("spotify_refresh_token", refreshToken)
@@ -763,7 +764,7 @@ public class MainActivity extends AppCompatActivity {
     private static final long TOKEN_EXPIRY_SKEW_MS = 60_000L;
 
     private boolean isAccessTokenExpired() {
-        SharedPreferences prefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
+        SharedPreferences prefs = SecurePrefs.get(getApplicationContext(), "SpotifyPrefs");
         long expiresAt = prefs.getLong("spotify_expires_at", 0L);
         // No recorded expiry (e.g. token saved by an older app version) — treat as expired
         // to force one refresh and start tracking the deadline.
