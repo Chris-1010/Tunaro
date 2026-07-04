@@ -54,6 +54,10 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     protected View playbackBarBackground;
     protected SeekBar playbackSeekbar;
     private boolean isSeeking = false;
+    // Magnet-to-start window (ms): dragging the seekbar within this fixed
+    // distance of the beginning snaps to 0. Fixed, not a percentage, so it never
+    // swallows the intro of a long track (#105).
+    private static final int SEEK_SNAP_TO_START_MS = 2000;
     protected ImageView albumCover;
     protected TextView songName;
     protected TextView artistName;
@@ -221,12 +225,14 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
             playbackSeekbar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override
                 public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-//                    if (fromUser && isSeeking) {
-//                        // Update position text if it exists
-//                        if (positionText != null) {
-//                            positionText.setText(formatDuration(progress));
-//                        }
-//                    }
+                    if (fromUser && progress > 0 && progress <= SEEK_SNAP_TO_START_MS) {
+                        // Magnet-to-start: while the drag is within the window of the
+                        // beginning, pull the thumb to 0 live so releasing restarts the
+                        // track. Snapping the progress here makes onStopTrackingTouch
+                        // read 0 and seek accordingly. The resulting fromUser=false
+                        // callback lands at progress 0, so this does not re-fire.
+                        seekBar.setProgress(0);
+                    }
                 }
 
                 @Override
