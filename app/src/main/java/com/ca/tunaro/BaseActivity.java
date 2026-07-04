@@ -56,7 +56,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     private boolean isSeeking = false;
     // Magnet-to-start window: dragging the seekbar within this fraction of the
     // track duration from the beginning snaps to 0 (#105).
-    private static final float SEEK_SNAP_TO_START_FRACTION = 0.15f;
+    private static final float SEEK_SNAP_TO_START_FRACTION = 0.08f;
     protected ImageView albumCover;
     protected TextView songName;
     protected TextView artistName;
