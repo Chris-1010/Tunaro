@@ -80,6 +80,14 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     private static final String SORT_PREF_KEY = "playlist_sort_option";
     private static final String SORT_DIRECTION_KEY = "playlist_sort_direction";
 
+    // Date added filter (global: shared across all playlists)
+    private Spinner dateFilterSpinner;
+    private int dateFilterOption = 0;
+    private static final String DATE_FILTER_PREF_KEY = "playlist_date_filter";
+    private static final int DATE_FILTER_ALL = 0;
+    private static final int DATE_FILTER_MONTH = 1;
+    private static final int DATE_FILTER_SEASON = 2;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -164,6 +172,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                         // Setup search and sorting after songs are loaded
                         setupSearch();
                         setupSorting();
+                        setupDateFilter();
 
                         // Only cache if needed
                         if (result.needsCaching) {
@@ -350,7 +359,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         ArrayList<SongModel> filteredList = new ArrayList<>();
         String lowercaseQuery = query.toLowerCase().trim();
 
-        for (SongModel song : allSongs) {  // Use allSongs for filtering
+        for (SongModel song : getDateFilteredSongs()) {  // Search within the date-filtered set
             if (song.getName().toLowerCase().contains(lowercaseQuery) ||
                     song.getArtist().toLowerCase().contains(lowercaseQuery) ||
                     song.getAlbumName().toLowerCase().contains(lowercaseQuery)) {
@@ -470,6 +479,111 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             public void onNothingSelected(AdapterView<?> parent) {
             }
         });
+    }
+
+    private ArrayAdapter<String> createSpinnerAdapter(String[] options) {
+        ArrayAdapter<String> spinnerAdapter = new ArrayAdapter<String>(this, R.layout.spinner_dropdown_item, options) {
+            @Override
+            public View getView(int position, View convertView, android.view.ViewGroup parent) {
+                // Create a completely custom TextView programmatically for selected item
+                TextView textView = new TextView(getContext());
+                textView.setText(getItem(position));
+                textView.setTextColor(Color.WHITE);
+                textView.setTextSize(16);
+                textView.setPadding(0, 0, 0, 0);  // No padding - spinner already has padding
+                textView.setGravity(android.view.Gravity.CENTER_VERTICAL);
+                textView.setSingleLine(true);
+                textView.setEllipsize(null);
+
+                // Set layout parameters to ensure text isn't clipped
+                android.view.ViewGroup.LayoutParams params = new android.view.ViewGroup.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                );
+                textView.setLayoutParams(params);
+
+                return textView;
+            }
+        };
+        spinnerAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
+        return spinnerAdapter;
+    }
+
+    private void setupDateFilter() {
+        dateFilterSpinner = findViewById(R.id.date_filter_spinner);
+
+        String[] dateFilterOptions = new String[]{"All Time", "This Month", "This Season"};
+        dateFilterSpinner.setAdapter(createSpinnerAdapter(dateFilterOptions));
+
+        // Load saved preference (shared across all playlists)
+        dateFilterOption = prefs.getInt(DATE_FILTER_PREF_KEY, DATE_FILTER_ALL);
+        dateFilterSpinner.setSelection(dateFilterOption);
+
+        dateFilterSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                dateFilterOption = position;
+                prefs.edit().putInt(DATE_FILTER_PREF_KEY, position).apply();
+
+                // If there's an active search, re-filter to maintain search results
+                String currentQuery = searchBar.getText().toString();
+                if (!currentQuery.isEmpty()) {
+                    filterSongs(currentQuery);
+                } else {
+                    sortSongs(sortSpinner.getSelectedItemPosition());
+                }
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+    }
+
+    /**
+     * Returns the songs that pass the current date-added filter.
+     */
+    private ArrayList<SongModel> getDateFilteredSongs() {
+        if (dateFilterOption == DATE_FILTER_ALL) {
+            return new ArrayList<>(allSongs);
+        }
+
+        Date filterStart = getDateFilterStart(dateFilterOption);
+        ArrayList<SongModel> filteredSongs = new ArrayList<>();
+        for (SongModel song : allSongs) {
+            Date dateAdded = song.getDateAddedToPlaylist();
+            if (dateAdded != null && !dateAdded.before(filterStart)) {
+                filteredSongs.add(song);
+            }
+        }
+        return filteredSongs;
+    }
+
+    /**
+     * Returns the earliest date-added a song can have to pass the given filter:
+     * the first day of the current month, or the first day of the current
+     * meteorological season (Dec-Feb, Mar-May, Jun-Aug, Sep-Nov).
+     */
+    private static Date getDateFilterStart(int filterOption) {
+        java.util.Calendar calendar = java.util.Calendar.getInstance();
+        calendar.set(java.util.Calendar.DAY_OF_MONTH, 1);
+        calendar.set(java.util.Calendar.HOUR_OF_DAY, 0);
+        calendar.set(java.util.Calendar.MINUTE, 0);
+        calendar.set(java.util.Calendar.SECOND, 0);
+        calendar.set(java.util.Calendar.MILLISECOND, 0);
+
+        if (filterOption == DATE_FILTER_SEASON) {
+            int month = calendar.get(java.util.Calendar.MONTH);
+            int seasonStartMonth = ((month + 1) / 3) * 3 - 1;
+            if (seasonStartMonth < 0) {
+                // Jan/Feb belong to the winter that started in December of last year
+                calendar.add(java.util.Calendar.YEAR, -1);
+                seasonStartMonth = java.util.Calendar.DECEMBER;
+            }
+            calendar.set(java.util.Calendar.MONTH, seasonStartMonth);
+        }
+
+        return calendar.getTime();
     }
 
     private void updateSortDirectionIcon() {
@@ -610,7 +724,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     private void sortSongs(int sortOption) {
         if (adapter == null || selectedPlaylist == null) return;
 
-        ArrayList<SongModel> songs = new ArrayList<>(allSongs);
+        ArrayList<SongModel> songs = getDateFilteredSongs();
 
         applySortToList(songs, sortOption);
         adapter.updateSongs(songs);
