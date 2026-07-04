@@ -11,7 +11,7 @@
         android:id="@+id/rankings_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
+        android:layout_marginTop="40dp"
         android:text="Rankings"
         android:textColor="@color/white"
         android:textSize="30sp"
@@ -20,24 +20,296 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <TextView
-        android:id="@+id/placeholder_text"
-        android:layout_width="wrap_content"
+    <!-- Setup phase: choose the tournament size and start -->
+    <LinearLayout
+        android:id="@+id/setup_phase"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Coming Soon!"
-        android:textColor="@color/white"
-        android:textSize="24sp"
+        android:layout_marginStart="32dp"
+        android:layout_marginEnd="32dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toBottomOf="@+id/rankings_title"
+        app:layout_constraintVertical_bias="0.35">
 
-    <Button
-        android:id="@+id/back_button"
-        android:layout_width="wrap_content"
+        <TextView
+            android:id="@+id/pool_summary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAlignment="center"
+            android:textColor="@color/white"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/size_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:text="Tournament size"
+            android:textColor="@color/faintTanAccent"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/tournament_size_spinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="#1AFFFFFF"
+            android:padding="8dp"
+            android:popupBackground="#222222" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/start_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:backgroundTint="@color/tanAccent"
+            android:padding="12dp"
+            android:text="Start Tournament"
+            android:textColor="@color/black"
+            android:textSize="16sp"
+            app:cornerRadius="24dp" />
+
+    </LinearLayout>
+
+    <!-- Match phase: two contenders, tap the preferred song -->
+    <LinearLayout
+        android:id="@+id/match_phase"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="32dp"
-        android:text="Back"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/rankings_title"
+        app:layout_constraintVertical_bias="0.3">
+
+        <TextView
+            android:id="@+id/round_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/tanAccent"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/match_progress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="@color/white"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/match_instruction"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Tap the song you prefer"
+            android:textColor="@color/faintTanAccent"
+            android:textSize="14sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/song_card_a"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true"
+                app:cardBackgroundColor="#E0E0E0"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <ImageView
+                        android:id="@+id/cover_a"
+                        android:layout_width="110dp"
+                        android:layout_height="110dp"
+                        android:scaleType="centerCrop" />
+
+                    <TextView
+                        android:id="@+id/song_name_a"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:ellipsize="end"
+                        android:maxLines="2"
+                        android:textAlignment="center"
+                        android:textColor="@color/black"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/artist_name_a"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textAlignment="center"
+                        android:textColor="@color/black"
+                        android:textSize="12sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/preview_button_a"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:backgroundTint="@color/purpleTheme"
+                        android:text="Preview"
+                        android:textColor="@color/white"
+                        android:textSize="12sp"
+                        app:cornerRadius="18dp" />
+
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <TextView
+                android:id="@+id/vs_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:text="VS"
+                android:textColor="@color/white"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/song_card_b"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true"
+                app:cardBackgroundColor="#E0E0E0"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <ImageView
+                        android:id="@+id/cover_b"
+                        android:layout_width="110dp"
+                        android:layout_height="110dp"
+                        android:scaleType="centerCrop" />
+
+                    <TextView
+                        android:id="@+id/song_name_b"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:ellipsize="end"
+                        android:maxLines="2"
+                        android:textAlignment="center"
+                        android:textColor="@color/black"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/artist_name_b"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textAlignment="center"
+                        android:textColor="@color/black"
+                        android:textSize="12sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/preview_button_b"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:backgroundTint="@color/purpleTheme"
+                        android:text="Preview"
+                        android:textColor="@color/white"
+                        android:textSize="12sp"
+                        app:cornerRadius="18dp" />
+
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Results phase: the final leaderboard -->
+    <LinearLayout
+        android:id="@+id/results_phase"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@+id/playback_bar"
+        app:layout_constraintTop_toBottomOf="@+id/rankings_title">
+
+        <TextView
+            android:id="@+id/leaderboard_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Your Leaderboard"
+            android:textColor="@color/tanAccent"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/leaderboard_recycler_view"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="16dp"
+            android:layout_weight="1"
+            tools:listitem="@layout/item_leaderboard_entry" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/restart_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            android:backgroundTint="@color/tanAccent"
+            android:padding="12dp"
+            android:text="Play Again"
+            android:textColor="@color/black"
+            android:textSize="16sp"
+            app:cornerRadius="24dp" />
+
+    </LinearLayout>
+
+    <include
+        android:id="@+id/playback_bar"
+        layout="@layout/playback_bar"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/playback_bar_height"
+        android:layout_gravity="bottom"
+        android:layout_marginBottom="10dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
