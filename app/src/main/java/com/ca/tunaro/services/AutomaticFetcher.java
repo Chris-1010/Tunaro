@@ -10,6 +10,7 @@ import android.widget.Toast;
 import com.ca.tunaro.activites.MainActivity;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.models.SongModel;
+import com.ca.tunaro.utils.SecurePrefs;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -113,7 +114,7 @@ public class AutomaticFetcher {
     }
 
     public FetcherCredentials getStoredCredentials() {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        SharedPreferences prefs = SecurePrefs.get(context, PREFS_NAME);
 
         String username = prefs.getString(PREF_USERNAME, null);
         if (username == null) return null;
@@ -128,7 +129,7 @@ public class AutomaticFetcher {
     }
 
     private void storeCredentials(String username, String password, String jwt, String apiKey) {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        SharedPreferences prefs = SecurePrefs.get(context, PREFS_NAME);
         SharedPreferences.Editor editor = prefs.edit()
                 .putString(PREF_USERNAME, username)
                 .putString(PREF_PASSWORD, password)
@@ -140,12 +141,12 @@ public class AutomaticFetcher {
     }
 
     public void setEnabled(boolean enabled) {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        SharedPreferences prefs = SecurePrefs.get(context, PREFS_NAME);
         prefs.edit().putBoolean(PREF_ENABLED, enabled).apply();
     }
 
     public void markAsDeregistered() {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        SharedPreferences prefs = SecurePrefs.get(context, PREFS_NAME);
         prefs.edit()
                 .putBoolean(PREF_REGISTERED, false)
                 .putBoolean(PREF_ENABLED, false)
@@ -153,7 +154,7 @@ public class AutomaticFetcher {
     }
 
     private String getStoredSpotifyRefreshToken() {
-        SharedPreferences prefs = context.getSharedPreferences("SpotifyPrefs", Context.MODE_PRIVATE);
+        SharedPreferences prefs = SecurePrefs.get(context, "SpotifyPrefs");
         return prefs.getString("spotify_refresh_token", null);
     }
     //#endregion
@@ -263,7 +264,7 @@ public class AutomaticFetcher {
         String newApiKey = apiKeyResponse.getApiKey();
 
         // Update stored API key and JWT
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        SharedPreferences prefs = SecurePrefs.get(context, PREFS_NAME);
         prefs.edit()
                 .putString(PREF_API_KEY, newApiKey)
                 .putString(PREF_JWT_TOKEN, jwtToken)
@@ -311,7 +312,7 @@ public class AutomaticFetcher {
         }
 
         // Get expires_in from SharedPreferences (defaults to 3600 seconds / 1 hour)
-        SharedPreferences prefs = context.getSharedPreferences("SpotifyPrefs", Context.MODE_PRIVATE);
+        SharedPreferences prefs = SecurePrefs.get(context, "SpotifyPrefs");
         int expiresIn = prefs.getInt("spotify_expires_in", 3600);
 
         apiClient.importSpotifyTokens(
@@ -361,7 +362,7 @@ public class AutomaticFetcher {
         String freshJwtToken = loginResponse.getAccessToken();
 
         // Update stored JWT token
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        SharedPreferences prefs = SecurePrefs.get(context, PREFS_NAME);
         prefs.edit().putString(PREF_JWT_TOKEN, freshJwtToken).apply();
 
         Log.d(TAG, "Refreshed JWT token for user: " + creds.getUsername());
@@ -574,7 +575,7 @@ public class AutomaticFetcher {
 
     //#region Statistics
     private void updateStatistics(ImportResults results) {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        SharedPreferences prefs = SecurePrefs.get(context, PREFS_NAME);
 
         int currentTotal = prefs.getInt(PREF_TOTAL_IMPORTED, 0);
         prefs.edit()
@@ -585,7 +586,7 @@ public class AutomaticFetcher {
     }
 
     private void updateLastFetchStats(int imported, long timestamp) {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        SharedPreferences prefs = SecurePrefs.get(context, PREFS_NAME);
 
         if (imported > 0) {
             int currentTotal = prefs.getInt(PREF_TOTAL_IMPORTED, 0);
@@ -601,7 +602,7 @@ public class AutomaticFetcher {
     }
 
     public String getStatisticsDisplay() {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        SharedPreferences prefs = SecurePrefs.get(context, PREFS_NAME);
         int totalImported = prefs.getInt(PREF_TOTAL_IMPORTED, 0);
         long lastFetchTime = prefs.getLong(PREF_LAST_FETCH_TIME, 0);
         int fetchCount = prefs.getInt(PREF_TOTAL_FETCH_COUNT, 0);

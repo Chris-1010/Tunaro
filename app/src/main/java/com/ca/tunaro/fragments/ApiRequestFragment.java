@@ -29,6 +29,7 @@ import androidx.fragment.app.Fragment;
 import com.ca.tunaro.R;
 import com.ca.tunaro.activites.MainActivity;
 import com.ca.tunaro.utils.DeveloperHistory;
+import com.ca.tunaro.utils.SecurePrefs;
 import com.ca.tunaro.utils.DarkListDialog;
 import com.ca.tunaro.utils.JsonHighlighter;
 
@@ -401,8 +402,7 @@ public class ApiRequestFragment extends Fragment {
             String token = mainActivity.getSpotifyApi().getAccessToken();
             if (token != null) return token;
         }
-        SharedPreferences prefs =
-                requireContext().getSharedPreferences("SpotifyPrefs", Context.MODE_PRIVATE);
+        SharedPreferences prefs = SecurePrefs.get(requireContext(), "SpotifyPrefs");
         return prefs.getString("spotify_access_token", null);
     }
 

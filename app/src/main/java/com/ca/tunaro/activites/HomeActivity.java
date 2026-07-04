@@ -12,6 +12,7 @@ import androidx.cardview.widget.CardView;
 import com.bumptech.glide.Glide;
 import com.ca.tunaro.BaseActivity;
 import com.ca.tunaro.R;
+import com.ca.tunaro.utils.SecurePrefs;
 import com.google.android.material.button.MaterialButton;
 
 public class HomeActivity extends BaseActivity {
@@ -43,7 +44,7 @@ public class HomeActivity extends BaseActivity {
 
     private void setupProfileImage() {
         ImageView profileImage = findViewById(R.id.user_profile_image);
-        SharedPreferences prefs = getSharedPreferences("SpotifyPrefs", MODE_PRIVATE);
+        SharedPreferences prefs = SecurePrefs.get(getApplicationContext(), "SpotifyPrefs");
         String imageUrl = prefs.getString("spotify_profile_image_url", null);
         if (imageUrl != null && profileImage != null) {
             Glide.with(this)

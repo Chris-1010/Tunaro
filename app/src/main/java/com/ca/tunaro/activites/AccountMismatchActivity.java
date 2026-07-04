@@ -15,6 +15,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.ca.tunaro.R;
 import com.ca.tunaro.database.DatabaseHelper;
+import com.ca.tunaro.utils.SecurePrefs;
 
 public class AccountMismatchActivity extends AppCompatActivity {
     private static final String TAG = "AccountMismatchActivity";
@@ -146,9 +147,9 @@ public class AccountMismatchActivity extends AppCompatActivity {
         deleteDatabase("TunaroDB");
 
         // Clear all SharedPreferences
-        getSharedPreferences("SpotifyPrefs", MODE_PRIVATE).edit().clear().apply();
+        SecurePrefs.get(getApplicationContext(), "SpotifyPrefs").edit().clear().apply();
         getSharedPreferences("TunaroPrefs", MODE_PRIVATE).edit().clear().apply();
-        getSharedPreferences("AutoFetcherPrefs", MODE_PRIVATE).edit().clear().apply();
+        SecurePrefs.get(getApplicationContext(), "AutoFetcherPrefs").edit().clear().apply();
 
         Log.d(TAG, "App data reset complete");
         Toast.makeText(this, "App data has been reset", Toast.LENGTH_SHORT).show();
