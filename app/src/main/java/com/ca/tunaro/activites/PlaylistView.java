@@ -10,6 +10,7 @@ import android.text.TextWatcher;
 import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
+import android.widget.AbsListView;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -66,20 +67,18 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
     // Searching
     private EditText searchBar;
+    private ImageView searchIcon;
+    private boolean searchModeActive = false;
     private ArrayList<SongModel> allSongs = new ArrayList<>();
 
     // Sorting
     private ImageView sortDirectionIcon;
+    private ImageView sortIcon;
     private Spinner sortSpinner;
     private boolean isAscending = false;
     private SharedPreferences prefs;
     private static final String SORT_PREF_KEY = "playlist_sort_option";
     private static final String SORT_DIRECTION_KEY = "playlist_sort_direction";
-
-    // Filter toggle
-    private ImageView filterToggleIcon;
-    private View controlsContainer;
-    private static final String CONTROLS_VISIBLE_KEY = "controls_visible";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -165,7 +164,6 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                         // Setup search and sorting after songs are loaded
                         setupSearch();
                         setupSorting();
-                        setupFilterToggle();
 
                         // Only cache if needed
                         if (result.needsCaching) {
@@ -293,6 +291,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
     private void setupSearch() {
         searchBar = findViewById(R.id.search_bar);
+        searchIcon = findViewById(R.id.search_icon);
 
         searchBar.addTextChangedListener(new TextWatcher() {
             @Override
@@ -308,11 +307,42 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             public void afterTextChanged(Editable s) {
             }
         });
+
+        // The search icon (right of the sort-direction icon) toggles search mode: the sort widgets
+        // are swapped inline for the search field, which is auto-focused with the keyboard shown.
+        searchIcon.setOnClickListener(v -> setSearchMode(!searchModeActive));
+    }
+
+    // Swaps between the sort widgets and the inline search field. Entering focuses the field and
+    // shows the keyboard; leaving clears the query, restores the sort, and hides the keyboard.
+    private void setSearchMode(boolean active) {
+        searchModeActive = active;
+        int sortVis = active ? View.GONE : View.VISIBLE;
+        sortIcon.setVisibility(sortVis);
+        sortSpinner.setVisibility(sortVis);
+        sortDirectionIcon.setVisibility(sortVis);
+        searchBar.setVisibility(active ? View.VISIBLE : View.GONE);
+        searchIcon.setImageResource(active ? R.drawable.ic_close : R.drawable.ic_search);
+
+        android.view.inputmethod.InputMethodManager imm =
+                (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (active) {
+            // Collapse the header so more song rows are visible while searching.
+            AppBarLayout appBarLayout = findViewById(R.id.app_bar);
+            if (appBarLayout != null) appBarLayout.setExpanded(false, true);
+            searchBar.requestFocus();
+            if (imm != null) imm.showSoftInput(searchBar, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+        } else {
+            if (imm != null) imm.hideSoftInputFromWindow(searchBar.getWindowToken(), 0);
+            showNoMatches(false);
+            searchBar.setText(""); // Clearing re-applies the current sort via filterSongs.
+        }
     }
 
     private void filterSongs(String query) {
         if (query == null || query.isEmpty()) {
             // Re-apply current sort when clearing search
+            showNoMatches(false);
             sortSongs(sortSpinner.getSelectedItemPosition());
             return;
         }
@@ -337,17 +367,27 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         adapter.updateSortContext(currentSortOption);
         pushContextualMapsToAdapter(filteredList, currentSortOption);
 
+        showNoMatches(filteredList.isEmpty());
+    }
+
+    private void showNoMatches(boolean show) {
+        View emptyLabel = findViewById(R.id.empty_label);
+        if (emptyLabel != null) emptyLabel.setVisibility(show ? View.VISIBLE : View.GONE);
     }
 
     private void setupSorting() {
         sortDirectionIcon = findViewById(R.id.sort_direction_icon);
+        sortIcon = findViewById(R.id.sort_icon);
         sortSpinner = findViewById(R.id.sort_spinner);
 
         // Initialize SharedPreferences
         prefs = getSharedPreferences("PlaylistPrefs", MODE_PRIVATE);
 
-        // Set up spinner adapter with custom view
+        // Set up spinner adapter with custom view. "Title" (index 2) is intentionally kept in the
+        // array so existing sort/pref indices don't shift, but it is hidden from the dropdown
+        // (search covers title lookup); see getDropDownView.
         String[] sortOptions = new String[]{"Date Added", "Last Listened", "Title", "Length", "Artist", "Popularity", "Listen Count", "Release Date"};
+        final int hiddenTitleIndex = 2;
         ArrayAdapter<String> sortAdapter = new ArrayAdapter<String>(this, R.layout.spinner_dropdown_item, sortOptions) {
             @Override
             public View getView(int position, View convertView, android.view.ViewGroup parent) {
@@ -369,6 +409,21 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 textView.setLayoutParams(params);
 
                 return textView;
+            }
+
+            @Override
+            public View getDropDownView(int position, View convertView, android.view.ViewGroup parent) {
+                // Fully hide the "Title" row so it can't be picked and leaves no visible gap,
+                // without renumbering the option indices the sort logic and prefs rely on.
+                // Returning a fresh zero-height, non-painting View collapses the popup row slot
+                // entirely; mutating the recycled TextView leaves the row's background band behind.
+                if (position == hiddenTitleIndex) {
+                    View blank = new View(getContext());
+                    blank.setLayoutParams(new AbsListView.LayoutParams(
+                            AbsListView.LayoutParams.MATCH_PARENT, 0));
+                    return blank;
+                }
+                return super.getDropDownView(position, null, parent);
             }
         };
         sortAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
@@ -413,35 +468,6 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
             @Override
             public void onNothingSelected(AdapterView<?> parent) {
-            }
-        });
-    }
-
-    private void setupFilterToggle() {
-        filterToggleIcon = findViewById(R.id.filter_toggle_icon);
-        controlsContainer = findViewById(R.id.controls_container);
-
-        // Load saved visibility state
-        boolean controlsVisible = prefs.getBoolean(CONTROLS_VISIBLE_KEY, true); // Default to visible
-        controlsContainer.setVisibility(controlsVisible ? View.VISIBLE : View.GONE);
-
-        // Toggle controls visibility when filter icon is clicked
-        filterToggleIcon.setOnClickListener(v -> {
-            boolean isVisible = controlsContainer.getVisibility() == View.VISIBLE;
-            controlsContainer.setVisibility(isVisible ? View.GONE : View.VISIBLE);
-
-            // Save the state
-            prefs.edit().putBoolean(CONTROLS_VISIBLE_KEY, !isVisible).apply();
-
-            // When hiding controls, reset to Date Added (Newest first) and clear search
-            if (isVisible) {
-                searchBar.setText("");
-                isAscending = false; // Newest first
-                sortSpinner.setSelection(0); // Date Added
-                prefs.edit().putInt(SORT_PREF_KEY, 0).apply();
-                prefs.edit().putBoolean(SORT_DIRECTION_KEY, false).apply();
-                updateSortDirectionIcon();
-                sortSongs(0);
             }
         });
     }
