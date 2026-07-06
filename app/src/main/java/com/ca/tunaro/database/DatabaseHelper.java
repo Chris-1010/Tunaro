@@ -555,9 +555,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return songs;
     }
 
-    /** Full song rows for every locally-known song by the artist, regardless of playlist
-     *  membership. Backs the Songs tab's added-only filter so added songs show even when they
-     *  aren't among the loaded top tracks / discography. */
+    /** Full song rows for the artist's songs that are actively in at least one of the user's
+     *  playlists (song_playlists row with no removed_at). Backs the Songs tab's added-only filter
+     *  so added songs show even when they aren't among the loaded top tracks / discography.
+     *  Merely viewing a song records it in the DB but does not add it to a playlist, so such songs
+     *  are correctly excluded here. */
     public List<SongModel> getArtistLocalSongs(String artistId) {
         List<SongModel> songs = new ArrayList<>();
         SQLiteDatabase db = this.getReadableDatabase();
@@ -569,6 +571,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                         ", ar." + COLUMN_ARTIST_NAME +
                         " FROM " + TABLE_SONG_ARTISTS + " tgt" +
                         " JOIN " + TABLE_SONGS + " s ON s." + COLUMN_SPOTIFY_URI + " = tgt." + COLUMN_SPOTIFY_URI +
+                        " JOIN " + TABLE_SONG_PLAYLISTS + " sp ON sp." + COLUMN_SPOTIFY_URI + " = s." + COLUMN_SPOTIFY_URI +
+                        " AND sp." + COLUMN_REMOVED_AT + " IS NULL" +
                         " LEFT JOIN " + TABLE_ALBUMS + " a ON s." + COLUMN_ALBUM_ID + " = a." + COLUMN_ALBUM_ID +
                         " LEFT JOIN " + TABLE_SONG_ARTISTS + " sa ON s." + COLUMN_SPOTIFY_URI + " = sa." + COLUMN_SPOTIFY_URI + " AND sa." + COLUMN_POSITION + " = 0" +
                         " LEFT JOIN " + TABLE_ARTISTS + " ar ON sa." + COLUMN_ARTIST_ID + " = ar." + COLUMN_ARTIST_ID +
@@ -583,14 +587,18 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return songs;
     }
 
-    /** URIs of the artist's locally-known songs, regardless of playlist membership. Used to flag
-     *  "added" songs in the discography Songs tab. */
+    /** URIs of the artist's songs that are actively in at least one of the user's playlists
+     *  (song_playlists row with no removed_at). Used to flag "added" songs in the discography
+     *  Songs tab. A song merely viewed (and thus recorded in the DB) is not "added" and is excluded. */
     public java.util.Set<String> getArtistLocalSongUris(String artistId) {
         java.util.Set<String> uris = new java.util.HashSet<>();
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
-                "SELECT " + COLUMN_SPOTIFY_URI + " FROM " + TABLE_SONG_ARTISTS +
-                        " WHERE " + COLUMN_ARTIST_ID + " = ?",
+                "SELECT DISTINCT sa." + COLUMN_SPOTIFY_URI +
+                        " FROM " + TABLE_SONG_ARTISTS + " sa" +
+                        " JOIN " + TABLE_SONG_PLAYLISTS + " sp ON sp." + COLUMN_SPOTIFY_URI + " = sa." + COLUMN_SPOTIFY_URI +
+                        " AND sp." + COLUMN_REMOVED_AT + " IS NULL" +
+                        " WHERE sa." + COLUMN_ARTIST_ID + " = ?",
                 new String[]{artistId});
         if (cursor.moveToFirst()) {
             do { uris.add(cursor.getString(0)); } while (cursor.moveToNext());
