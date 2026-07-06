@@ -46,16 +46,39 @@
                 android:textStyle="bold"
                 tools:text="Album Name" />
 
-            <TextView
-                android:id="@+id/albumMeta"
+            <!-- Release-type chip + remaining meta (year · tracks) on the subtitle line -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="3dp"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:textColor="#B3FFFFFF"
-                android:textSize="12sp"
-                tools:text="Album · 2024 · 12 tracks" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/albumTypeBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/rounded_md"
+                    android:backgroundTint="@color/dark_blue"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="4dp"
+                    android:textColor="@android:color/white"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    tools:text="Single" />
+
+                <TextView
+                    android:id="@+id/albumMeta"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="#B3FFFFFF"
+                    android:textSize="12sp"
+                    tools:text="2024 · 12 tracks" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/albumContextual"
@@ -68,19 +91,5 @@
                 tools:text="Popularity: 72/100"
                 tools:visibility="visible" />
         </LinearLayout>
-
-        <TextView
-            android:id="@+id/albumTypeBadge"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/rounded_md"
-            android:backgroundTint="@color/dark_blue"
-            android:paddingHorizontal="10dp"
-            android:paddingVertical="4dp"
-            android:textColor="@android:color/white"
-            android:textSize="11sp"
-            android:textStyle="bold"
-            tools:text="Single" />
     </LinearLayout>
 </androidx.cardview.widget.CardView>

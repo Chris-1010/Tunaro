@@ -59,11 +59,12 @@ public class Album_RecyclerViewAdapter extends RecyclerView.Adapter<Album_Recycl
 
         holder.nameView.setText(album.getName());
 
+        // The release type is shown as the coloured chip, so the meta line carries only year · tracks.
         StringBuilder meta = new StringBuilder();
-        meta.append(capitalise(album.getAlbumType()));
-        if (album.getReleaseYear() > 0) meta.append(" · ").append(album.getReleaseYear());
+        if (album.getReleaseYear() > 0) meta.append(album.getReleaseYear());
         if (album.getTrackCount() >= 0) {
-            meta.append(" · ").append(album.getTrackCount())
+            if (meta.length() > 0) meta.append(" · ");
+            meta.append(album.getTrackCount())
                     .append(album.getTrackCount() == 1 ? " track" : " tracks");
         }
         holder.metaView.setText(meta.toString());
