@@ -362,6 +362,11 @@ public class ArtistView extends BaseActivity {
         updateAddedFilterButtonColor();
         ArtistSongsFragment songs = songsFragment();
         if (songs != null) songs.setAddedOnlyFilter(addedFilterActive);
+        // The filter only affects the Songs tab, so surface it when toggled on from the Albums
+        // tab. Toggling off leaves the current tab alone.
+        if (addedFilterActive && viewPager != null && viewPager.getCurrentItem() != 0) {
+            viewPager.setCurrentItem(0);
+        }
     }
 
     // On: fill the button with the extracted theme colour. Off: the faint translucent tint.
