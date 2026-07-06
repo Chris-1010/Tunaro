@@ -255,13 +255,16 @@ public class MainActivity extends AppCompatActivity {
             return false;
         }
 
-        // Restore session state
+        // Restore session state. The pooling HTTP manager allows concurrent requests on this
+        // shared instance; the default BasicHttpClientConnectionManager permits only one
+        // connection at a time and throws "connection is still allocated" under parallel calls.
         spotifyApi = new SpotifyApi.Builder()
                 .setClientId(CLIENT_ID)
                 .setClientSecret(CLIENT_SECRET)
                 .setRedirectUri(REDIRECT_URI)
                 .setAccessToken(accessToken)
                 .setRefreshToken(refreshToken)
+                .setHttpManager(new PoolingSpotifyHttpManager())
                 .build();
         userID = savedUserId;
         userDisplayName = savedDisplayName;
@@ -425,7 +428,9 @@ public class MainActivity extends AppCompatActivity {
                         // Save both tokens and expiry
                         saveTokens(accessToken, refreshToken, expiresIn);
 
-                        // Initialize SpotifyApi with access token
+                        // Initialize SpotifyApi with access token. Pooling HTTP manager so
+                        // concurrent requests on this shared instance don't collide on a single
+                        // BasicHttpClientConnectionManager connection.
                         runOnUiThread(() -> {
                             spotifyApi = new SpotifyApi.Builder()
                                     .setClientId(CLIENT_ID)
@@ -433,6 +438,7 @@ public class MainActivity extends AppCompatActivity {
                                     .setRedirectUri(REDIRECT_URI)
                                     .setAccessToken(accessToken)
                                     .setRefreshToken(refreshToken)
+                                    .setHttpManager(new PoolingSpotifyHttpManager())
                                     .build();
 
                             // Complete the authentication future
