@@ -47,6 +47,8 @@ public class SongModel implements Serializable, Playable {
         this.popularity = popularity;
         this.albumName = albumName;
         this.releaseDate = releaseDate;
+        // Built from live Spotify tracks (top tracks / album tracks), so playable by default.
+        this.isPlayable = true;
     }
 
     // Full constructor — for SongView, assembled from DB joins

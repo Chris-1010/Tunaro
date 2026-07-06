@@ -555,6 +555,34 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return songs;
     }
 
+    /** Full song rows for every locally-known song by the artist, regardless of playlist
+     *  membership. Backs the Songs tab's added-only filter so added songs show even when they
+     *  aren't among the loaded top tracks / discography. */
+    public List<SongModel> getArtistLocalSongs(String artistId) {
+        List<SongModel> songs = new ArrayList<>();
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT DISTINCT s." + COLUMN_SPOTIFY_URI + ", s." + COLUMN_SONG_NAME +
+                        ", s." + COLUMN_DURATION_MS + ", s." + COLUMN_SPOTIFY_URI +
+                        ", s." + COLUMN_POPULARITY + ", a." + COLUMN_COVER_IMAGE_URL +
+                        ", a." + COLUMN_ALBUM_NAME + ", a." + COLUMN_RELEASE_DATE +
+                        ", ar." + COLUMN_ARTIST_NAME +
+                        " FROM " + TABLE_SONG_ARTISTS + " tgt" +
+                        " JOIN " + TABLE_SONGS + " s ON s." + COLUMN_SPOTIFY_URI + " = tgt." + COLUMN_SPOTIFY_URI +
+                        " LEFT JOIN " + TABLE_ALBUMS + " a ON s." + COLUMN_ALBUM_ID + " = a." + COLUMN_ALBUM_ID +
+                        " LEFT JOIN " + TABLE_SONG_ARTISTS + " sa ON s." + COLUMN_SPOTIFY_URI + " = sa." + COLUMN_SPOTIFY_URI + " AND sa." + COLUMN_POSITION + " = 0" +
+                        " LEFT JOIN " + TABLE_ARTISTS + " ar ON sa." + COLUMN_ARTIST_ID + " = ar." + COLUMN_ARTIST_ID +
+                        " WHERE tgt." + COLUMN_ARTIST_ID + " = ?" +
+                        " ORDER BY s." + COLUMN_SONG_NAME + " ASC",
+                new String[]{artistId});
+        if (cursor.moveToFirst()) {
+            do { songs.add(leanSongFromCursor(cursor)); } while (cursor.moveToNext());
+        }
+        cursor.close();
+        db.close();
+        return songs;
+    }
+
     /** URIs of the artist's locally-known songs, regardless of playlist membership. Used to flag
      *  "added" songs in the discography Songs tab. */
     public java.util.Set<String> getArtistLocalSongUris(String artistId) {

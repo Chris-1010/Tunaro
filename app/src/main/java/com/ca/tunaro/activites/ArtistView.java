@@ -12,6 +12,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.core.graphics.ColorUtils;
+import androidx.fragment.app.Fragment;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -23,7 +24,7 @@ import com.ca.tunaro.BaseActivity;
 import com.ca.tunaro.R;
 import com.ca.tunaro.adapters.ArtistTabAdapter;
 import com.ca.tunaro.database.DatabaseHelper;
-import com.ca.tunaro.fragments.ArtistAddedSongsSheet;
+import com.ca.tunaro.fragments.ArtistSongsFragment;
 import com.ca.tunaro.models.AlbumModel;
 import com.ca.tunaro.utils.ColorExtractor;
 import com.ca.tunaro.utils.SnippetTheme;
@@ -53,6 +54,12 @@ public class ArtistView extends BaseActivity {
 
     private int tabSelectedTextColor = Color.BLACK;
     private int tabUnselectedTextColor = Color.WHITE;
+
+    // Added-songs toggle state. When on, the Songs tab is filtered to locally-added songs and the
+    // button is filled with the extracted theme colour (captured from SnippetTheme.playButton).
+    private boolean addedFilterActive = false;
+    private int addedFilterFillColor = Color.TRANSPARENT;
+    private static final int ADDED_FILTER_OFF_TINT = 0x1AFFFFFF;
 
     // Shared discography state. The fetch is owned here (not in a tab fragment) so it can be
     // triggered from either tab and the result reused by both plus the header summary.
@@ -334,7 +341,9 @@ public class ArtistView extends BaseActivity {
         TextView label = findViewById(R.id.added_songs_label);
 
         DatabaseHelper db = new DatabaseHelper(this);
-        int count = db.getArtistSongsInFavOrArchivedPlaylists(artistId).size();
+        // The toggle reveals exactly the locally-added songs the Songs tab flags with a tick,
+        // so the label counts that same set.
+        int count = db.getArtistLocalSongUris(artistId).size();
         db.close();
 
         if (count == 0) {
@@ -343,10 +352,49 @@ public class ArtistView extends BaseActivity {
         }
         label.setText(count + (count == 1 ? " added song" : " added songs"));
         row.setVisibility(View.VISIBLE);
-        row.setOnClickListener(v -> {
-            ArtistAddedSongsSheet sheet = ArtistAddedSongsSheet.newInstance(artistId, artistName);
-            sheet.show(getSupportFragmentManager(), "artist_added_songs");
-        });
+        row.setOnClickListener(v -> toggleAddedFilter());
+        updateAddedFilterButtonColor();
+    }
+
+    // Flips the added-only filter and pushes the new state to the Songs tab.
+    private void toggleAddedFilter() {
+        addedFilterActive = !addedFilterActive;
+        updateAddedFilterButtonColor();
+        ArtistSongsFragment songs = songsFragment();
+        if (songs != null) songs.setAddedOnlyFilter(addedFilterActive);
+    }
+
+    // On: fill the button with the extracted theme colour. Off: the faint translucent tint.
+    private void updateAddedFilterButtonColor() {
+        View row = findViewById(R.id.added_songs_row);
+        if (row == null) return;
+        row.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                addedFilterActive ? addedFilterFillColor : ADDED_FILTER_OFF_TINT));
+    }
+
+    public boolean isAddedFilterActive() { return addedFilterActive; }
+
+    // When the now-playing song changes, rebind the Songs tab so the active-row highlight and
+    // queued lime edges track playback (matching PlaylistView). A pure play<->pause toggle on the
+    // same song needs no rebind, but a whole-list refresh is cheap and keeps the logic simple.
+    @Override
+    public void onPlaybackStateChanged(boolean isPlaying, com.ca.tunaro.models.SongModel currentSong) {
+        super.onPlaybackStateChanged(isPlaying, currentSong);
+        ArtistSongsFragment songs = songsFragment();
+        if (songs != null) songs.refreshPlaybackState();
+    }
+
+    // Collapses the parallax header (animated) so the song/album rows fill more of the screen.
+    // Called by the tabs when search mode is toggled on.
+    public void collapseHeader() {
+        com.google.android.material.appbar.AppBarLayout appBar = findViewById(R.id.app_bar);
+        if (appBar != null) appBar.setExpanded(false, true);
+    }
+
+    // Locates the live Songs fragment held by the ViewPager2's FragmentStateAdapter.
+    private ArtistSongsFragment songsFragment() {
+        Fragment f = getSupportFragmentManager().findFragmentByTag("f0");
+        return f instanceof ArtistSongsFragment ? (ArtistSongsFragment) f : null;
     }
 
     //#endregion
@@ -573,6 +621,9 @@ public class ArtistView extends BaseActivity {
     }
 
     private void applyTabTheme(SnippetTheme theme) {
+        // Reuse the tab's selected-fill colour for the added-songs toggle's on-state.
+        addedFilterFillColor = theme.playButton;
+        updateAddedFilterButtonColor();
         if (tabLayout == null) return;
         int selectedFill = theme.playButton;
         int unselectedFill = theme.rowBackground;

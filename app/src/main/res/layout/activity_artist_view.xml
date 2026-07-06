@@ -172,14 +172,6 @@
                             android:textColor="@android:color/white"
                             android:textSize="13sp"
                             tools:text="8 added songs" />
-
-                        <ImageView
-                            android:layout_width="16dp"
-                            android:layout_height="16dp"
-                            android:layout_marginStart="6dp"
-                            android:contentDescription="@string/empty"
-                            android:src="@drawable/ic_external_link"
-                            app:tint="@color/white" />
                     </LinearLayout>
 
                 </LinearLayout>

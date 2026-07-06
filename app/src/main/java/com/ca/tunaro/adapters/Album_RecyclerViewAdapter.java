@@ -25,7 +25,10 @@ import java.util.ArrayList;
 public class Album_RecyclerViewAdapter extends RecyclerView.Adapter<Album_RecyclerViewAdapter.ViewHolder> {
 
     public interface OnAlbumClickListener {
-        void onAlbumClick(AlbumModel album);
+        // Tapping/holding the album cover plays the album (discarding the current queue).
+        void onAlbumPlay(AlbumModel album);
+        // Tapping elsewhere on the row opens the album's detail view.
+        void onAlbumOpen(AlbumModel album);
     }
 
     // Mirrors the Albums tab sort spinner positions.
@@ -58,11 +61,14 @@ public class Album_RecyclerViewAdapter extends RecyclerView.Adapter<Album_Recycl
         AlbumModel album = albums.get(position);
 
         holder.nameView.setText(album.getName());
+        holder.nameView.setSelected(true); // Enable marquee on long names.
 
-        // The release type is shown as the coloured chip, so the meta line carries only year · tracks.
+        // The release type is shown as the coloured chip, so the meta line carries the release date
+        // and, when sorting by track count, the track count alongside it.
         StringBuilder meta = new StringBuilder();
-        if (album.getReleaseYear() > 0) meta.append(album.getReleaseYear());
-        if (album.getTrackCount() >= 0) {
+        String releaseDate = formatReleaseDateForDisplay(album.getReleaseDate());
+        if (releaseDate != null) meta.append(releaseDate);
+        if (sortOption == SORT_TRACK_COUNT && album.getTrackCount() >= 0) {
             if (meta.length() > 0) meta.append(" · ");
             meta.append(album.getTrackCount())
                     .append(album.getTrackCount() == 1 ? " track" : " tracks");
@@ -72,13 +78,10 @@ public class Album_RecyclerViewAdapter extends RecyclerView.Adapter<Album_Recycl
         holder.typeBadge.setText(capitalise(album.getAlbumType()));
         holder.typeBadge.setBackgroundTintList(android.content.res.ColorStateList.valueOf(typeColor(album.getAlbumType())));
 
-        // Contextual line: only show the value when sorting by a numeric metric.
+        // Contextual line: only for popularity. Track count now rides in the meta line above.
         if (sortOption == SORT_POPULARITY && album.getPopularity() >= 0) {
             holder.contextualView.setVisibility(View.VISIBLE);
             holder.contextualView.setText("Popularity: " + album.getPopularity() + "/100");
-        } else if (sortOption == SORT_TRACK_COUNT && album.getTrackCount() >= 0) {
-            holder.contextualView.setVisibility(View.VISIBLE);
-            holder.contextualView.setText("Tracks: " + album.getTrackCount());
         } else {
             holder.contextualView.setVisibility(View.GONE);
         }
@@ -90,8 +93,16 @@ public class Album_RecyclerViewAdapter extends RecyclerView.Adapter<Album_Recycl
                 .transition(DrawableTransitionOptions.withCrossFade())
                 .into(holder.coverView);
 
+        // Cover tap/hold plays the album; the rest of the row opens the album detail view.
+        holder.coverView.setOnClickListener(v -> {
+            if (clickListener != null) clickListener.onAlbumPlay(album);
+        });
+        holder.coverView.setOnLongClickListener(v -> {
+            if (clickListener != null) clickListener.onAlbumPlay(album);
+            return true;
+        });
         holder.itemView.setOnClickListener(v -> {
-            if (clickListener != null) clickListener.onAlbumClick(album);
+            if (clickListener != null) clickListener.onAlbumOpen(album);
         });
     }
 
@@ -122,6 +133,34 @@ public class Album_RecyclerViewAdapter extends RecyclerView.Adapter<Album_Recycl
     private static String capitalise(String text) {
         if (text == null || text.isEmpty()) return "Album";
         return text.substring(0, 1).toUpperCase() + text.substring(1).toLowerCase();
+    }
+
+    // Formats a Spotify release date ("YYYY", "YYYY-MM", or "YYYY-MM-DD") for display, including
+    // the month where available. Mirrors Song_RecyclerViewAdapter's formatting.
+    private static final String[] MONTH_NAMES =
+            {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+
+    private static String formatReleaseDateForDisplay(String releaseDate) {
+        if (releaseDate == null || releaseDate.isEmpty()) return null;
+        try {
+            String[] parts = releaseDate.split("-");
+            if (parts.length == 1) {
+                return parts[0];
+            } else if (parts.length == 2) {
+                int month = Integer.parseInt(parts[1]);
+                return MONTH_NAMES[month - 1] + " " + parts[0];
+            } else if (parts.length == 3) {
+                int day = Integer.parseInt(parts[2]);
+                int month = Integer.parseInt(parts[1]);
+                String year = parts[0];
+                if (month == 1 && day == 1) return year;
+                if (day == 1) return MONTH_NAMES[month - 1] + " " + year;
+                return day + " " + MONTH_NAMES[month - 1] + " " + year;
+            }
+        } catch (Exception e) {
+            return releaseDate;
+        }
+        return releaseDate;
     }
 
     public static class ViewHolder extends RecyclerView.ViewHolder {
