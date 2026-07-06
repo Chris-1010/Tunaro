@@ -11,6 +11,7 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.core.graphics.ColorUtils;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -79,10 +80,11 @@ public class ArtistView extends BaseActivity {
 
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            View headerContent = findViewById(R.id.header_content);
-            if (headerContent != null) {
-                headerContent.setPadding(headerContent.getPaddingLeft(), systemBars.top + 8,
-                        headerContent.getPaddingRight(), headerContent.getPaddingBottom());
+            // Pad the app bar (which holds the pinned back button/tabs) below the status bar.
+            View appBar = findViewById(R.id.app_bar);
+            if (appBar != null) {
+                appBar.setPadding(appBar.getPaddingLeft(), systemBars.top,
+                        appBar.getPaddingRight(), appBar.getPaddingBottom());
             }
             View playbackBar = findViewById(R.id.playback_bar);
             if (playbackBar != null) {
@@ -101,14 +103,35 @@ public class ArtistView extends BaseActivity {
             return;
         }
 
-        findViewById(R.id.back_button).setOnClickListener(v -> finish());
+        androidx.appcompat.widget.Toolbar toolbar = findViewById(R.id.collapsed_toolbar);
+        toolbar.setNavigationOnClickListener(v -> finish());
 
         setupTabs();
+        setupCollapsingHeader();
         setupAddedSongsRow();
         loadHeader();
     }
 
     //#region Header
+
+    // Fades the small collapsed-state artist image + name in as the app bar collapses, so they stay
+    // visible once the big expanded header has scrolled away.
+    private void setupCollapsingHeader() {
+        com.google.android.material.appbar.AppBarLayout appBar = findViewById(R.id.app_bar);
+        TextView collapsedName = findViewById(R.id.collapsed_artist_name);
+        View collapsedImageCard = findViewById(R.id.collapsed_artist_image_card);
+        if (appBar == null || collapsedName == null) return;
+        collapsedName.setText(artistName);
+        appBar.addOnOffsetChangedListener((bar, verticalOffset) -> {
+            int range = bar.getTotalScrollRange();
+            // 0 when fully expanded, 1 when fully collapsed.
+            float fraction = range == 0 ? 0f : Math.abs(verticalOffset) / (float) range;
+            // Only ramp up over the last portion of the collapse for a snappier fade.
+            float alpha = Math.min(1f, Math.max(0f, (fraction - 0.6f) / 0.4f));
+            collapsedName.setAlpha(alpha);
+            if (collapsedImageCard != null) collapsedImageCard.setAlpha(alpha);
+        });
+    }
 
     private void loadHeader() {
         TextView nameView = findViewById(R.id.artist_name);
@@ -174,6 +197,7 @@ public class ArtistView extends BaseActivity {
         if (name != null) {
             artistName = name;
             ((TextView) findViewById(R.id.artist_name)).setText(name);
+            ((TextView) findViewById(R.id.collapsed_artist_name)).setText(name);
         }
 
         Glide.with(this)
@@ -182,6 +206,13 @@ public class ArtistView extends BaseActivity {
                 .error(R.drawable.song_placeholder)
                 .transition(DrawableTransitionOptions.withCrossFade())
                 .into((android.widget.ImageView) findViewById(R.id.artist_image));
+
+        Glide.with(this)
+                .load(imageUrl)
+                .placeholder(R.drawable.song_placeholder)
+                .error(R.drawable.song_placeholder)
+                .transition(DrawableTransitionOptions.withCrossFade())
+                .into((android.widget.ImageView) findViewById(R.id.collapsed_artist_image));
 
         TextView meta = findViewById(R.id.artist_meta);
         List<String> metaParts = new ArrayList<>();
@@ -231,6 +262,24 @@ public class ArtistView extends BaseActivity {
                     new int[]{dominantColor, Color.BLACK});
             mainLayout.setBackground(gradient);
         }
+        applyCollapsedScrim(dominantColor);
+    }
+
+    // Collapsed toolbar scrim: black on the left, fading to a tint of the extracted colour on the
+    // right. The tint begins just past the small artist image (~20% from the left) and strengthens
+    // toward the right edge, leaving the back arrow + image on clean black.
+    private void applyCollapsedScrim(int dominantColor) {
+        com.google.android.material.appbar.CollapsingToolbarLayout collapsing =
+                findViewById(R.id.collapsing_toolbar);
+        if (collapsing == null) return;
+        // Blend a third of the way toward black so the tint stays readable but pronounced.
+        int tint = ColorUtils.blendARGB(dominantColor, Color.BLACK, 0.35f);
+        GradientDrawable scrim = new GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{Color.BLACK, Color.BLACK, tint});
+        // Hold black across the first ~20%, then ramp to the tint at the right edge.
+        scrim.setGradientCenter(0.2f, 0.5f);
+        collapsing.setContentScrim(scrim);
     }
 
     private void showHeaderShimmer(boolean show) {
