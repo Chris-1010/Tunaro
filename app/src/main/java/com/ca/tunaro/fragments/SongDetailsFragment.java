@@ -122,8 +122,6 @@ public class SongDetailsFragment extends Fragment {
             startActivity(intent);
         });
 
-        setupArtists();
-
         // Release date
         TextView releaseDateView = rootView.findViewById(R.id.SongView_ReleaseDate);
         releaseDateView.setText(formatReleaseDate(song.getReleaseDate()));
@@ -168,54 +166,6 @@ public class SongDetailsFragment extends Fragment {
         }
         TextView songIdView = rootView.findViewById(R.id.song_id_value);
         songIdView.setText(song.getId());
-    }
-
-    // Builds a clickable chip per artist (including features), each opening ArtistView. Sourced
-    // from the local song_artists join so feature artists are covered, not just the primary.
-    private void setupArtists() {
-        LinearLayout artistsRow = rootView.findViewById(R.id.artists_row);
-        LinearLayout container = rootView.findViewById(R.id.artist_chips_container);
-        container.removeAllViews();
-
-        DatabaseHelper db = new DatabaseHelper(requireContext());
-        List<com.ca.tunaro.models.Artist> artists = db.getSongArtists(song.getId());
-        db.close();
-
-        if (artists.isEmpty()) {
-            artistsRow.setVisibility(View.GONE);
-            return;
-        }
-        artistsRow.setVisibility(View.VISIBLE);
-
-        int marginEnd = Math.round(6 * getResources().getDisplayMetrics().density);
-        int padH = Math.round(10 * getResources().getDisplayMetrics().density);
-        int padV = Math.round(5 * getResources().getDisplayMetrics().density);
-
-        for (com.ca.tunaro.models.Artist artist : artists) {
-            TextView chip = new TextView(requireContext());
-            chip.setText(artist.getName());
-            chip.setTextColor(Color.WHITE);
-            chip.setTextSize(14f);
-            chip.setTypeface(chip.getTypeface(), android.graphics.Typeface.BOLD);
-            chip.setPadding(padH, padV, padH, padV);
-            chip.setBackgroundResource(R.drawable.rounded_md);
-            chip.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF00116A));
-
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            lp.setMarginEnd(marginEnd);
-            chip.setLayoutParams(lp);
-
-            chip.setOnClickListener(v -> {
-                Intent intent = new Intent(requireContext(), com.ca.tunaro.activites.ArtistView.class);
-                intent.putExtra("artist_id", artist.getArtistId());
-                intent.putExtra("artist_name", artist.getName());
-                startActivity(intent);
-                requireActivity().overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
-            });
-
-            container.addView(chip);
-        }
     }
 
     private void setupListeningHistory() {

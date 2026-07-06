@@ -136,40 +136,6 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- Artists Row — each artist (incl. features) opens ArtistView -->
-            <LinearLayout
-                android:id="@+id/artists_row"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingHorizontal="12dp"
-                android:paddingTop="4dp"
-                android:paddingBottom="4dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="8dp"
-                    android:text="By"
-                    android:textColor="@android:color/white"
-                    android:textSize="14sp" />
-
-                <HorizontalScrollView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:overScrollMode="never"
-                    android:scrollbars="none">
-
-                    <LinearLayout
-                        android:id="@+id/artist_chips_container"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal" />
-                </HorizontalScrollView>
-            </LinearLayout>
-
             <!-- Release Date Row -->
             <LinearLayout
                 android:layout_width="match_parent"
