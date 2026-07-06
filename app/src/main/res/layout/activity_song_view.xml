@@ -222,14 +222,15 @@
                     android:visibility="gone"
                     tools:text="Artist 1, Artist 2" />
 
-                <!-- One tappable chip per artist; each opens ArtistView for that artist. -->
+                <!-- One tappable chip per artist; each opens ArtistView for that artist. Chips are
+                     packed into evenly-spaced rows at runtime (see SongView.renderArtistChips), so
+                     this is a vertical container holding one horizontal row LinearLayout per line. -->
                 <LinearLayout
                     android:id="@+id/SongView_ArtistChips"
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:gravity="center"
-                    android:orientation="horizontal"
+                    android:orientation="vertical"
                     android:paddingHorizontal="16dp" />
 
             </LinearLayout>
