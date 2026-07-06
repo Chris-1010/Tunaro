@@ -159,13 +159,25 @@ public class ArtistAlbumsFragment extends Fragment
     //#region Discography (fetched + owned by ArtistView)
 
     @Override
+    public void onDiscographyProgress(List<AlbumModel> partial) {
+        render(partial, false);
+    }
+
+    @Override
     public void onDiscographyReady(List<AlbumModel> ready) {
+        render(ready, true);
+    }
+
+    // Renders whatever set of albums is available so far. On the final call the shimmer is always
+    // cleared (even for an empty discography, which then shows the empty label); on interim calls
+    // it is cleared only once the first albums arrive.
+    private void render(List<AlbumModel> list, boolean isFinal) {
         if (!isAdded()) return;
-        showShimmer(false);
+        if (isFinal || (list != null && !list.isEmpty())) showShimmer(false);
         albums.clear();
-        if (ready != null) albums.addAll(ready);
+        if (list != null) albums.addAll(list);
         applySort();
-        showEmpty(albums.isEmpty());
+        showEmpty(albums.isEmpty() && isFinal);
     }
 
     //#endregion

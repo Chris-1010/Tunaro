@@ -64,6 +64,9 @@ public class ArtistView extends BaseActivity {
 
     public interface DiscographyListener {
         void onDiscographyReady(List<AlbumModel> albums);
+
+        // Interim callback as albums stream in; final state still arrives via onDiscographyReady.
+        default void onDiscographyProgress(List<AlbumModel> albums) {}
     }
 
     @Override
@@ -326,6 +329,19 @@ public class ArtistView extends BaseActivity {
         discographyListeners.remove(listener);
     }
 
+    // Interim update as albums page in / get enriched: listeners re-render the growing list but
+    // the discography is not yet marked complete, so consumers that need the full set (the Songs
+    // tab's "Load full discography") keep waiting for the final publish.
+    private void publishProgress(List<AlbumModel> albums) {
+        runOnUiThread(() -> {
+            discography = albums;
+            updateDiscographySummary(albums);
+            for (DiscographyListener listener : new ArrayList<>(discographyListeners)) {
+                listener.onDiscographyProgress(albums);
+            }
+        });
+    }
+
     private void publishDiscography(List<AlbumModel> albums) {
         runOnUiThread(() -> {
             discography = albums;
@@ -372,6 +388,8 @@ public class ArtistView extends BaseActivity {
                             if (existing == null || isEarlier(candidate, existing)) byName.put(key, candidate);
                         }
                     }
+                    // Surface albums as each page lands so the list fills progressively.
+                    publishProgress(new ArrayList<>(byName.values()));
                     boolean morePages = items != null && items.length == DISCOGRAPHY_PAGE_LIMIT
                             && paging.getNext() != null;
                     if (morePages) {
@@ -421,6 +439,8 @@ public class ArtistView extends BaseActivity {
                             if (album.getPopularity() != null) model.setPopularity(album.getPopularity());
                         }
                     }
+                    // Re-publish so the freshly enriched track counts / popularity show up.
+                    publishProgress(collected);
                     enrichAlbums(mainActivity, collected, end);
                 })
                 .exceptionally(throwable -> {
