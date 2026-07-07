@@ -1,44 +1,261 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/dark_blue"
+    android:background="@android:color/black"
     tools:context=".activites.ArtistView">
 
-    <TextView
-        android:id="@+id/artist_view_title"
-        android:layout_width="wrap_content"
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/app_bar"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:text="Artist"
-        android:textColor="@color/white"
-        android:textSize="30sp"
-        android:textStyle="bold"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        android:background="@android:color/transparent"
+        app:elevation="0dp">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Coming Soon!"
-        android:textColor="@color/white"
-        android:textSize="24sp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        <com.google.android.material.appbar.CollapsingToolbarLayout
+            android:id="@+id/collapsing_toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:contentScrim="@android:color/black"
+            app:layout_scrollFlags="scroll|exitUntilCollapsed|snap"
+            app:titleEnabled="false"
+            app:toolbarId="@+id/collapsed_toolbar">
 
-    <Button
-        android:id="@+id/back_button"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="32dp"
-        android:text="Back"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+            <!-- Expanded header content: parallax-scrolls away as the bar collapses. Top padding
+                 clears the pinned toolbar so the image doesn't sit under it. -->
+            <LinearLayout
+                android:id="@+id/header_content"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingTop="?attr/actionBarSize"
+                android:paddingBottom="8dp"
+                app:layout_collapseMode="parallax">
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+                <!-- Artist image + name, wrapped in shimmer for first-ever load -->
+                <com.facebook.shimmer.ShimmerFrameLayout
+                    android:id="@+id/artist_header_shimmer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:visibility="gone"
+                    tools:visibility="visible">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:paddingVertical="12dp">
+
+                        <View
+                            android:layout_width="120dp"
+                            android:layout_height="120dp"
+                            android:background="@drawable/circle_background"
+                            android:backgroundTint="@color/shimmer_placeholder" />
+
+                        <View
+                            android:layout_width="180dp"
+                            android:layout_height="22dp"
+                            android:layout_marginTop="16dp"
+                            android:background="@color/shimmer_placeholder" />
+
+                        <View
+                            android:layout_width="120dp"
+                            android:layout_height="14dp"
+                            android:layout_marginTop="12dp"
+                            android:background="@color/shimmer_placeholder" />
+                    </LinearLayout>
+                </com.facebook.shimmer.ShimmerFrameLayout>
+
+                <!-- Actual header content -->
+                <LinearLayout
+                    android:id="@+id/artist_header_content"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <androidx.cardview.widget.CardView
+                        android:layout_width="120dp"
+                        android:layout_height="120dp"
+                        app:cardCornerRadius="60dp"
+                        app:cardElevation="6dp">
+
+                        <ImageView
+                            android:id="@+id/artist_image"
+                            android:layout_width="120dp"
+                            android:layout_height="120dp"
+                            android:contentDescription="@string/empty"
+                            android:scaleType="centerCrop"
+                            tools:srcCompat="@tools:sample/avatars" />
+                    </androidx.cardview.widget.CardView>
+
+                    <TextView
+                        android:id="@+id/artist_name"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:ellipsize="marquee"
+                        android:gravity="center"
+                        android:marqueeRepeatLimit="marquee_forever"
+                        android:paddingHorizontal="16dp"
+                        android:singleLine="true"
+                        android:textColor="@android:color/white"
+                        android:textSize="26sp"
+                        android:textStyle="bold"
+                        tools:text="Artist Name" />
+
+                    <!-- Followers · popularity -->
+                    <TextView
+                        android:id="@+id/artist_meta"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:gravity="center"
+                        android:paddingHorizontal="16dp"
+                        android:textColor="#B3FFFFFF"
+                        android:textSize="13sp"
+                        tools:text="1,234,567 followers · 82% popularity" />
+
+                    <!-- Genres -->
+                    <TextView
+                        android:id="@+id/artist_genres"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:gravity="center"
+                        android:paddingHorizontal="24dp"
+                        android:textColor="#80FFFFFF"
+                        android:textSize="12sp"
+                        android:visibility="gone"
+                        tools:text="pop · synthpop · indie"
+                        tools:visibility="visible" />
+
+                    <!-- Discography summary: songs/singles/albums, active since, latest release -->
+                    <TextView
+                        android:id="@+id/artist_discography_summary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center"
+                        android:paddingHorizontal="24dp"
+                        android:textColor="#99FFFFFF"
+                        android:textSize="12sp"
+                        android:visibility="gone"
+                        tools:text="12 albums · 30 singles · Active since 2014 · Latest: Album (2024)"
+                        tools:visibility="visible" />
+
+                    <!-- Added songs row -->
+                    <LinearLayout
+                        android:id="@+id/added_songs_row"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/ripple_rounded_background"
+                        android:backgroundTint="#1AFFFFFF"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="16dp"
+                        android:paddingVertical="8dp"
+                        android:visibility="gone"
+                        tools:visibility="visible">
+
+                        <TextView
+                            android:id="@+id/added_songs_label"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@android:color/white"
+                            android:textSize="13sp"
+                            tools:text="8 added songs" />
+                    </LinearLayout>
+
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Collapsed toolbar: pins at the top. Back arrow as the navigation icon, plus a
+                 small circular artist image and name that fade in once the header is collapsed.
+                 Fixed height + black scrim so the parallax header slides fully behind it. -->
+            <androidx.appcompat.widget.Toolbar
+                android:id="@+id/collapsed_toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="?attr/actionBarSize"
+                android:gravity="center_vertical"
+                app:contentInsetStartWithNavigation="0dp"
+                app:layout_collapseMode="pin"
+                app:navigationIcon="@drawable/ic_arrow_back">
+
+                <!-- Small circular artist image for the collapsed state -->
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/collapsed_artist_image_card"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginEnd="12dp"
+                    android:alpha="0"
+                    app:cardCornerRadius="20dp"
+                    app:cardElevation="4dp"
+                    tools:alpha="1">
+
+                    <ImageView
+                        android:id="@+id/collapsed_artist_image"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:contentDescription="@string/empty"
+                        android:scaleType="centerCrop"
+                        tools:srcCompat="@tools:sample/avatars" />
+                </androidx.cardview.widget.CardView>
+
+                <!-- Small artist name, fades in only when the header is collapsed -->
+                <TextView
+                    android:id="@+id/collapsed_artist_name"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="16dp"
+                    android:alpha="0"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:textColor="@android:color/white"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    tools:alpha="1"
+                    tools:text="Artist Name" />
+            </androidx.appcompat.widget.Toolbar>
+
+        </com.google.android.material.appbar.CollapsingToolbarLayout>
+
+        <!-- Tabs: pinned below the collapsing header, always visible so tab switching stays
+             reachable whether the header is expanded or collapsed. -->
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/tab_layout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@android:color/transparent"
+            android:paddingVertical="4dp"
+            app:tabGravity="center"
+            app:tabIndicatorHeight="0dp"
+            app:tabMode="fixed"
+            app:tabPaddingEnd="2dp"
+            app:tabPaddingStart="2dp" />
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <!-- ViewPager for Songs / Albums: fills the space below the app bar and drives collapse -->
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/view_pager"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/transparent"
+        android:overScrollMode="never"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior" />
+
+    <include
+        android:id="@+id/playback_bar"
+        layout="@layout/playback_bar"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/playback_bar_height"
+        android:layout_gravity="bottom" />
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

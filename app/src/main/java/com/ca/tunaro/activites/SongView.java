@@ -21,6 +21,8 @@ import androidx.viewpager2.widget.ViewPager2;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.ca.tunaro.BaseActivity;
+import android.content.Intent;
+
 import com.ca.tunaro.R;
 import com.ca.tunaro.adapters.SongTabAdapter;
 import com.ca.tunaro.database.DatabaseHelper;
@@ -135,6 +137,7 @@ public class SongView extends BaseActivity {
 
         int nameIndex = parent.indexOfChild(nameView);
         TextView artistView = findViewById(R.id.SongView_ArtistName);
+        View artistChips = findViewById(R.id.SongView_ArtistChips);
 
         com.facebook.shimmer.ShimmerFrameLayout shimmer = new com.facebook.shimmer.ShimmerFrameLayout(this);
         shimmer.setId(R.id.song_info_shimmer);
@@ -153,8 +156,10 @@ public class SongView extends BaseActivity {
 
         parent.removeView(nameView);
         if (artistView != null) parent.removeView(artistView);
+        if (artistChips != null) parent.removeView(artistChips);
         inner.addView(nameView);
         if (artistView != null) inner.addView(artistView);
+        if (artistChips != null) inner.addView(artistChips);
         shimmer.addView(inner);
         parent.addView(shimmer, nameIndex);
 
@@ -173,12 +178,14 @@ public class SongView extends BaseActivity {
 
         TextView nameView = inner.findViewById(R.id.SongView_SongName);
         TextView artistView = inner.findViewById(R.id.SongView_ArtistName);
+        View artistChips = inner.findViewById(R.id.SongView_ArtistChips);
         inner.removeAllViews();
         shimmer.removeAllViews();
         parent.removeView(shimmer);
 
         if (nameView != null) parent.addView(nameView, shimmerIndex);
         if (artistView != null) parent.addView(artistView, shimmerIndex + 1);
+        if (artistChips != null) parent.addView(artistChips, shimmerIndex + 2);
     }
 
     private void fetchAndPopulateFromApi(String spotifyUri) {
@@ -238,12 +245,12 @@ public class SongView extends BaseActivity {
                         selectedSong = fullSong;
                         stopHeaderShimmer();
                         TextView nameView = findViewById(R.id.SongView_SongName);
-                        TextView artistView = findViewById(R.id.SongView_ArtistName);
+                        View artistChips = findViewById(R.id.SongView_ArtistChips);
                         if (nameView != null) nameView.setAlpha(0f);
-                        if (artistView != null) artistView.setAlpha(0f);
+                        if (artistChips != null) artistChips.setAlpha(0f);
                         setupBasicSongInfo();
                         if (nameView != null) nameView.animate().alpha(1f).setDuration(300).start();
-                        if (artistView != null) artistView.animate().alpha(1f).setDuration(300).start();
+                        if (artistChips != null) artistChips.animate().alpha(1f).setDuration(300).start();
                         setupDynamicBackground();
                         // Recreate the adapter so the Details tab picks up the full metadata
                         allVariantUris.clear();
@@ -289,7 +296,9 @@ public class SongView extends BaseActivity {
 
         nameView.setText(selectedSong.getName());
         nameView.setSelected(true);
+        // Kept in sync for the hidden shimmer/fade placeholder; the visible names are chips.
         artistView.setText(selectedSong.getArtist());
+        setupArtistChips();
 
         Glide.with(this)
                 .load(selectedSong.getAlbumCoverUrl())
@@ -297,6 +306,132 @@ public class SongView extends BaseActivity {
                 .error(R.drawable.song_placeholder)
                 .transition(DrawableTransitionOptions.withCrossFade())
                 .into(albumCoverImageView);
+    }
+
+    // Renders the artist subtitle as one tappable chip per artist, each opening ArtistView for
+    // that artist. Artist ids live in the local DB (SongModel carries only names), so they are
+    // resolved off the UI thread. Mirrors the per-artist pills in the Details tab, relocated here.
+    private void setupArtistChips() {
+        if (selectedSong == null) return;
+        final String songId = selectedSong.getId();
+        new Thread(() -> {
+            DatabaseHelper db = new DatabaseHelper(getApplicationContext());
+            List<com.ca.tunaro.models.Artist> artists = db.getSongArtists(songId);
+            db.close();
+            runOnUiThread(() -> renderArtistChips(artists));
+        }).start();
+    }
+
+    private void renderArtistChips(List<com.ca.tunaro.models.Artist> artists) {
+        final LinearLayout container = findViewById(R.id.SongView_ArtistChips);
+        if (container == null) return;
+        container.removeAllViews();
+        if (artists == null || artists.isEmpty()) return;
+
+        // Build every chip up front so their measured widths are known before packing.
+        final List<TextView> chips = new ArrayList<>();
+        for (com.ca.tunaro.models.Artist artist : artists) chips.add(buildArtistChip(artist));
+
+        // Packing needs the container's laid-out width, which isn't known until a layout pass, so
+        // defer it. Re-pack on width changes (e.g. rotation) too.
+        if (container.getWidth() > 0) {
+            packChipsIntoRows(container, chips);
+        } else {
+            container.getViewTreeObserver().addOnGlobalLayoutListener(
+                    new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+                        @Override
+                        public void onGlobalLayout() {
+                            if (container.getWidth() <= 0) return;
+                            container.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                            packChipsIntoRows(container, chips);
+                        }
+                    });
+        }
+    }
+
+    private TextView buildArtistChip(com.ca.tunaro.models.Artist artist) {
+        float density = getResources().getDisplayMetrics().density;
+        int padH = Math.round(12 * density);
+        int padV = Math.round(5 * density);
+
+        TextView chip = new TextView(this);
+        chip.setText(artist.getName());
+        chip.setTextColor(Color.WHITE);
+        chip.setTextSize(14f);
+        chip.setTypeface(chip.getTypeface(), android.graphics.Typeface.BOLD);
+        chip.setPadding(padH, padV, padH, padV);
+        chip.setBackgroundResource(R.drawable.rounded_md);
+        chip.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF00116A));
+
+        if (artist.getArtistId() != null) {
+            chip.setOnClickListener(v -> {
+                Intent intent = new Intent(SongView.this, ArtistView.class);
+                intent.putExtra("artist_id", artist.getArtistId());
+                intent.putExtra("artist_name", artist.getName());
+                startActivity(intent);
+                overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+            });
+        }
+        return chip;
+    }
+
+    // Greedily packs chips into rows that fit the container width, then distributes each row's
+    // chips with even gaps (including the outer edges — "space-evenly") using weighted spacers.
+    private void packChipsIntoRows(LinearLayout container, List<TextView> chips) {
+        container.removeAllViews();
+        int available = container.getWidth() - container.getPaddingLeft() - container.getPaddingRight();
+        if (available <= 0) available = getResources().getDisplayMetrics().widthPixels;
+
+        float density = getResources().getDisplayMetrics().density;
+        int minGap = Math.round(8 * density); // Minimum breathing room reserved per gap when packing.
+        int rowMarginV = Math.round(4 * density);
+
+        int widthSpec = View.MeasureSpec.makeMeasureSpec(available, View.MeasureSpec.AT_MOST);
+        int heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+
+        List<TextView> row = new ArrayList<>();
+        int rowChipsWidth = 0;
+        for (TextView chip : chips) {
+            chip.measure(widthSpec, heightSpec);
+            int w = chip.getMeasuredWidth();
+            // Reserve a minimum gap on both sides of each chip when testing the fit.
+            int needed = rowChipsWidth + w + (row.size() + 1) * minGap;
+            if (!row.isEmpty() && needed > available) {
+                container.addView(buildChipRow(row, rowMarginV));
+                row = new ArrayList<>();
+                rowChipsWidth = 0;
+            }
+            row.add(chip);
+            rowChipsWidth += w;
+        }
+        if (!row.isEmpty()) container.addView(buildChipRow(row, rowMarginV));
+    }
+
+    // A full-width horizontal row: weighted spacers before, between, and after the chips give the
+    // even ("space-evenly") distribution; the chips themselves stay their natural size.
+    private LinearLayout buildChipRow(List<TextView> chips, int rowMarginV) {
+        LinearLayout rowLayout = new LinearLayout(this);
+        rowLayout.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        rowLp.topMargin = rowMarginV;
+        rowLp.bottomMargin = rowMarginV;
+        rowLayout.setLayoutParams(rowLp);
+
+        rowLayout.addView(makeSpacer());
+        for (TextView chip : chips) {
+            chip.setLayoutParams(new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            rowLayout.addView(chip);
+            rowLayout.addView(makeSpacer());
+        }
+        return rowLayout;
+    }
+
+    private View makeSpacer() {
+        View spacer = new View(this);
+        spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
+        return spacer;
     }
 
     private void setupAlbumCover() {

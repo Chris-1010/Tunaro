@@ -24,7 +24,6 @@ import com.ca.tunaro.R;
 import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.interfaces.Song_RecyclerViewInterface;
-import com.ca.tunaro.activites.PlaylistView;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -38,6 +37,11 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
 
     private int currentSortOption = -1;
     private boolean shouldShowContextualInfo = false;
+    // Whether the artist-name row is shown. Hidden on the ArtistView Songs tab
+    // (the page already belongs to that artist), so the layout collapses.
+    private boolean showArtist = true;
+    // When set (ArtistView Songs tab), rows whose URI is in this set show a green "added" tick.
+    private java.util.Set<String> addedUris = null;
     private Map<String, Integer> listenCountMap = null;
     private Map<String, Integer> popularityMap = null;
     private Map<String, String> lastListenedMap = null;
@@ -61,8 +65,13 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         SongModel model = songModels.get(position);
         holder.songNameView.setSelected(true); // Enable marquee
         holder.songNameView.setText(model.getName());
-        holder.artistView.setSelected(true); // Enable marquee
-        holder.artistView.setText(model.getArtist());
+        if (showArtist) {
+            holder.artistView.setVisibility(View.VISIBLE);
+            holder.artistView.setSelected(true); // Enable marquee
+            holder.artistView.setText(model.getArtist());
+        } else {
+            holder.artistView.setVisibility(View.GONE);
+        }
 
         // Active/queue state indicators
         PlaybackManager pm = PlaybackManager.getInstance();
@@ -94,6 +103,10 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
                 .error(R.drawable.song_placeholder)
                 .transition(DrawableTransitionOptions.withCrossFade())
                 .into(holder.imageCoverView);
+
+        // "Added" tick — only shown in contexts that supply an added-URI set (ArtistView Songs tab).
+        boolean added = addedUris != null && addedUris.contains(model.getId());
+        holder.addedIcon.setVisibility(added ? View.VISIBLE : View.GONE);
 
         // Check if the song has notes/snippets and show/hide the corresponding icon accordingly
         if (dbHelper.hasSongNotes(model.getId())) holder.hasNotesIcon.setVisibility(View.VISIBLE);
@@ -170,6 +183,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         View queuedEdge;
         View queueSwipeOverlay;
         ImageView queueSwipeIcon;
+        ImageView addedIcon;
         ImageView hasNotesIcon;
         ImageView hasSnippetsIcon;
         TextView songNameView, artistView;
@@ -190,6 +204,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
             queuedEdge = itemView.findViewById(R.id.queuedEdge);
             queueSwipeOverlay = itemView.findViewById(R.id.queueSwipeOverlay);
             queueSwipeIcon = itemView.findViewById(R.id.queueSwipeIcon);
+            addedIcon = itemView.findViewById(R.id.addedIcon);
             hasNotesIcon = itemView.findViewById(R.id.hasNotesIcon);
             hasSnippetsIcon = itemView.findViewById(R.id.hasSnippetsIcon);
             contextualInfoView = itemView.findViewById(R.id.contextualInfoView);
@@ -230,14 +245,13 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
                 }
             });
 
-            // Long press on album cover — play individually (no queue)
+            // Long press on album cover — play individually (no queue). Any host that
+            // implements the interface handles it; the default is a no-op.
             imageCoverView.setOnLongClickListener(view -> {
                 if (recyclerViewInterface != null) {
                     int position = getAdapterPosition();
                     if (position != RecyclerView.NO_POSITION) {
-                        if (recyclerViewInterface instanceof PlaylistView) {
-                            recyclerViewInterface.onAlbumCoverLongClick(position);
-                        }
+                        recyclerViewInterface.onAlbumCoverLongClick(position);
                         return true;
                     }
                 }
@@ -454,6 +468,18 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         this.currentSortOption = sortOption;
         // Show contextual info for Date Added (0), Last Listened (1), Length (3), Popularity (5), Listen Count (6), and Release Date (7)
         this.shouldShowContextualInfo = (sortOption == 0 || sortOption == 1 || sortOption == 3 || sortOption == 5 || sortOption == 6 || sortOption == 7);
+        notifyDataSetChanged();
+    }
+
+    // Hide the artist-name row (ArtistView Songs tab). Default true elsewhere.
+    public void setShowArtist(boolean showArtist) {
+        this.showArtist = showArtist;
+        notifyDataSetChanged();
+    }
+
+    // Marks which songs are locally added (their URI shows a green tick). Pass null to disable.
+    public void setAddedUris(java.util.Set<String> addedUris) {
+        this.addedUris = addedUris;
         notifyDataSetChanged();
     }
 

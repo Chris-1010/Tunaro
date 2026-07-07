@@ -208,6 +208,8 @@
                     android:textSize="28sp"
                     android:textStyle="bold" />
 
+                <!-- Retained for the header shimmer/fade choreography; the visible artist names
+                     are rendered as tappable chips in SongView_ArtistChips below. -->
                 <TextView
                     android:id="@+id/SongView_ArtistName"
                     android:layout_width="wrap_content"
@@ -217,7 +219,19 @@
                     android:paddingHorizontal="16dp"
                     android:textColor="@android:color/darker_gray"
                     android:textSize="16sp"
+                    android:visibility="gone"
                     tools:text="Artist 1, Artist 2" />
+
+                <!-- One tappable chip per artist; each opens ArtistView for that artist. Chips are
+                     packed into evenly-spaced rows at runtime (see SongView.renderArtistChips), so
+                     this is a vertical container holding one horizontal row LinearLayout per line. -->
+                <LinearLayout
+                    android:id="@+id/SongView_ArtistChips"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="16dp" />
 
             </LinearLayout>
 
