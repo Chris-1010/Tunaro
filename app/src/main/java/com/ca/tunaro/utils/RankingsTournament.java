@@ -108,7 +108,9 @@ public class RankingsTournament {
     public void reportWinner(SongModel winner) {
         SongModel a = getContenderA();
         SongModel b = getContenderB();
-        SongModel loser = winner == a ? b : a;
+        // Identify the loser by song ID rather than reference identity, so a winner
+        // reconstructed via Parcel/DB reload still matches the correct contender.
+        SongModel loser = winner.getId().equals(a.getId()) ? b : a;
         nextRound.add(winner);
         losersByRound.get(losersByRound.size() - 1).add(loser);
         matchesPlayedInRound++;

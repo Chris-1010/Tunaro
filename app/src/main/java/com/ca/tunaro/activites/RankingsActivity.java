@@ -31,6 +31,8 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class RankingsActivity extends BaseActivity implements Library_RecyclerViewInterface {
     private static final String TAG = "RankingsActivity";
@@ -108,11 +110,20 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
         findViewById(R.id.preview_button_b).setOnClickListener(v -> previewContender(tournament.getContenderB()));
         findViewById(R.id.restart_button).setOnClickListener(v -> showSetupPhase());
 
-        loadSongPool();
-        showSetupPhase();
+        // Building the pool issues one DB query per annotated song, so load it off the
+        // main thread and render the setup UI once it is ready. Show a loading state
+        // in the meantime rather than a misleading "empty library" message.
+        showLoadingPhase();
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        executor.execute(() -> {
+            loadSongPool();
+            runOnUiThread(this::showSetupPhase);
+        });
+        executor.shutdown();
     }
 
-    // The candidate pool is the library: every song with notes or snippets
+    // The candidate pool is the library: every song with notes or snippets.
+    // Runs off the main thread (N+2 synchronous DB reads).
     private void loadSongPool() {
         songPool.clear();
         Set<String> songIds = new LinkedHashSet<>(dbHelper.getSongIdsWithNotes());
@@ -123,6 +134,17 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
             if (song != null) songPool.add(song);
         }
         Log.d(TAG, "Loaded ranking pool of " + songPool.size() + " songs");
+    }
+
+    private void showLoadingPhase() {
+        setupPhase.setVisibility(View.VISIBLE);
+        matchPhase.setVisibility(View.GONE);
+        resultsPhase.setVisibility(View.GONE);
+
+        poolSummary.setText("Loading your library…");
+        sizeLabel.setVisibility(View.GONE);
+        sizeSpinner.setVisibility(View.GONE);
+        startButton.setVisibility(View.GONE);
     }
 
     private void showSetupPhase() {
@@ -139,6 +161,9 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
         }
 
         poolSummary.setText(songPool.size() + " songs in your library");
+        sizeLabel.setVisibility(View.VISIBLE);
+        sizeSpinner.setVisibility(View.VISIBLE);
+        startButton.setVisibility(View.VISIBLE);
 
         sizeOptions.clear();
         List<String> labels = new ArrayList<>();
