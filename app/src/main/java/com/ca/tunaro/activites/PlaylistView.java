@@ -572,8 +572,13 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         calendar.set(java.util.Calendar.SECOND, 0);
         calendar.set(java.util.Calendar.MILLISECOND, 0);
 
+        // The calendar is already positioned on the 1st of the current month, which is
+        // exactly the DATE_FILTER_MONTH boundary, so only the season case needs adjusting.
         if (filterOption == DATE_FILTER_SEASON) {
-            int month = calendar.get(java.util.Calendar.MONTH);
+            int month = calendar.get(java.util.Calendar.MONTH); // 0 = Jan .. 11 = Dec
+            // Map each month to the first month of its meteorological season:
+            //   Jan/Feb -> Dec (of previous year), Mar-May -> Mar,
+            //   Jun-Aug -> Jun, Sep-Nov -> Sep, Dec -> Dec.
             int seasonStartMonth = ((month + 1) / 3) * 3 - 1;
             if (seasonStartMonth < 0) {
                 // Jan/Feb belong to the winter that started in December of last year
