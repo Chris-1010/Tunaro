@@ -55,6 +55,10 @@ import se.michaelthelin.spotify.requests.data.users_profile.GetCurrentUsersProfi
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
 
+    // Set by BaseActivity when Spotify reports the App-Remote grant has lapsed:
+    // forces the consent flow instead of silently restoring the cached session.
+    public static final String EXTRA_FORCE_REAUTH = "force_reauth";
+
     // Minimum time the spinner splash stays visible on the fast (already-logged-in) path.
     private static final long SPLASH_MIN_DISPLAY_MS = 1200;
 
@@ -107,8 +111,13 @@ public class MainActivity extends AppCompatActivity {
                 REDIRECT_URI.toString()
         );
 
+        // When re-auth is forced (App-Remote grant lapsed), skip silent restore and
+        // go straight to the consent flow so Spotify re-issues the grant.
+        boolean forceReauth = getIntent() != null
+                && getIntent().getBooleanExtra(EXTRA_FORCE_REAUTH, false);
+
         // Restore session from saved tokens (silent recovery)
-        if (tryRestoreSession()) {
+        if (!forceReauth && tryRestoreSession()) {
             Log.d(TAG, "Session restored from saved tokens");
             connectSpotifyAppRemote();
 

@@ -887,7 +887,30 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
 
     @Override
     public void onConnectionStateChanged(boolean isConnected) {
-        // might want to show some UI feedback when connection state changes
+        // A successful (re)connection clears any in-flight re-auth so a future
+        // lapse can trigger the flow again.
+        if (isConnected) {
+            reauthInProgress = false;
+        }
+    }
+
+    // Guards against every registered Activity (and every connection retry)
+    // launching the re-auth flow at once. Static so it is shared across the
+    // whole Activity stack; cleared once a connection succeeds.
+    private static boolean reauthInProgress = false;
+
+    @Override
+    public void onAuthorizationRequired() {
+        // Spotify's App-Remote grant has lapsed. Route to MainActivity to re-run
+        // the consent flow, which re-establishes the grant. Fire only once.
+        if (reauthInProgress) return;
+        reauthInProgress = true;
+        runOnUiThread(() -> {
+            Intent intent = new Intent(this, MainActivity.class);
+            intent.putExtra(MainActivity.EXTRA_FORCE_REAUTH, true);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            startActivity(intent);
+        });
     }
 
     public void setDeviceWarningVisible(boolean visible) {
