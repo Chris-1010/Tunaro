@@ -1,16 +1,20 @@
 package com.ca.tunaro.managers;
 
 import android.content.Context;
+import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.widget.Toast;
+
+import androidx.core.content.ContextCompat;
 
 import com.ca.tunaro.BaseActivity;
 import com.ca.tunaro.activites.MainActivity;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.models.SongSnippet;
+import com.ca.tunaro.services.PlaybackService;
 import com.ca.tunaro.utils.DeviceChecker;
 import com.ca.tunaro.utils.SongCache;
 import com.spotify.android.appremote.api.ConnectionParams;
@@ -87,6 +91,21 @@ public class PlaybackManager {
     // Timestamp of last advance — suppress end-of-song check for 3s after an advance
     // to avoid Spotify returning stale position data for the newly-started track.
     private long lastAdvanceTimeMs = 0;
+
+    //#region Playback-session lifetime anchor (ADR-0002)
+    // PlaybackService is a foreground service that keeps the process alive for the
+    // duration of a playback session, so this playback brain keeps running while
+    // backgrounded (the real fix for process death). PlaybackManager owns the
+    // session lifecycle: it starts the service when a track is confirmed playing
+    // and stops it on a genuine session-end. No state moves into the service.
+    private boolean sessionActive = false;
+    // A brief pause keeps the session alive and resumable; a long idle pause is
+    // treated as a session end, since a paused session steers nothing and no longer
+    // justifies pinning the process.
+    private static final long PAUSED_SESSION_TIMEOUT_MS = 30 * 60 * 1000L;
+    private final Handler sessionHandler = new Handler(Looper.getMainLooper());
+    private Runnable pausedTimeoutRunnable;
+    //#endregion
 
     //#region Snippet Playback Fields
     // The behaviour applied when a snippet's end-timer fires. Transient: held in
@@ -316,6 +335,11 @@ public class PlaybackManager {
             boolean wasPlaying = isPlaying;
             isPlaying = !playerState.isPaused;
 
+            // Session choke point (ADR-0002): a confirmed-playing state anchors the
+            // process for the session; a pause keeps the anchor but arms the idle
+            // timeout. This is the single place a session is started.
+            updateSessionForState(isPlaying);
+
             // Notify if state or track changed
             if (wasPlaying != isPlaying || trackChanged) {
                 notifyPlaybackStateChanged();
@@ -351,6 +375,11 @@ public class PlaybackManager {
             if (isTrackingPosition) {
                 stopPositionTracking();
             }
+
+            // A null track is ambiguous (transient transition vs. genuine stop), so
+            // the session is not torn down here; instead arm the idle timeout so a
+            // real stop is eventually reaped without risking a mid-transition kill.
+            updateSessionForState(false);
         }
     }
 
@@ -1039,6 +1068,67 @@ public class PlaybackManager {
         }
     }
 
+    //#region Playback-session lifetime anchor (ADR-0002)
+
+    // Update the session anchor from the current play/pause state. Called from the
+    // single choke point (processPlayerState): a confirmed-playing state starts the
+    // service and clears any pending paused-timeout; a paused/stopped state arms the
+    // timeout so a long idle session is eventually reaped.
+    private void updateSessionForState(boolean playing) {
+        if (playing) {
+            cancelPausedTimeout();
+            startPlaybackSession();
+        } else if (sessionActive) {
+            armPausedTimeout();
+        }
+    }
+
+    private void startPlaybackSession() {
+        if (sessionActive || applicationContext == null) return;
+        sessionActive = true;
+        try {
+            ContextCompat.startForegroundService(applicationContext,
+                    new Intent(applicationContext, PlaybackService.class));
+            Log.d(TAG, "Playback session started (foreground service)");
+        } catch (Exception e) {
+            // Background-start restriction (Android 12+): a session confirmed while
+            // Tunaro is backgrounded (e.g. a Spotify autoplay track change) may be
+            // refused. No recovery — the brain keeps running until the process is
+            // reclaimed; the session simply has no anchor this time.
+            sessionActive = false;
+            Log.w(TAG, "Could not start playback session: " + e.getMessage());
+        }
+    }
+
+    private void stopPlaybackSession() {
+        cancelPausedTimeout();
+        if (!sessionActive) return;
+        sessionActive = false;
+        if (applicationContext != null) {
+            applicationContext.stopService(new Intent(applicationContext, PlaybackService.class));
+            Log.d(TAG, "Playback session stopped");
+        }
+    }
+
+    private void armPausedTimeout() {
+        if (pausedTimeoutRunnable != null) return; // already counting down
+        pausedTimeoutRunnable = () -> {
+            pausedTimeoutRunnable = null;
+            Log.d(TAG, "Session paused for " + PAUSED_SESSION_TIMEOUT_MS + "ms — ending session");
+            stopPlaybackSession();
+        };
+        sessionHandler.postDelayed(pausedTimeoutRunnable, PAUSED_SESSION_TIMEOUT_MS);
+    }
+
+    private void cancelPausedTimeout() {
+        if (pausedTimeoutRunnable != null) {
+            sessionHandler.removeCallbacks(pausedTimeoutRunnable);
+            pausedTimeoutRunnable = null;
+        }
+    }
+
+    //#endregion
+
     //#region Getters
 
     public boolean isPlaying() {
@@ -1104,6 +1194,7 @@ public class PlaybackManager {
     }
 
     public void disconnect() {
+        stopPlaybackSession();
         stopPositionTracking();
         stopListenTracking();
         cancelCurrentSnippetTimer();
