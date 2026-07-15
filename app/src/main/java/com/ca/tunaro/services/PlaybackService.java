@@ -9,7 +9,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
@@ -57,6 +59,15 @@ public class PlaybackService extends Service implements PlaybackManager.Playback
     private Bitmap currentArt;
     private String currentArtSongId;
 
+    // Media-carousel precedence tracking (see assertPrecedence()).
+    private boolean lastPlaying = false;
+    private String lastNudgeSongId;
+
+    // Spotify emits its own session update just after playback starts, so a single
+    // immediate reassert can be out-recencied; reassert again at these delays.
+    private final Handler nudgeHandler = new Handler(Looper.getMainLooper());
+    private static final long[] NUDGE_DELAYS_MS = { 350L, 1200L, 3000L };
+
     @Nullable
     @Override
     public IBinder onBind(Intent intent) {
@@ -93,6 +104,7 @@ public class PlaybackService extends Service implements PlaybackManager.Playback
 
     @Override
     public void onDestroy() {
+        nudgeHandler.removeCallbacksAndMessages(null);
         if (playbackManager != null) {
             playbackManager.removeListener(this);
         }
@@ -109,6 +121,21 @@ public class PlaybackService extends Service implements PlaybackManager.Playback
 
     @Override
     public void onPlaybackStateChanged(boolean isPlaying, SongModel currentSong) {
+        // On a transition into playing or a track change, assert media-carousel
+        // precedence (best-effort — the system owns final ordering).
+        String songId = currentSong != null ? currentSong.getId() : null;
+        boolean becamePlaying = isPlaying && !lastPlaying;
+        boolean trackChanged = songId != null && !songId.equals(lastNudgeSongId);
+        if (isPlaying && (becamePlaying || trackChanged)) {
+            assertPrecedence();
+            schedulePrecedenceReasserts();
+        } else if (!isPlaying) {
+            // Paused: stop reasserting so it can't steal the card back post-pause.
+            nudgeHandler.removeCallbacksAndMessages(null);
+        }
+        lastPlaying = isPlaying;
+        lastNudgeSongId = songId;
+
         updateMetadata(currentSong);
         updatePlaybackState();
         postNotification();
@@ -125,6 +152,33 @@ public class PlaybackService extends Service implements PlaybackManager.Playback
     public void onConnectionStateChanged(boolean isConnected) {
         // Connection changes don't affect the notification; session lifecycle on
         // disconnect is handled by PlaybackManager stopping the service.
+    }
+
+    //#endregion
+
+    //#region Media-carousel precedence
+
+    // Assert precedence over Spotify on two independent signals the system uses to
+    // rank the media carousel:
+    //   1. Session recency — push a brief PAUSED→PLAYING edge. The stack ranks by
+    //      the session that most recently transitioned to playing, not by
+    //      setActive() or by re-setting the same STATE_PLAYING (which the poller
+    //      already does), so a real edge is what re-recencies this session.
+    //   2. Notification recency — re-post with an advancing when-time, since
+    //      SystemUI's carousel ranks the media notifications, not the session stack.
+    private void assertPrecedence() {
+        if (mediaSession == null || playbackManager == null || !playbackManager.isPlaying()) return;
+        mediaSession.setActive(true);
+        mediaSession.setPlaybackState(buildState(false));
+        mediaSession.setPlaybackState(buildState(true));
+        postNotification();
+    }
+
+    private void schedulePrecedenceReasserts() {
+        nudgeHandler.removeCallbacksAndMessages(null);
+        for (long delay : NUDGE_DELAYS_MS) {
+            nudgeHandler.postDelayed(this::assertPrecedence, delay);
+        }
     }
 
     //#endregion
@@ -156,15 +210,9 @@ public class PlaybackService extends Service implements PlaybackManager.Playback
             if (playbackManager != null) playbackManager.previous();
         }
 
-        @Override
-        public void onSeekTo(long pos) {
-            // Gated in the PlaybackState actions: ACTION_SEEK_TO is only advertised
-            // outside snippet mode, so the notification seekbar is non-draggable
-            // while a snippet owns the playhead. Guard here too for safety.
-            if (playbackManager != null && !playbackManager.isSnippetMode()) {
-                playbackManager.seekTo(pos);
-            }
-        }
+        // Seeking is intentionally not handled: ACTION_SEEK_TO is not advertised,
+        // so the notification progress bar is display-only. Routing a seek through
+        // Spotify would hand media-carousel precedence back to it.
     };
 
     //#endregion
@@ -188,25 +236,25 @@ public class PlaybackService extends Service implements PlaybackManager.Playback
 
     private void updatePlaybackState() {
         if (mediaSession == null || playbackManager == null) return;
-        boolean isPlaying = playbackManager.isPlaying();
+        mediaSession.setPlaybackState(buildState(playbackManager.isPlaying()));
+    }
+
+    private PlaybackStateCompat buildState(boolean playing) {
         long actions = PlaybackStateCompat.ACTION_PLAY
                 | PlaybackStateCompat.ACTION_PAUSE
                 | PlaybackStateCompat.ACTION_PLAY_PAUSE
                 | PlaybackStateCompat.ACTION_SKIP_TO_NEXT
                 | PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS;
-        // Draggable seekbar in normal playback; suppressed during snippet mode,
-        // mirroring the in-app rule (CONTEXT.md, Tunaro media session).
-        if (!playbackManager.isSnippetMode()) {
-            actions |= PlaybackStateCompat.ACTION_SEEK_TO;
-        }
-        PlaybackStateCompat state = new PlaybackStateCompat.Builder()
+        // ACTION_SEEK_TO is deliberately omitted so the notification progress bar
+        // is display-only (non-draggable): a notification seek routes through
+        // Spotify and hands media-carousel precedence back to it.
+        return new PlaybackStateCompat.Builder()
                 .setActions(actions)
                 .setState(
-                        isPlaying ? PlaybackStateCompat.STATE_PLAYING : PlaybackStateCompat.STATE_PAUSED,
+                        playing ? PlaybackStateCompat.STATE_PLAYING : PlaybackStateCompat.STATE_PAUSED,
                         playbackManager.getCurrentPositionMs(),
-                        isPlaying ? 1f : 0f)
+                        playing ? 1f : 0f)
                 .build();
-        mediaSession.setPlaybackState(state);
     }
 
     private void postNotification() {
@@ -226,6 +274,11 @@ public class PlaybackService extends Service implements PlaybackManager.Playback
                         .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
                         .setOngoing(true)
                         .setContentIntent(buildContentIntent())
+                        // Advancing when-time (hidden) feeds SystemUI's media-carousel
+                        // recency ranking, so a reassert re-post reads as the most
+                        // recently active media notification. See assertPrecedence().
+                        .setWhen(System.currentTimeMillis())
+                        .setShowWhen(false)
                         .setOnlyAlertOnce(true);
 
         if (currentArt != null && song != null && song.getId().equals(currentArtSongId)) {
