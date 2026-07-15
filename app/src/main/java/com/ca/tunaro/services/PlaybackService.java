@@ -243,8 +243,13 @@ public class PlaybackService extends Service implements PlaybackManager.Playback
         long actions = PlaybackStateCompat.ACTION_PLAY
                 | PlaybackStateCompat.ACTION_PAUSE
                 | PlaybackStateCompat.ACTION_PLAY_PAUSE
-                | PlaybackStateCompat.ACTION_SKIP_TO_NEXT
                 | PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS;
+        // Only advertise skip-to-next when a next track actually exists. In Stop
+        // mode at the end of the queue hasNext() is false, so the next control is
+        // dropped rather than presented as a dead button.
+        if (playbackManager.hasNext()) {
+            actions |= PlaybackStateCompat.ACTION_SKIP_TO_NEXT;
+        }
         // ACTION_SEEK_TO is deliberately omitted so the notification progress bar
         // is display-only (non-draggable): a notification seek routes through
         // Spotify and hands media-carousel precedence back to it.
@@ -291,12 +296,18 @@ public class PlaybackService extends Service implements PlaybackManager.Playback
                 isPlaying ? R.drawable.ic_notif_pause : R.drawable.ic_notif_play,
                 getString(isPlaying ? R.string.notif_pause : R.string.notif_play),
                 MediaButtonReceiver.buildMediaButtonPendingIntent(this, PlaybackStateCompat.ACTION_PLAY_PAUSE));
-        builder.addAction(R.drawable.ic_notif_skip_next, getString(R.string.notif_next),
-                MediaButtonReceiver.buildMediaButtonPendingIntent(this, PlaybackStateCompat.ACTION_SKIP_TO_NEXT));
 
-        builder.setStyle(new MediaStyle()
-                .setMediaSession(mediaSession.getSessionToken())
-                .setShowActionsInCompactView(0, 1, 2));
+        // Omit the next control entirely when there is no next track (Stop mode at
+        // the end of the queue), so compact view shows prev + play/pause only.
+        boolean showNext = playbackManager != null && playbackManager.hasNext();
+        if (showNext) {
+            builder.addAction(R.drawable.ic_notif_skip_next, getString(R.string.notif_next),
+                    MediaButtonReceiver.buildMediaButtonPendingIntent(this, PlaybackStateCompat.ACTION_SKIP_TO_NEXT));
+        }
+
+        MediaStyle style = new MediaStyle().setMediaSession(mediaSession.getSessionToken());
+        style.setShowActionsInCompactView(showNext ? new int[]{0, 1, 2} : new int[]{0, 1});
+        builder.setStyle(style);
 
         return builder.build();
     }
