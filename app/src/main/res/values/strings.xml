@@ -5,6 +5,12 @@
     <string name="no_playlists_found">No playlists found</string>
     <string name="save">Save</string>
     <string name="app_name" translatable="false">Tunaro</string>
+    <string name="playback_channel_name">Playback</string>
+    <string name="playback_channel_description">Media controls while Tunaro is steering playback</string>
+    <string name="notif_previous">Previous</string>
+    <string name="notif_play">Play</string>
+    <string name="notif_pause">Pause</string>
+    <string name="notif_next">Next</string>
     <string name="title_home">Home</string>
     <string name="title_dashboard">Dashboard</string>
     <string name="title_notifications">Notifications</string>

@@ -68,3 +68,6 @@ secrets.xml
 STATUS.md
 docs/
 CONTEXT.md
+
+# Local deploy script (build + install to phone over Tailscale)
+deploy.sh
