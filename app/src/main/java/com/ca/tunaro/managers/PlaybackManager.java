@@ -20,6 +20,7 @@ import com.ca.tunaro.utils.SongCache;
 import com.spotify.android.appremote.api.ConnectionParams;
 import com.spotify.android.appremote.api.Connector;
 import com.spotify.android.appremote.api.SpotifyAppRemote;
+import com.spotify.android.appremote.api.error.UserNotAuthorizedException;
 import com.spotify.protocol.types.PlayerState;
 import com.spotify.protocol.types.Track;
 
@@ -138,6 +139,11 @@ public class PlaybackManager {
         void onConnectionStateChanged(boolean isConnected);
 
         void onPlaybackPositionChanged(long positionMs, long durationMs);
+
+        // Called when Spotify reports the App-Remote authorization has lapsed and
+        // the user must re-complete the consent flow. Default no-op so listeners
+        // that don't handle re-auth need no changes.
+        default void onAuthorizationRequired() {}
     }
 
     private PlaybackManager() {
@@ -237,6 +243,18 @@ public class PlaybackManager {
 
                 Log.w(TAG, "Spotify remote connection failed: " + throwable.getMessage(), throwable);
                 notifyConnectionStateChanged();
+
+                // A UserNotAuthorized failure means the App-Remote grant has lapsed
+                // (e.g. expired or the Spotify app was re-logged). Retrying just fails
+                // identically until the user re-completes the consent flow, so skip the
+                // backoff loop and signal the UI to re-authorize instead.
+                if (throwable instanceof UserNotAuthorizedException) {
+                    connectRetryCount = 0;
+                    Log.w(TAG, "Spotify App-Remote authorization required; requesting re-auth");
+                    notifyAuthorizationRequired();
+                    return;
+                }
+
                 scheduleRetryOrGiveUp(onSuccess);
             }
         });
@@ -1008,6 +1026,12 @@ public class PlaybackManager {
     private void notifyPlaybackPositionChanged() {
         for (PlaybackListener listener : listeners) {
             listener.onPlaybackPositionChanged(currentPositionMs, durationMs);
+        }
+    }
+
+    private void notifyAuthorizationRequired() {
+        for (PlaybackListener listener : listeners) {
+            listener.onAuthorizationRequired();
         }
     }
 
