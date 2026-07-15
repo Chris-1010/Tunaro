@@ -55,6 +55,10 @@ import se.michaelthelin.spotify.requests.data.users_profile.GetCurrentUsersProfi
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
 
+    // Set by BaseActivity when Spotify reports the App-Remote grant has lapsed:
+    // forces the consent flow instead of silently restoring the cached session.
+    public static final String EXTRA_FORCE_REAUTH = "force_reauth";
+
     // Minimum time the spinner splash stays visible on the fast (already-logged-in) path.
     private static final long SPLASH_MIN_DISPLAY_MS = 1200;
 
@@ -88,6 +92,8 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main_splash);
         applyRandomSplashGradient();
 
+        requestNotificationPermissionIfNeeded();
+
         // Set the singleton instance
         instance = this;
         Log.d(TAG, "onCreate: MainActivity instance is now " + instance);
@@ -107,8 +113,13 @@ public class MainActivity extends AppCompatActivity {
                 REDIRECT_URI.toString()
         );
 
+        // When re-auth is forced (App-Remote grant lapsed), skip silent restore and
+        // go straight to the consent flow so Spotify re-issues the grant.
+        boolean forceReauth = getIntent() != null
+                && getIntent().getBooleanExtra(EXTRA_FORCE_REAUTH, false);
+
         // Restore session from saved tokens (silent recovery)
-        if (tryRestoreSession()) {
+        if (!forceReauth && tryRestoreSession()) {
             Log.d(TAG, "Session restored from saved tokens");
             connectSpotifyAppRemote();
 
@@ -183,6 +194,23 @@ public class MainActivity extends AppCompatActivity {
             {0xFF001B3A, 0xFF4A90E2}, // midnight blue -> sky blue
             {0xFF0B1D51, 0xFF18C6B0}, // royal navy -> aqua
     };
+
+    // On Android 13+ the playback-session media notification (ADR-0002) is hidden
+    // unless POST_NOTIFICATIONS is granted. Request it once at startup; the result
+    // is not awaited — playback still works, only the notification is suppressed if
+    // denied.
+    private void requestNotificationPermissionIfNeeded() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return;
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this,
+                android.Manifest.permission.POST_NOTIFICATIONS)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        androidx.core.app.ActivityCompat.requestPermissions(this,
+                new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, REQUEST_POST_NOTIFICATIONS);
+    }
+
+    private static final int REQUEST_POST_NOTIFICATIONS = 2001;
 
     private void applyRandomSplashGradient() {
         View root = findViewById(R.id.splash_root);
