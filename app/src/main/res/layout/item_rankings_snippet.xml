@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/snippet_row"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="4dp"
+    android:background="@drawable/rankings_snippet_row_bg"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="6dp"
+    android:paddingTop="4dp"
+    android:paddingEnd="10dp"
+    android:paddingBottom="4dp">
+
+    <ImageButton
+        android:id="@+id/snippet_play_button"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:background="@null"
+        android:clickable="false"
+        android:contentDescription="Play snippet"
+        android:focusable="false"
+        android:scaleType="fitCenter"
+        android:src="@drawable/play_circle_filled"
+        app:tint="@color/white" />
+
+    <TextView
+        android:id="@+id/snippet_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="Snippet"
+        android:textColor="@color/white"
+        android:textSize="13sp" />
+
+</LinearLayout>

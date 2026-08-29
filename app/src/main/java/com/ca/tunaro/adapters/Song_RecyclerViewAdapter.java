@@ -23,6 +23,7 @@ import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.R;
 import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.models.SongModel;
+import com.ca.tunaro.models.SongRankInfo;
 import com.ca.tunaro.interfaces.Song_RecyclerViewInterface;
 
 import java.util.ArrayList;
@@ -45,6 +46,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
     private Map<String, Integer> listenCountMap = null;
     private Map<String, Integer> popularityMap = null;
     private Map<String, String> lastListenedMap = null;
+    private Map<String, SongRankInfo> rankInfoMap = null;
 
     public Song_RecyclerViewAdapter(Context context, Song_RecyclerViewInterface recyclerViewInterface, ArrayList<SongModel> songModels) {
         this.context = context;
@@ -164,6 +166,19 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
                     String releaseDate = model.getReleaseDate();
                     String formattedReleaseDate = formatReleaseDateForDisplay(releaseDate);
                     holder.contextualInfoView.setText("Released: " + formattedReleaseDate);
+                    break;
+
+                case 8: // Rank (Elo)
+                    SongRankInfo rankInfo = rankInfoMap != null ? rankInfoMap.get(model.getId()) : null;
+                    if (rankInfo != null) {
+                        // Rating shown as a signed offset from the 1500 seed.
+                        long offset = Math.round(rankInfo.rating) - 1500;
+                        String sign = offset >= 0 ? "+" : "";
+                        holder.contextualInfoView.setText(
+                                "#" + rankInfo.rank + " (" + sign + offset + ")");
+                    } else {
+                        holder.contextualInfoView.setText("Unranked");
+                    }
                     break;
             }
         } else {
@@ -466,8 +481,8 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
 
     public void updateSortContext(int sortOption) {
         this.currentSortOption = sortOption;
-        // Show contextual info for Date Added (0), Last Listened (1), Length (3), Popularity (5), Listen Count (6), and Release Date (7)
-        this.shouldShowContextualInfo = (sortOption == 0 || sortOption == 1 || sortOption == 3 || sortOption == 5 || sortOption == 6 || sortOption == 7);
+        // Show contextual info for Date Added (0), Last Listened (1), Length (3), Popularity (5), Listen Count (6), Release Date (7), and Rank (8)
+        this.shouldShowContextualInfo = (sortOption == 0 || sortOption == 1 || sortOption == 3 || sortOption == 5 || sortOption == 6 || sortOption == 7 || sortOption == 8);
         notifyDataSetChanged();
     }
 
@@ -495,6 +510,11 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
 
     public void updateLastListenedMap(Map<String, String> lastListenedMap) {
         this.lastListenedMap = lastListenedMap;
+        notifyDataSetChanged();
+    }
+
+    public void updateRankInfoMap(Map<String, SongRankInfo> rankInfoMap) {
+        this.rankInfoMap = rankInfoMap;
         notifyDataSetChanged();
     }
 

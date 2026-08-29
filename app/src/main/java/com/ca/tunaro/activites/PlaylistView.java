@@ -45,6 +45,7 @@ import com.google.android.material.appbar.AppBarLayout;
 import com.google.android.material.appbar.CollapsingToolbarLayout;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
@@ -79,6 +80,9 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     private SharedPreferences prefs;
     private static final String SORT_PREF_KEY = "playlist_sort_option";
     private static final String SORT_DIRECTION_KEY = "playlist_sort_direction";
+    // Index of the "Rank" option in the sort spinner (appended, so earlier
+    // indices the prefs rely on don't shift).
+    private static final int SORT_RANK = 8;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -386,7 +390,14 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         // Set up spinner adapter with custom view. "Title" (index 2) is intentionally kept in the
         // array so existing sort/pref indices don't shift, but it is hidden from the dropdown
         // (search covers title lookup); see getDropDownView.
-        String[] sortOptions = new String[]{"Date Added", "Last Listened", "Title", "Length", "Artist", "Popularity", "Listen Count", "Release Date"};
+        // "Rank" (index 8) is only offered once at least one song in the playlist has been ranked,
+        // so a playlist the user has never ranked doesn't dangle a dead sort option.
+        List<String> optionList = new ArrayList<>(Arrays.asList(
+                "Date Added", "Last Listened", "Title", "Length", "Artist", "Popularity", "Listen Count", "Release Date"));
+        if (hasAnyRankedSong()) {
+            optionList.add("Rank");
+        }
+        String[] sortOptions = optionList.toArray(new String[0]);
         final int hiddenTitleIndex = 2;
         ArrayAdapter<String> sortAdapter = new ArrayAdapter<String>(this, R.layout.spinner_dropdown_item, sortOptions) {
             @Override
@@ -433,6 +444,12 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         int savedSortOption = prefs.getInt(SORT_PREF_KEY, 0); // Default to Date Added
         isAscending = prefs.getBoolean(SORT_DIRECTION_KEY, false); // Default to descending
 
+        // A stored Rank selection (index 8) is out of range when Rank isn't offered
+        // for this playlist; clamp it so setSelection can't crash.
+        if (savedSortOption >= sortOptions.length) {
+            savedSortOption = 0;
+        }
+
         sortSpinner.setSelection(savedSortOption);
 
         updateSortDirectionIcon();
@@ -472,6 +489,14 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         });
     }
 
+    // True if any song currently loaded in this playlist has an Elo rating.
+    private boolean hasAnyRankedSong() {
+        if (allSongs == null || allSongs.isEmpty()) return false;
+        List<String> ids = new ArrayList<>();
+        for (SongModel song : allSongs) ids.add(song.getId());
+        return !new DatabaseHelper(this).getRankInfoBatch(ids).isEmpty();
+    }
+
     private void updateSortDirectionIcon() {
         sortDirectionIcon.setImageResource(isAscending ?
                 R.drawable.ic_arrow_upward :
@@ -479,6 +504,13 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     }
 
     private void applySortToList(ArrayList<SongModel> songs, int sortOption) {
+        // Rank sorts by Elo rating, but unranked songs must always trail the ranked
+        // ones regardless of direction, so it can't use the generic reversal below.
+        if (sortOption == SORT_RANK) {
+            sortByRank(songs);
+            return;
+        }
+
         Comparator<SongModel> comparator = null;
 
         switch (sortOption) {
@@ -607,6 +639,27 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         }
     }
 
+    // Sort by Elo rank: ranked songs first (highest rating first by default, or
+    // lowest first when ascending), then all unranked songs in their existing order.
+    private void sortByRank(ArrayList<SongModel> songs) {
+        List<String> ids = new ArrayList<>();
+        for (SongModel song : songs) ids.add(song.getId());
+
+        Map<String, com.ca.tunaro.models.SongRankInfo> rankInfo = computeLocalRankInfo(ids);
+
+        songs.sort((s1, s2) -> {
+            com.ca.tunaro.models.SongRankInfo i1 = rankInfo.get(s1.getId());
+            com.ca.tunaro.models.SongRankInfo i2 = rankInfo.get(s2.getId());
+            if (i1 != null && i2 != null) {
+                int cmp = Double.compare(i1.rating, i2.rating);  // ascending by rating
+                return isAscending ? cmp : -cmp;
+            }
+            if (i1 != null) return -1;  // ranked always before unranked
+            if (i2 != null) return 1;
+            return 0;                    // both unranked: keep order (stable sort)
+        });
+    }
+
     private void sortSongs(int sortOption) {
         if (adapter == null || selectedPlaylist == null) return;
 
@@ -636,7 +689,43 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             DatabaseHelper db = new DatabaseHelper(this);
             adapter.updateListenCounts(db.getVariantListenCountsBatch(ids));
             db.close();
+        } else if (sortOption == SORT_RANK) {
+            adapter.updateRankInfoMap(computeLocalRankInfo(ids));
         }
+    }
+
+    // Rank shown next to a song is computed on the fly relative to THIS playlist's
+    // rated songs, not the global standings: order by Elo rating descending, songs
+    // with an equal rating share a rank, and ranks are contiguous (1, 2, 2, 3, …)
+    // so a playlist missing some globally-higher songs still starts at #1. The raw
+    // rating is carried through for display. Unrated songs are simply absent.
+    private Map<String, com.ca.tunaro.models.SongRankInfo> computeLocalRankInfo(List<String> ids) {
+        DatabaseHelper db = new DatabaseHelper(this);
+        Map<String, com.ca.tunaro.models.SongRankInfo> global = db.getRankInfoBatch(ids);
+        db.close();
+
+        // Distinct ratings, highest first → dense rank number.
+        java.util.TreeSet<Long> distinct = new java.util.TreeSet<>(java.util.Collections.reverseOrder());
+        for (com.ca.tunaro.models.SongRankInfo info : global.values()) {
+            distinct.add(ratingKey(info.rating));
+        }
+        Map<Long, Integer> rankForRating = new java.util.HashMap<>();
+        int rank = 1;
+        for (Long key : distinct) rankForRating.put(key, rank++);
+
+        Map<String, com.ca.tunaro.models.SongRankInfo> local = new java.util.HashMap<>();
+        for (Map.Entry<String, com.ca.tunaro.models.SongRankInfo> entry : global.entrySet()) {
+            double rating = entry.getValue().rating;
+            local.put(entry.getKey(),
+                    new com.ca.tunaro.models.SongRankInfo(rankForRating.get(ratingKey(rating)), rating));
+        }
+        return local;
+    }
+
+    // Bucket ratings that are equal up to floating-point dust so tied Elos, which
+    // arise naturally (all first-round winners land on the same value), share a rank.
+    private static long ratingKey(double rating) {
+        return Math.round(rating * 1000.0);
     }
 
     private void showShimmerLoading(boolean isLoading) {

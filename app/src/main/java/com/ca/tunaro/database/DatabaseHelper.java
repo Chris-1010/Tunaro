@@ -12,7 +12,9 @@ import android.util.Log;
 import com.ca.tunaro.models.Artist;
 import com.ca.tunaro.models.ListenHistoryEntry;
 import com.ca.tunaro.models.PlaylistModel;
+import com.ca.tunaro.models.RankingGame;
 import com.ca.tunaro.models.SongModel;
+import com.ca.tunaro.models.SongRankInfo;
 import com.ca.tunaro.models.SongNote;
 import com.ca.tunaro.models.SongSnippet;
 import com.google.gson.Gson;
@@ -43,7 +45,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     private static final String TAG = "DatabaseHelper";
     private static final String DATABASE_NAME = "TunaroDB";
-    private static final int DATABASE_VERSION = 14;
+    private static final int DATABASE_VERSION = 16;
 
     // Table names
     private static final String TABLE_ARTISTS = "artists";
@@ -56,6 +58,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String TABLE_SONG_NOTES = "song_notes";
     private static final String TABLE_SONG_SNIPPETS = "song_snippets";
     private static final String TABLE_LISTEN_HISTORY = "listen_history";
+    private static final String TABLE_SONG_RATINGS = "song_ratings";
+    private static final String TABLE_RANKING_GAMES = "ranking_games";
 
     // Shared columns
     private static final String COLUMN_UUID = "uuid";
@@ -122,6 +126,32 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     // Listen history columns
     private static final String COLUMN_LISTEN_TIMESTAMP = "listen_timestamp";
     private static final String CURSOR_PREF_KEY = "last_sync_cursor";
+
+    // Song ratings columns (Elo across ranking games)
+    private static final String COLUMN_RATING = "rating";
+    private static final String COLUMN_MATCHES_PLAYED = "matches_played";
+    private static final String COLUMN_GAMES_PLAYED = "games_played";
+    private static final String COLUMN_UPDATED_AT = "updated_at";
+
+    // Ranking games columns
+    private static final String COLUMN_STATUS = "status";
+    private static final String COLUMN_BRACKET_SIZE = "bracket_size";
+    private static final String COLUMN_ENTRANT_IDS = "entrant_ids";
+    private static final String COLUMN_DECISIONS = "decisions";
+    private static final String COLUMN_FINAL_ORDER = "final_order";
+    private static final String COLUMN_PLAYLIST_IDS = "playlist_ids";
+    private static final String COLUMN_COMPLETED_AT = "completed_at";
+
+    // Ranking game status values
+    public static final String GAME_IN_PROGRESS = "in_progress";
+    public static final String GAME_COMPLETED = "completed";
+
+    // Starting Elo rating and update sensitivity.
+    private static final double DEFAULT_RATING = 1500.0;
+    private static final double ELO_K = 32.0;
+    // One clear rung between adjacent placements when lifting a song to enforce a
+    // game's final order (an even-match win's worth of rating).
+    private static final double ELO_RANK_STEP = 16.0;
 
     //#region Create table SQL
 
@@ -225,6 +255,29 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     + COLUMN_LISTEN_TIMESTAMP + " TEXT NOT NULL"
                     + ")";
 
+    private static final String CREATE_TABLE_SONG_RATINGS =
+            "CREATE TABLE " + TABLE_SONG_RATINGS + "("
+                    + COLUMN_SPOTIFY_URI + " TEXT PRIMARY KEY,"
+                    + COLUMN_RATING + " REAL NOT NULL DEFAULT " + DEFAULT_RATING + ","
+                    + COLUMN_MATCHES_PLAYED + " INTEGER NOT NULL DEFAULT 0,"
+                    + COLUMN_GAMES_PLAYED + " INTEGER NOT NULL DEFAULT 0,"
+                    + COLUMN_UPDATED_AT + " TEXT"
+                    + ")";
+
+    private static final String CREATE_TABLE_RANKING_GAMES =
+            "CREATE TABLE " + TABLE_RANKING_GAMES + "("
+                    + COLUMN_ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + COLUMN_STATUS + " TEXT NOT NULL,"
+                    + COLUMN_BRACKET_SIZE + " INTEGER NOT NULL,"
+                    + COLUMN_ENTRANT_IDS + " TEXT NOT NULL,"
+                    + COLUMN_DECISIONS + " TEXT,"
+                    + COLUMN_FINAL_ORDER + " TEXT,"
+                    + COLUMN_PLAYLIST_IDS + " TEXT,"
+                    + COLUMN_CREATED_AT + " TEXT,"
+                    + COLUMN_UPDATED_AT + " TEXT,"
+                    + COLUMN_COMPLETED_AT + " TEXT"
+                    + ")";
+
     //#endregion
 
     public DatabaseHelper(Context context) {
@@ -243,6 +296,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.execSQL(CREATE_TABLE_SONG_NOTES);
         db.execSQL(CREATE_TABLE_SONG_SNIPPETS);
         db.execSQL(CREATE_TABLE_LISTEN_HISTORY);
+        db.execSQL(CREATE_TABLE_SONG_RATINGS);
+        db.execSQL(CREATE_TABLE_RANKING_GAMES);
     }
 
     @Override
@@ -409,6 +464,25 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             oldVersion = 14;
         }
 
+        if (oldVersion == 14) {
+            // v14→v15: rankings gain a persistent Elo rating per song and a saved
+            // game table (one resumable game + completed history). Purely additive,
+            // so existing data is untouched.
+            db.execSQL(CREATE_TABLE_SONG_RATINGS);
+            db.execSQL(CREATE_TABLE_RANKING_GAMES);
+            Log.i(TAG, "DB v15 migration complete");
+            oldVersion = 15;
+        }
+
+        if (oldVersion == 15) {
+            // v15→v16: remember which playlists a ranking game drew its entrants
+            // from. Additive, so existing saved games keep their data (playlist_ids
+            // simply stays null for them).
+            db.execSQL("ALTER TABLE " + TABLE_RANKING_GAMES + " ADD COLUMN " + COLUMN_PLAYLIST_IDS + " TEXT");
+            Log.i(TAG, "DB v16 migration complete");
+            oldVersion = 16;
+        }
+
         if (oldVersion < newVersion) {
             db.execSQL("DROP TABLE IF EXISTS favourite_playlists");
             db.execSQL("DROP TABLE IF EXISTS archived_playlists");
@@ -424,6 +498,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONG_NOTES);
             db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONG_SNIPPETS);
             db.execSQL("DROP TABLE IF EXISTS " + TABLE_LISTEN_HISTORY);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONG_RATINGS);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_RANKING_GAMES);
             onCreate(db);
         }
     }
@@ -2294,6 +2370,444 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         } catch (java.text.ParseException e) {
             return "Unknown";
         }
+    }
+
+    //#endregion
+
+    //#region ======== RANKINGS ========
+
+    /**
+     * All non-archived playlists (favourite first, then by name), for the ranking
+     * setup's playlist picker. Each entrant pool is the union of the selected
+     * playlists' active songs.
+     */
+    public List<PlaylistModel> getNonArchivedPlaylists() {
+        List<PlaylistModel> playlists = new ArrayList<>();
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT " + COLUMN_PLAYLIST_ID + ", " + COLUMN_PLAYLIST_NAME + ", " + COLUMN_IMAGE_URL +
+                        ", " + COLUMN_TRACK_COUNT + ", " + COLUMN_IS_FAVOURITE +
+                        " FROM " + TABLE_PLAYLISTS +
+                        " WHERE " + COLUMN_IS_ARCHIVED + " = 0" +
+                        " ORDER BY " + COLUMN_IS_FAVOURITE + " DESC, " + COLUMN_PLAYLIST_NAME + " ASC", null);
+        if (cursor.moveToFirst()) {
+            do {
+                PlaylistModel playlist = new PlaylistModel(
+                        cursor.getString(0), cursor.getString(1), cursor.getInt(3), null, new ArrayList<>());
+                playlist.setImageUrl(cursor.getString(2));
+                playlist.setFavourite(cursor.getInt(4) == 1);
+                playlists.add(playlist);
+            } while (cursor.moveToNext());
+        }
+        cursor.close();
+        db.close();
+        return playlists;
+    }
+
+    // ----- Elo ratings -----
+
+    /**
+     * Apply one match outcome to the Elo ratings of the two songs. Increase-only:
+     * the winner gains the standard amount (larger for an upset), the loser is never
+     * penalised. Ratings therefore ratchet upward and a single hard draw can't sink a
+     * song — order is instead enforced by lifting via {@link #enforceRankingOrder}.
+     * Creates a rating row for any song not yet rated.
+     */
+    public void applyMatchResult(String winnerUri, String loserUri) {
+        if (winnerUri == null || loserUri == null || winnerUri.equals(loserUri)) return;
+        SQLiteDatabase db = this.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            double winnerRating = readRating(db, winnerUri);
+            double loserRating = readRating(db, loserUri);
+
+            double expectedWinner = 1.0 / (1.0 + Math.pow(10.0, (loserRating - winnerRating) / 400.0));
+            double gain = ELO_K * (1.0 - expectedWinner);
+
+            writeRating(db, winnerUri, winnerRating + gain);
+            bumpMatchesPlayed(db, loserUri);   // the loser played, but its rating holds
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+            db.close();
+        }
+    }
+
+    // Count a match against a song without changing its rating (seeding a row first).
+    private void bumpMatchesPlayed(SQLiteDatabase db, String uri) {
+        ContentValues seed = new ContentValues();
+        seed.put(COLUMN_SPOTIFY_URI, uri);
+        seed.put(COLUMN_RATING, DEFAULT_RATING);
+        seed.put(COLUMN_MATCHES_PLAYED, 0);
+        db.insertWithOnConflict(TABLE_SONG_RATINGS, null, seed, SQLiteDatabase.CONFLICT_IGNORE);
+
+        db.execSQL("UPDATE " + TABLE_SONG_RATINGS +
+                        " SET " + COLUMN_MATCHES_PLAYED + " = " + COLUMN_MATCHES_PLAYED + " + 1, " +
+                        COLUMN_UPDATED_AT + " = ?" +
+                        " WHERE " + COLUMN_SPOTIFY_URI + " = ?",
+                new Object[]{nowUtc(), uri});
+    }
+
+    /**
+     * Seed a rating row for any entrant not yet rated, at the current lowest rating
+     * across all rated songs (or {@link #DEFAULT_RATING} when none exist yet). New
+     * songs therefore enter at the bottom and climb by winning.
+     */
+    public void seedNewEntrants(List<String> uris) {
+        if (uris == null || uris.isEmpty()) return;
+        SQLiteDatabase db = this.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            double seed = DEFAULT_RATING;
+            Cursor cursor = db.rawQuery(
+                    "SELECT MIN(" + COLUMN_RATING + ") FROM " + TABLE_SONG_RATINGS, null);
+            try {
+                if (cursor.moveToFirst() && !cursor.isNull(0)) seed = cursor.getDouble(0);
+            } finally {
+                cursor.close();
+            }
+            for (String uri : uris) {
+                ContentValues values = new ContentValues();
+                values.put(COLUMN_SPOTIFY_URI, uri);
+                values.put(COLUMN_RATING, seed);
+                values.put(COLUMN_MATCHES_PLAYED, 0);
+                db.insertWithOnConflict(TABLE_SONG_RATINGS, null, values, SQLiteDatabase.CONFLICT_IGNORE);
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+            db.close();
+        }
+    }
+
+    /** Raw Elo per uri, defaulting to the seed rating for any song not yet rated. */
+    public Map<String, Double> getRawRatings(List<String> uris) {
+        Map<String, Double> result = new HashMap<>();
+        if (uris == null || uris.isEmpty()) return result;
+        for (String uri : uris) result.put(uri, DEFAULT_RATING);
+
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT " + COLUMN_SPOTIFY_URI + ", " + COLUMN_RATING +
+                        " FROM " + TABLE_SONG_RATINGS +
+                        " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + buildPlaceholders(uris.size()) + ")",
+                uris.toArray(new String[0]));
+        if (cursor.moveToFirst()) {
+            do { result.put(cursor.getString(0), cursor.getDouble(1)); } while (cursor.moveToNext());
+        }
+        cursor.close();
+        db.close();
+        return result;
+    }
+
+    /**
+     * Matches played per uri, defaulting to 0 for any song not yet rated. Used to
+     * weight new-game sampling toward songs that have been ranked the least, so
+     * repeated games over a large pool spread coverage rather than re-facing the
+     * same songs.
+     */
+    public Map<String, Integer> getMatchesPlayed(List<String> uris) {
+        Map<String, Integer> result = new HashMap<>();
+        if (uris == null || uris.isEmpty()) return result;
+        for (String uri : uris) result.put(uri, 0);
+
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT " + COLUMN_SPOTIFY_URI + ", " + COLUMN_MATCHES_PLAYED +
+                        " FROM " + TABLE_SONG_RATINGS +
+                        " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + buildPlaceholders(uris.size()) + ")",
+                uris.toArray(new String[0]));
+        if (cursor.moveToFirst()) {
+            do { result.put(cursor.getString(0), cursor.getInt(1)); } while (cursor.moveToNext());
+        }
+        cursor.close();
+        db.close();
+        return result;
+    }
+
+    /** Record that a completed game was played, for each entrant that is rated. */
+    public void incrementGamesPlayed(List<String> entrantUris) {
+        if (entrantUris == null || entrantUris.isEmpty()) return;
+        SQLiteDatabase db = this.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            for (String uri : entrantUris) {
+                db.execSQL("UPDATE " + TABLE_SONG_RATINGS +
+                                " SET " + COLUMN_GAMES_PLAYED + " = " + COLUMN_GAMES_PLAYED + " + 1" +
+                                " WHERE " + COLUMN_SPOTIFY_URI + " = ?",
+                        new String[]{uri});
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+            db.close();
+        }
+    }
+
+    private double readRating(SQLiteDatabase db, String uri) {
+        Cursor cursor = db.rawQuery(
+                "SELECT " + COLUMN_RATING + " FROM " + TABLE_SONG_RATINGS +
+                        " WHERE " + COLUMN_SPOTIFY_URI + " = ?",
+                new String[]{uri});
+        double rating = DEFAULT_RATING;
+        try {
+            if (cursor.moveToFirst()) rating = cursor.getDouble(0);
+        } finally {
+            cursor.close();
+        }
+        return rating;
+    }
+
+    private void writeRating(SQLiteDatabase db, String uri, double rating) {
+        // Seed a row on first sighting (ignored if one already exists), then set
+        // the new rating and bump matches_played in place.
+        ContentValues seed = new ContentValues();
+        seed.put(COLUMN_SPOTIFY_URI, uri);
+        seed.put(COLUMN_RATING, DEFAULT_RATING);
+        seed.put(COLUMN_MATCHES_PLAYED, 0);
+        db.insertWithOnConflict(TABLE_SONG_RATINGS, null, seed, SQLiteDatabase.CONFLICT_IGNORE);
+
+        db.execSQL("UPDATE " + TABLE_SONG_RATINGS +
+                        " SET " + COLUMN_RATING + " = ?, " +
+                        COLUMN_MATCHES_PLAYED + " = " + COLUMN_MATCHES_PLAYED + " + 1, " +
+                        COLUMN_UPDATED_AT + " = ?" +
+                        " WHERE " + COLUMN_SPOTIFY_URI + " = ?",
+                new Object[]{rating, nowUtc(), uri});
+    }
+
+    // Set a rating outright without touching matches_played, seeding a row first.
+    private void setRatingValue(SQLiteDatabase db, String uri, double rating) {
+        ContentValues seed = new ContentValues();
+        seed.put(COLUMN_SPOTIFY_URI, uri);
+        seed.put(COLUMN_RATING, DEFAULT_RATING);
+        seed.put(COLUMN_MATCHES_PLAYED, 0);
+        db.insertWithOnConflict(TABLE_SONG_RATINGS, null, seed, SQLiteDatabase.CONFLICT_IGNORE);
+
+        db.execSQL("UPDATE " + TABLE_SONG_RATINGS +
+                        " SET " + COLUMN_RATING + " = ?, " + COLUMN_UPDATED_AT + " = ?" +
+                        " WHERE " + COLUMN_SPOTIFY_URI + " = ?",
+                new Object[]{rating, nowUtc(), uri});
+    }
+
+    /**
+     * Keep Elo from contradicting a game's final placement, raising only. Walking the
+     * standings from last to first, any song not already rated above the one placed
+     * behind it is lifted an {@link #ELO_RANK_STEP} above it. Ratings are only raised
+     * here, never lowered, so an order recorded in an earlier game survives — a song
+     * that placed lower this time keeps its rating and stays ahead of songs it beat
+     * before.
+     */
+    public void enforceRankingOrder(List<String> orderedUris) {
+        if (orderedUris == null || orderedUris.size() < 2) return;
+        SQLiteDatabase db = this.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            int last = orderedUris.size() - 1;
+            double floor = readRating(db, orderedUris.get(last));
+            for (int i = last - 1; i >= 0; i--) {
+                String uri = orderedUris.get(i);
+                double rating = readRating(db, uri);
+                if (rating <= floor) {
+                    rating = floor + ELO_RANK_STEP;
+                    setRatingValue(db, uri, rating);
+                }
+                floor = rating;
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+            db.close();
+        }
+    }
+
+    /**
+     * Global standing for each requested song: dense rank among all rated songs
+     * (1 = highest Elo) and the raw rating. Songs with no rating — directly or
+     * via an ISRC-linked variant — are absent from the result.
+     */
+    public Map<String, SongRankInfo> getRankInfoBatch(List<String> uris) {
+        Map<String, SongRankInfo> results = new HashMap<>();
+        if (uris == null || uris.isEmpty()) return results;
+
+        SQLiteDatabase db = this.getReadableDatabase();
+
+        // Every rated song in Elo order → dense unique global rank.
+        Map<String, SongRankInfo> globalInfo = new HashMap<>();
+        Cursor rankCursor = db.rawQuery(
+                "SELECT " + COLUMN_SPOTIFY_URI + ", " + COLUMN_RATING +
+                        " FROM " + TABLE_SONG_RATINGS +
+                        " ORDER BY " + COLUMN_RATING + " DESC, " + COLUMN_SPOTIFY_URI + " ASC", null);
+        int rank = 0;
+        if (rankCursor.moveToFirst()) {
+            do {
+                rank++;
+                globalInfo.put(rankCursor.getString(0), new SongRankInfo(rank, rankCursor.getDouble(1)));
+            } while (rankCursor.moveToNext());
+        }
+        rankCursor.close();
+
+        // Map each requested uri to its ISRC siblings (including itself).
+        String placeholders = buildPlaceholders(uris.size());
+        Cursor isrcCursor = db.rawQuery(
+                "SELECT sil_req." + COLUMN_SPOTIFY_URI + ", sil_sib." + COLUMN_SPOTIFY_URI +
+                        " FROM " + TABLE_SONG_ISRC_LINKS + " sil_req" +
+                        " JOIN " + TABLE_SONG_ISRC_LINKS + " sil_sib ON sil_sib." + COLUMN_ISRC + " = sil_req." + COLUMN_ISRC +
+                        " WHERE sil_req." + COLUMN_SPOTIFY_URI + " IN (" + placeholders + ")",
+                uris.toArray(new String[0]));
+        Map<String, List<String>> variantMap = new HashMap<>();
+        if (isrcCursor.moveToFirst()) {
+            do {
+                variantMap.computeIfAbsent(isrcCursor.getString(0), k -> new ArrayList<>())
+                        .add(isrcCursor.getString(1));
+            } while (isrcCursor.moveToNext());
+        }
+        isrcCursor.close();
+        db.close();
+
+        for (String uri : uris) {
+            List<String> siblings = variantMap.getOrDefault(uri, java.util.Collections.singletonList(uri));
+            SongRankInfo best = null;
+            for (String sib : siblings) {
+                SongRankInfo info = globalInfo.get(sib);
+                // Best = highest rating (lowest rank number).
+                if (info != null && (best == null || info.rating > best.rating)) best = info;
+            }
+            if (best != null) results.put(uri, best);
+        }
+        return results;
+    }
+
+    // ----- Saved games -----
+
+    /** The single resumable game, or null if none is in progress. */
+    public RankingGame getInProgressGame() {
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT * FROM " + TABLE_RANKING_GAMES +
+                        " WHERE " + COLUMN_STATUS + " = ?" +
+                        " ORDER BY " + COLUMN_ID + " DESC LIMIT 1",
+                new String[]{GAME_IN_PROGRESS});
+        RankingGame game = cursor.moveToFirst() ? gameFromCursor(cursor) : null;
+        cursor.close();
+        db.close();
+        return game;
+    }
+
+    public RankingGame getGame(long id) {
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT * FROM " + TABLE_RANKING_GAMES + " WHERE " + COLUMN_ID + " = ?",
+                new String[]{String.valueOf(id)});
+        RankingGame game = cursor.moveToFirst() ? gameFromCursor(cursor) : null;
+        cursor.close();
+        db.close();
+        return game;
+    }
+
+    public List<RankingGame> getCompletedGames() {
+        List<RankingGame> games = new ArrayList<>();
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT * FROM " + TABLE_RANKING_GAMES +
+                        " WHERE " + COLUMN_STATUS + " = ?" +
+                        " ORDER BY " + COLUMN_ID + " DESC",
+                new String[]{GAME_COMPLETED});
+        if (cursor.moveToFirst()) {
+            do { games.add(gameFromCursor(cursor)); } while (cursor.moveToNext());
+        }
+        cursor.close();
+        db.close();
+        return games;
+    }
+
+    /**
+     * Create a fresh in-progress game. Only one is allowed at a time, so any
+     * existing in-progress game is discarded first. Returns the new game id.
+     */
+    public long startInProgressGame(int bracketSize, List<String> entrantIds, List<String> playlistIds) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        db.delete(TABLE_RANKING_GAMES, COLUMN_STATUS + " = ?", new String[]{GAME_IN_PROGRESS});
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_STATUS, GAME_IN_PROGRESS);
+        values.put(COLUMN_BRACKET_SIZE, bracketSize);
+        values.put(COLUMN_ENTRANT_IDS, joinUris(entrantIds));
+        values.put(COLUMN_PLAYLIST_IDS, joinUris(playlistIds));
+        values.put(COLUMN_DECISIONS, "");
+        values.put(COLUMN_CREATED_AT, nowUtc());
+        values.put(COLUMN_UPDATED_AT, nowUtc());
+        long id = db.insert(TABLE_RANKING_GAMES, null, values);
+        db.close();
+        return id;
+    }
+
+    /** Persist the decisions made so far in the in-progress game. */
+    public void updateGameDecisions(long id, List<String> decisions) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_DECISIONS, joinUris(decisions));
+        values.put(COLUMN_UPDATED_AT, nowUtc());
+        db.update(TABLE_RANKING_GAMES, values, COLUMN_ID + " = ?", new String[]{String.valueOf(id)});
+        db.close();
+    }
+
+    /** Mark a game completed and store its final 1..N ranking. */
+    public void completeGame(long id, List<String> decisions, List<String> finalOrder) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_STATUS, GAME_COMPLETED);
+        values.put(COLUMN_DECISIONS, joinUris(decisions));
+        values.put(COLUMN_FINAL_ORDER, joinUris(finalOrder));
+        values.put(COLUMN_UPDATED_AT, nowUtc());
+        values.put(COLUMN_COMPLETED_AT, nowUtc());
+        db.update(TABLE_RANKING_GAMES, values, COLUMN_ID + " = ?", new String[]{String.valueOf(id)});
+        db.close();
+    }
+
+    public void deleteGame(long id) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        db.delete(TABLE_RANKING_GAMES, COLUMN_ID + " = ?", new String[]{String.valueOf(id)});
+        db.close();
+    }
+
+    private RankingGame gameFromCursor(Cursor cursor) {
+        return new RankingGame(
+                cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_ID)),
+                cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_STATUS)),
+                cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_BRACKET_SIZE)),
+                splitUris(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_ENTRANT_IDS))),
+                splitUris(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_DECISIONS))),
+                splitUris(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_FINAL_ORDER))),
+                splitUris(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_PLAYLIST_IDS))),
+                cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_CREATED_AT)),
+                cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_UPDATED_AT)),
+                cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_COMPLETED_AT)));
+    }
+
+    // Spotify uris contain colons but never commas, so comma-joining is safe.
+    private static String joinUris(List<String> uris) {
+        if (uris == null || uris.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < uris.size(); i++) {
+            if (i > 0) sb.append(',');
+            sb.append(uris.get(i));
+        }
+        return sb.toString();
+    }
+
+    private static List<String> splitUris(String joined) {
+        List<String> uris = new ArrayList<>();
+        if (joined == null || joined.isEmpty()) return uris;
+        for (String part : joined.split(",")) {
+            if (!part.isEmpty()) uris.add(part);
+        }
+        return uris;
+    }
+
+    private static String nowUtc() {
+        java.text.SimpleDateFormat fmt =
+                new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault());
+        fmt.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+        return fmt.format(new Date());
     }
 
     //#endregion
