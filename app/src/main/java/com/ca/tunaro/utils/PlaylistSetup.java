@@ -34,6 +34,9 @@ public class PlaylistSetup {
     private static final int MAX_BATCH_SIZE = 50;    // Spotify API maximum limit per request
     private static final Object lock = new Object();
     private static final AtomicBoolean scanInProgress = new AtomicBoolean(false);
+    // Playlist track counts, kept from the last DB read so opening a playlist does not
+    // re-read the whole table. Refreshed on every scan.
+    private static volatile Map<String, DatabaseHelper.PlaylistScanInfo> trackCountSnapshot;
 
     public static class SongLoadResult {
         public final ArrayList<SongModel> songs;
@@ -161,7 +164,8 @@ public class PlaylistSetup {
 
         return ensureFreshToken(spotifyApi).thenCompose(ignored -> CompletableFuture.supplyAsync(() -> {
             List<String> cachedSongIds = playlistCache.getCachedPlaylistSongIds(playlistId);
-            if (cachedSongIds != null && !cachedSongIds.isEmpty()) {
+            if (cachedSongIds != null && !cachedSongIds.isEmpty()
+                    && isCachedSongListComplete(playlistId, cachedSongIds.size())) {
                 Map<String, SongModel> cachedSongsMap = songCache.getCachedSongsMap(cachedSongIds);
 
                 ArrayList<SongModel> cachedSongs = new ArrayList<>();
@@ -204,9 +208,17 @@ public class PlaylistSetup {
 
                 // Fetch missing songs - needs caching
                 try {
+                    int expectedTotal = cachedSongs.size() + missingSongIds.size();
                     ArrayList<SongModel> allSongs = fetchMissingSongs(missingSongIds, spotifyApi, cachedSongs,
                             progressListener, cachedSongIds.size()).get();
-                    return new SongLoadResult(allSongs, true);
+                    // A partial recovery must not be written back to the cache: doing so drops the
+                    // unrecovered IDs permanently and shrinks the playlist a little on every launch.
+                    boolean complete = allSongs.size() == expectedTotal;
+                    if (!complete) {
+                        Log.w("PlaylistSetup", "Recovered only " + allSongs.size() + " of " + expectedTotal
+                                + " songs for playlist " + playlistId + " — leaving cache untouched");
+                    }
+                    return new SongLoadResult(allSongs, complete);
                 } catch (Exception e) {
                     Log.e("PlaylistSetup", "Error fetching missing songs", e);
                     return new SongLoadResult(cachedSongs, false);
@@ -319,8 +331,23 @@ public class PlaylistSetup {
                 for (int i = 0; i < missingSongIds.size(); i += MAX_BATCH_SIZE) {
                     List<String> batchIds = missingSongIds.subList(i, Math.min(i + MAX_BATCH_SIZE, missingSongIds.size()));
 
+                    // The endpoint takes bare base62 IDs, not the "spotify:track:" URIs held in the cache.
+                    List<String> batchTrackIds = new ArrayList<>();
+                    List<String> requestedIds = new ArrayList<>();
+                    for (String songId : batchIds) {
+                        String trackId = toBareTrackId(songId);
+                        if (trackId == null) {
+                            Log.w("PlaylistSetup", "Skipping malformed song ID: " + songId);
+                            continue;
+                        }
+                        batchTrackIds.add(trackId);
+                        requestedIds.add(songId);
+                    }
+
+                    if (batchTrackIds.isEmpty()) continue;
+
                     se.michaelthelin.spotify.requests.data.tracks.GetSeveralTracksRequest getSeveralTracksRequest =
-                            spotifyApi.getSeveralTracks(String.join(",", batchIds))
+                            spotifyApi.getSeveralTracks(String.join(",", batchTrackIds))
                                     .setQueryParameter("market", "from_token")
                                     .build();
 
@@ -334,7 +361,9 @@ public class PlaylistSetup {
                                 upsertTrackToDb(dbHelper, tracks[trackIndex], songModel);
                             }
                         } else {
-                            Log.w("PlaylistSetup", "Track " + trackIndex + " was not found");
+                            String requested = trackIndex < requestedIds.size()
+                                    ? requestedIds.get(trackIndex) : "index " + trackIndex;
+                            Log.w("PlaylistSetup", "Track " + requested + " was not found");
                         }
                     }
 
@@ -350,6 +379,54 @@ public class PlaylistSetup {
 
             return allSongs;
         });
+    }
+
+    /**
+     * Convert a cached song ID ("spotify:track:<id>") to the bare base62 ID the Web API expects.
+     * Returns null when the ID is not a track URI.
+     */
+    private static String toBareTrackId(String songId) {
+        if (songId == null) return null;
+        if (songId.startsWith(SongModel.SPOTIFY_TRACK_URI_PREFIX)) {
+            String trackId = songId.substring(SongModel.SPOTIFY_TRACK_URI_PREFIX.length());
+            return trackId.isEmpty() ? null : trackId;
+        }
+        return null;
+    }
+
+    /**
+     * Guard against a truncated cache entry. When the cached ID list is shorter than the track
+     * count Spotify last reported, the cache is stale and the playlist must be refetched in full —
+     * otherwise the missing songs are never recovered.
+     */
+    private static boolean isCachedSongListComplete(String playlistId, int cachedCount) {
+        if (appContext == null) return true;
+        Map<String, DatabaseHelper.PlaylistScanInfo> counts = trackCountSnapshot;
+        if (counts == null) counts = loadTrackCounts();
+        DatabaseHelper.PlaylistScanInfo info = counts.get(playlistId);
+        if (info == null) return true;
+        int remoteCount = info.remoteCount;
+        if (remoteCount > 0 && cachedCount != remoteCount) {
+            Log.w("PlaylistSetup", "Cached song list for playlist " + playlistId + " has " + cachedCount
+                    + " of " + remoteCount + " tracks — refetching from Spotify");
+            return false;
+        }
+        return true;
+    }
+
+    /** Read every playlist's track counts and keep them for later cache checks. */
+    private static Map<String, DatabaseHelper.PlaylistScanInfo> loadTrackCounts() {
+        DatabaseHelper dbHelper = new DatabaseHelper(appContext);
+        Map<String, DatabaseHelper.PlaylistScanInfo> counts = dbHelper.getPlaylistTrackCounts();
+        dbHelper.close();
+        trackCountSnapshot = counts;
+        return counts;
+    }
+
+    /** Number of song IDs currently cached for a playlist; 0 when nothing is cached. */
+    private static int cachedSongIdCount(String playlistId) {
+        List<String> cached = playlistCache.getCachedPlaylistSongIds(playlistId);
+        return cached == null ? 0 : cached.size();
     }
 
     private static void ensurePlaylistLinksInDb(List<String> songIds, String playlistId) {
@@ -435,9 +512,7 @@ public class PlaylistSetup {
             Log.d("PlaylistSetup", "Scan already in progress — skipping duplicate scan");
             return CompletableFuture.completedFuture(null);
         }
-        DatabaseHelper dbHelper = new DatabaseHelper(appContext);
-        Map<String, DatabaseHelper.PlaylistScanInfo> trackCounts = dbHelper.getPlaylistTrackCounts();
-        dbHelper.close();
+        Map<String, DatabaseHelper.PlaylistScanInfo> trackCounts = loadTrackCounts();
 
         return CompletableFuture.runAsync(() -> {
             try {
@@ -445,9 +520,17 @@ public class PlaylistSetup {
                     String pid = entry.getKey();
                     DatabaseHelper.PlaylistScanInfo info = entry.getValue();
                     String label = info.name != null ? info.name : pid;
-                    if (info.remoteCount > 0 && info.scannedCount == info.remoteCount) {
+                    // A truncated cache entry needs a rescan even when the DB link count is
+                    // correct — the two are written separately and can disagree.
+                    int cachedCount = cachedSongIdCount(pid);
+                    boolean cacheTruncated = cachedCount > 0 && cachedCount != info.remoteCount;
+                    if (info.remoteCount > 0 && info.scannedCount == info.remoteCount && !cacheTruncated) {
                         Log.v("PlaylistSetup", "Skipping scan for \"" + label + "\" (" + info.remoteCount + " tracks up to date)");
                         continue;
+                    }
+                    if (cacheTruncated) {
+                        Log.w("PlaylistSetup", "Cached song list for \"" + label + "\" holds " + cachedCount
+                                + " of " + info.remoteCount + " tracks — repairing");
                     }
                     try {
                         ArrayList<SongModel> songs = scanPlaylistSync(pid, spotifyApi);
