@@ -1,6 +1,7 @@
 package com.ca.tunaro.activites;
 
 import android.app.ProgressDialog;
+import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
@@ -162,8 +163,10 @@ public class AccountMismatchActivity extends AppCompatActivity {
     }
 
     @Override
+    @SuppressLint("MissingSuperCall")
     public void onBackPressed() {
-        // Prevent going back to the splash screen
+        // Deliberately does not call super: back must not return to the splash screen
+        // or to whatever screen was showing under the mismatch prompt.
         finishAffinity();
     }
 }

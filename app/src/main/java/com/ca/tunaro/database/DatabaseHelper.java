@@ -1132,7 +1132,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             ContentValues update = new ContentValues();
             if (isArchived)  update.put(COLUMN_IS_ARCHIVED, 1);
             if (isFavourite) update.put(COLUMN_IS_FAVOURITE, 1);
-            if (!update.isEmpty()) {
+            if (update.size() > 0) {
                 db.update(TABLE_PLAYLISTS, update, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
             }
         }

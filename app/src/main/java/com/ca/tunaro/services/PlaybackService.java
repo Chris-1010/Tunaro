@@ -264,7 +264,13 @@ public class PlaybackService extends Service implements PlaybackManager.Playback
 
     private void postNotification() {
         if (!isForegroundStarted || notificationManager == null) return;
-        notificationManager.notify(NOTIFICATION_ID, buildNotification());
+        try {
+            notificationManager.notify(NOTIFICATION_ID, buildNotification());
+        } catch (SecurityException e) {
+            // POST_NOTIFICATIONS was denied (API 33+). Playback carries on without
+            // the media notification rather than taking the service down.
+            Log.w(TAG, "Cannot post playback notification — permission denied", e);
+        }
     }
 
     private Notification buildNotification() {
