@@ -476,8 +476,7 @@ public class SettingsActivity extends BaseActivity {
                     playlistCache.clearCache();
 
                     // Clear song cache
-                    SongCache songCache = new SongCache(this);
-                    songCache.clearCache();
+                    SongCache.getInstance(this).clearCache();
 
                     Toast.makeText(this, "Cache cleared successfully", Toast.LENGTH_SHORT).show();
                 })

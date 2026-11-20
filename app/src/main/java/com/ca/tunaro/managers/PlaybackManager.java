@@ -403,8 +403,7 @@ public class PlaybackManager {
 
     // Helper method to create SongModel
     private SongModel createSongModelFromRemoteTrack(Track remoteTrack, String songId, String[] artistNames) {
-        SongCache songCache = new SongCache(this.applicationContext);
-        SongModel cachedSong = songCache.getCachedSong(songId);
+        SongModel cachedSong = SongCache.getInstance(this.applicationContext).peekCachedSong(songId);
         if (cachedSong != null) {
             return cachedSong;
         }

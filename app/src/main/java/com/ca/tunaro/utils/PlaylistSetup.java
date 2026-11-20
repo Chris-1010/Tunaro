@@ -55,10 +55,10 @@ public class PlaylistSetup {
     public static void initialize(Context context) {
         appContext = context.getApplicationContext();
         playlistCache = new PlaylistCache(appContext);
-        songCache = new SongCache(appContext);
+        songCache = SongCache.getInstance(appContext);
 
-        // Clean up expired song cache entries off the main thread: it parses the whole
-        // cache blob, which would otherwise delay the first frame.
+        // Parse the song cache and prune expired entries off the main thread, so the
+        // first playlist open reads straight from memory.
         SongCache cache = songCache;
         AppExecutors.io().execute(cache::clearExpiredEntries);
     }
@@ -169,16 +169,24 @@ public class PlaylistSetup {
                     && isCachedSongListComplete(playlistId, cachedSongIds.size())) {
                 Map<String, SongModel> cachedSongsMap = songCache.getCachedSongsMap(cachedSongIds);
 
-                ArrayList<SongModel> cachedSongs = new ArrayList<>();
                 List<String> missingSongIds = new ArrayList<>();
+                ArrayList<SongModel> cachedSongs = SongCache.orderedHits(cachedSongIds, cachedSongsMap, missingSongIds);
 
-                // Preserve order from cached song IDs
-                for (String songId : cachedSongIds) {
-                    SongModel song = cachedSongsMap.get(songId);
-                    if (song != null) {
-                        cachedSongs.add(song);
-                    } else {
-                        missingSongIds.add(songId);
+                // Cache misses (expired or never cached) usually still live in the songs table:
+                // read them in one batch before resorting to the network, and re-cache the hits.
+                if (!missingSongIds.isEmpty() && appContext != null) {
+                    try {
+                        Map<String, SongModel> dbSongs = DatabaseHelper.getInstance(appContext)
+                                .getFullSongs(missingSongIds);
+                        if (!dbSongs.isEmpty()) {
+                            songCache.cacheSongs(new ArrayList<>(dbSongs.values()));
+                            cachedSongsMap.putAll(dbSongs);
+                            missingSongIds.clear();
+                            cachedSongs = SongCache.orderedHits(cachedSongIds, cachedSongsMap, missingSongIds);
+                            Log.d("PlaylistSetup", "Recovered " + dbSongs.size() + " songs from DB");
+                        }
+                    } catch (Exception e) {
+                        Log.e("PlaylistSetup", "DB fallback for cache misses failed", e);
                     }
                 }
 

@@ -981,6 +981,75 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return song;
     }
 
+    /**
+     * Batched {@link #getFullSong} for many URIs: one songs+albums query and one artists query per
+     * chunk instead of two queries per song. Songs with no linked artists are skipped, since the
+     * row is too incomplete to stand in for an API fetch.
+     */
+    public Map<String, SongModel> getFullSongs(List<String> spotifyUris) {
+        Map<String, SongModel> result = new HashMap<>();
+        if (spotifyUris == null || spotifyUris.isEmpty()) return result;
+        SQLiteDatabase db = this.getReadableDatabase();
+        final int chunkSize = 500; // stay under SQLite's bound-parameter limit
+        for (int start = 0; start < spotifyUris.size(); start += chunkSize) {
+            List<String> chunk = spotifyUris.subList(start, Math.min(start + chunkSize, spotifyUris.size()));
+            String[] args = chunk.toArray(new String[0]);
+            StringBuilder placeholders = new StringBuilder();
+            for (int i = 0; i < args.length; i++) placeholders.append(i == 0 ? "?" : ",?");
+
+            Map<String, List<String>> artistsByUri = new HashMap<>();
+            try (Cursor ac = db.rawQuery(
+                    "SELECT sa." + COLUMN_SPOTIFY_URI + ", ar." + COLUMN_ARTIST_NAME +
+                            " FROM " + TABLE_SONG_ARTISTS + " sa" +
+                            " JOIN " + TABLE_ARTISTS + " ar ON sa." + COLUMN_ARTIST_ID + " = ar." + COLUMN_ARTIST_ID +
+                            " WHERE sa." + COLUMN_SPOTIFY_URI + " IN (" + placeholders + ")" +
+                            " ORDER BY sa." + COLUMN_SPOTIFY_URI + ", sa." + COLUMN_POSITION + " ASC",
+                    args)) {
+                while (ac.moveToNext()) {
+                    List<String> names = artistsByUri.get(ac.getString(0));
+                    if (names == null) {
+                        names = new ArrayList<>();
+                        artistsByUri.put(ac.getString(0), names);
+                    }
+                    names.add(ac.getString(1));
+                }
+            }
+
+            try (Cursor cursor = db.rawQuery(
+                    "SELECT s.*, a." + COLUMN_ALBUM_NAME + " AS album_name, a." + COLUMN_ALBUM_TYPE +
+                            ", a." + COLUMN_RELEASE_DATE + ", a." + COLUMN_COVER_IMAGE_URL + " AS album_cover" +
+                            " FROM " + TABLE_SONGS + " s" +
+                            " LEFT JOIN " + TABLE_ALBUMS + " a ON s." + COLUMN_ALBUM_ID + " = a." + COLUMN_ALBUM_ID +
+                            " WHERE s." + COLUMN_SPOTIFY_URI + " IN (" + placeholders + ")",
+                    args)) {
+                int iUri = cursor.getColumnIndexOrThrow(COLUMN_SPOTIFY_URI);
+                int iName = cursor.getColumnIndexOrThrow(COLUMN_SONG_NAME);
+                int iDuration = cursor.getColumnIndexOrThrow(COLUMN_DURATION_MS);
+                int iIsrc = cursor.getColumnIndexOrThrow(COLUMN_ISRC);
+                int iPopularity = cursor.getColumnIndexOrThrow(COLUMN_POPULARITY);
+                int iPlayable = cursor.getColumnIndexOrThrow(COLUMN_IS_PLAYABLE);
+                int iAlbumId = cursor.getColumnIndexOrThrow(COLUMN_ALBUM_ID);
+                int iCreatedAt = cursor.getColumnIndexOrThrow(COLUMN_CREATED_AT);
+                int iAlbumName = cursor.getColumnIndexOrThrow("album_name");
+                int iAlbumType = cursor.getColumnIndexOrThrow(COLUMN_ALBUM_TYPE);
+                int iRelease = cursor.getColumnIndexOrThrow(COLUMN_RELEASE_DATE);
+                int iCover = cursor.getColumnIndexOrThrow("album_cover");
+                while (cursor.moveToNext()) {
+                    String uri = cursor.getString(iUri);
+                    List<String> names = artistsByUri.get(uri);
+                    if (names == null || names.isEmpty()) continue;
+                    String[] artistNames = names.toArray(new String[0]);
+                    result.put(uri, new SongModel(uri, cursor.getString(iName), artistNames[0], artistNames,
+                            cursor.getInt(iDuration), uri, cursor.getString(iCover), cursor.getInt(iPopularity),
+                            cursor.getString(iAlbumId), cursor.getString(iAlbumName), cursor.getString(iAlbumType),
+                            cursor.getString(iRelease), cursor.getString(iIsrc), cursor.getInt(iPlayable) == 1,
+                            cursor.getString(iCreatedAt)));
+                }
+            }
+        }
+        return result;
+    }
+
     public boolean songExists(String spotifyUri) {
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
