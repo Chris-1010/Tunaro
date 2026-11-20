@@ -57,8 +57,10 @@ public class PlaylistSetup {
         playlistCache = new PlaylistCache(appContext);
         songCache = new SongCache(appContext);
 
-        // Clean up expired song cache entries on initialization
-        songCache.clearExpiredEntries();
+        // Clean up expired song cache entries off the main thread: it parses the whole
+        // cache blob, which would otherwise delay the first frame.
+        SongCache cache = songCache;
+        AppExecutors.io().execute(cache::clearExpiredEntries);
     }
 
     private static <T> CompletableFuture<T> failedFuture(Throwable ex) {

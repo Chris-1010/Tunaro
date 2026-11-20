@@ -1,12 +1,11 @@
 package com.ca.tunaro.activites;
 
 import android.app.ProgressDialog;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.util.Log;
 import android.view.View;
 import android.widget.Toast;
@@ -18,6 +17,7 @@ import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.services.AutomaticFetcher;
 import com.ca.tunaro.services.SongRefreshService;
+import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.DeviceChecker;
 import com.ca.tunaro.utils.SecurePrefs;
 import com.ca.tunaro.utils.PlaylistSetup;
@@ -59,8 +59,12 @@ public class MainActivity extends AppCompatActivity {
     // forces the consent flow instead of silently restoring the cached session.
     public static final String EXTRA_FORCE_REAUTH = "force_reauth";
 
-    // Minimum time the spinner splash stays visible on the fast (already-logged-in) path.
-    private static final long SPLASH_MIN_DISPLAY_MS = 1200;
+    // Heavy launch jobs wait this long so Home's first loads get the network and disk first.
+    private static final long HEAVY_LAUNCH_JOB_DELAY_MS = 4000;
+    // The playlist scan and stale-song refresh run at most once per this interval.
+    private static final long HEAVY_LAUNCH_JOB_INTERVAL_MS = 6L * 60L * 60L * 1000L;
+    private static final String PREF_LAST_PLAYLIST_SCAN = "last_launch_playlist_scan_ms";
+    private static final String PREF_LAST_SONG_REFRESH = "last_launch_song_refresh_ms";
 
     // Singleton instance
     private static MainActivity instance;
@@ -125,32 +129,19 @@ public class MainActivity extends AppCompatActivity {
 
             // Proactively refresh the access token since the saved one may have expired
             refreshAccessToken()
-                    .thenRun(() -> {
-                        Log.d(TAG, "Token refreshed after session restore");
-                        performInitialDeviceCheck();
-                        performAutomaticFetch();
-                        performBackgroundRefresh();
-                        performPlaylistSongScan();
-                        performOrphanedListenFetch();
-                    })
-                    .exceptionally(e -> {
-                        Log.e(TAG, "Token refresh failed after session restore", e);
-                        // Still perform these even if refresh fails
-                        performInitialDeviceCheck();
-                        performAutomaticFetch();
-                        performBackgroundRefresh();
-                        performPlaylistSongScan();
-                        performOrphanedListenFetch();
-                        return null;
+                    .whenComplete((token, e) -> {
+                        if (e != null) {
+                            // Still run the launch jobs with the existing token.
+                            Log.e(TAG, "Token refresh failed after session restore", e);
+                        } else {
+                            Log.d(TAG, "Token refreshed after session restore");
+                        }
+                        startLaunchJobs();
                     });
 
-            // Keep the spinner splash visible briefly so it doesn't flash past on
-            // the fast (already-logged-in) path, then navigate to Home.
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                if (isFinishing() || isDestroyed()) return;
-                Intent intent = new Intent(MainActivity.this, HomeActivity.class);
-                startActivity(intent);
-            }, SPLASH_MIN_DISPLAY_MS);
+            // Session is ready: go straight to Home.
+            startActivity(new Intent(MainActivity.this, HomeActivity.class));
+            overridePendingTransition(R.anim.fade_in, R.anim.fade_out);
             return;
         }
 
@@ -263,11 +254,32 @@ public class MainActivity extends AppCompatActivity {
         // Return a new CompletableFuture that chains the authentication and user profile fetch
         return authFuture.thenCompose(aVoid -> getCurrentUsersProfile_Async()).thenRunAsync(() -> runOnUiThread(() -> {
             connectSpotifyAppRemote();
+            startLaunchJobs();
+        }), executor);
+    }
+
+    // Runs the launch-time sync jobs on the shared I/O pool. The light ones start now; the heavy
+    // ones (playlist scan, stale-song refresh, orphaned listen fetch) wait until Home has had time
+    // to load, and the scan / refresh are throttled so they do not run on every launch.
+    private void startLaunchJobs() {
+        Context appContext = getApplicationContext();
+        AppExecutors.io().execute(() -> {
             performInitialDeviceCheck();
             performAutomaticFetch();
-            performBackgroundRefresh();
-            performPlaylistSongScan();
-        }), executor);
+        });
+        AppExecutors.ioDelayed(() -> {
+            if (AppExecutors.isJobDue(appContext, PREF_LAST_PLAYLIST_SCAN, HEAVY_LAUNCH_JOB_INTERVAL_MS)) {
+                performPlaylistSongScan();
+            } else {
+                Log.d(TAG, "Playlist scan ran recently; skipping");
+            }
+            if (AppExecutors.isJobDue(appContext, PREF_LAST_SONG_REFRESH, HEAVY_LAUNCH_JOB_INTERVAL_MS)) {
+                performBackgroundRefresh();
+            } else {
+                Log.d(TAG, "Stale-song refresh ran recently; skipping");
+            }
+            performOrphanedListenFetch();
+        }, HEAVY_LAUNCH_JOB_DELAY_MS);
     }
 
     private boolean tryRestoreSession() {
@@ -529,7 +541,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void performPlaylistSongScan() {
         if (spotifyApi == null) return;
+        Context appContext = getApplicationContext();
         PlaylistSetup.scanAllPlaylistSongs(buildFreshSpotifyApi())
+                .thenRun(() -> AppExecutors.markJobRun(appContext, PREF_LAST_PLAYLIST_SCAN))
                 .exceptionally(e -> {
                     Log.e(TAG, "Playlist song scan failed", e);
                     return null;
@@ -607,12 +621,14 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) {
                 Log.e(TAG, "Orphaned listen fetch failed", e);
             }
-        });
+        }, AppExecutors.io());
     }
 
     private void performBackgroundRefresh() {
         if (spotifyApi == null) return;
+        Context appContext = getApplicationContext();
         new SongRefreshService(this, buildFreshSpotifyApi()).refreshStaleSongs()
+                .thenRun(() -> AppExecutors.markJobRun(appContext, PREF_LAST_SONG_REFRESH))
                 .exceptionally(e -> {
                     Log.e(TAG, "Background song refresh failed", e);
                     return null;
