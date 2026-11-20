@@ -83,6 +83,7 @@
                 android:layout_height="30dp"
                 android:layout_marginTop="@dimen/space_sm"
                 android:layout_marginEnd="@dimen/space_sm"
+                android:contentDescription="@string/cd_favourite_playlist"
                 android:src="@drawable/favorite_filled"
                 android:visibility="gone"
                 app:layout_constraintEnd_toEndOf="parent"

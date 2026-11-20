@@ -1,5 +1,6 @@
 package com.ca.tunaro.adapters;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Outline;
 import android.graphics.Rect;
@@ -378,6 +379,11 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         // queue. The album cover stays put; a green/red overlay wipes in from
         // the cover's left edge, tracking the swipe distance. The action
         // commits once the swipe passes a threshold, then the overlay eases out.
+        // Taps are never consumed here (the listener returns false), so the
+        // views' own onTouchEvent still fires performClick and TalkBack's
+        // click path is untouched. Calling performClick from the listener
+        // would double-fire the row click.
+        @SuppressLint("ClickableViewAccessibility")
         private void attachQueueSwipe() {
             final int touchSlop = ViewConfiguration.get(itemView.getContext()).getScaledTouchSlop();
             final int addColor = ContextCompat.getColor(itemView.getContext(), R.color.success);

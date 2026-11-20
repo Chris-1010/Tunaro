@@ -76,6 +76,7 @@
                         android:layout_width="30dp"
                         android:layout_height="30dp"
                         android:layout_gravity="center"
+                        android:importantForAccessibility="no"
                         android:visibility="gone"
                         tools:src="@drawable/ic_queue_add" />
 
@@ -156,7 +157,7 @@
                     android:layout_width="18dp"
                     android:layout_height="18dp"
                     android:layout_marginBottom="@dimen/space_xs"
-                    android:contentDescription="@string/empty"
+                    android:contentDescription="@string/cd_in_library"
                     android:src="@drawable/ic_check_circle_green"
                     android:visibility="gone"
                     tools:visibility="visible" />
@@ -165,15 +166,17 @@
                     android:id="@+id/hasNotesIcon"
                     android:layout_width="18dp"
                     android:layout_height="18dp"
+                    android:contentDescription="@string/cd_has_notes"
                     android:src="@drawable/ic_note"
                     android:visibility="visible"
-                    app:tint="@android:color/holo_blue_dark" />
+                    app:tint="@color/accent" />
 
                 <ImageView
                     android:id="@+id/hasSnippetsIcon"
                     android:layout_width="18dp"
                     android:layout_height="18dp"
                     android:layout_marginTop="@dimen/space_xs"
+                    android:contentDescription="@string/cd_has_snippets"
                     android:src="@drawable/snippet"
                     android:visibility="visible" />
 

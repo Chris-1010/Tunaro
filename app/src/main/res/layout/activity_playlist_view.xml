@@ -135,7 +135,7 @@
                 android:id="@+id/sort_icon"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="Sort By"
+                android:contentDescription="@string/cd_sort_by"
                 android:padding="12dp"
                 android:src="@drawable/ic_sort"
                 android:visibility="visible" />
@@ -155,7 +155,7 @@
                 android:id="@+id/sort_direction_icon"
                 android:layout_width="wrap_content"
                 android:layout_height="50dp"
-                android:contentDescription="Sort Direction"
+                android:contentDescription="@string/cd_sort_direction"
                 android:padding="@dimen/space_sm"
                 android:src="@drawable/ic_arrow_downward"
                 android:visibility="visible" />
@@ -178,7 +178,7 @@
                 android:id="@+id/search_icon"
                 android:layout_width="wrap_content"
                 android:layout_height="50dp"
-                android:contentDescription="Search Icon"
+                android:contentDescription="@string/cd_search"
                 android:padding="@dimen/space_sm"
                 android:src="@drawable/ic_search"
                 android:visibility="visible" />

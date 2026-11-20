@@ -25,7 +25,7 @@
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:layout_marginEnd="@dimen/space_md"
-        android:contentDescription="Toggle archived playlists"
+        android:contentDescription="@string/cd_toggle_archived"
         android:padding="12dp"
         android:src="@drawable/archived_playlists"
         app:layout_constraintBottom_toBottomOf="@+id/playlists_title"

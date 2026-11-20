@@ -22,7 +22,7 @@
         android:layout_height="30dp"
         android:background="@null"
         android:clickable="false"
-        android:contentDescription="Play snippet"
+        android:contentDescription="@string/cd_play_snippet"
         android:focusable="false"
         android:scaleType="fitCenter"
         android:src="@drawable/play_circle_filled"

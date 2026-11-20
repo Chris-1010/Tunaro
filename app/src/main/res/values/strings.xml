@@ -118,4 +118,18 @@
     <string name="home_developer_caption">SQL queries and API requests</string>
     <string name="home_rankings_caption">Play a ranking game to find your favourite songs</string>
     <string name="home_play_earliest">Play from Earliest Listened To</string>
+    <!-- Accessibility descriptions -->
+    <string name="cd_play_pause">Play or pause</string>
+    <string name="cd_device_warning">Playback is on another device</string>
+    <string name="cd_in_library">Added to library</string>
+    <string name="cd_has_notes">Has notes</string>
+    <string name="cd_has_snippets">Has snippets</string>
+    <string name="cd_favourite_playlist">Favourite playlist</string>
+    <string name="cd_sort_by">Sort by</string>
+    <string name="cd_sort_direction">Sort direction</string>
+    <string name="cd_toggle_archived">Toggle archived playlists</string>
+    <string name="cd_play_snippet">Play snippet</string>
+    <string name="cd_play_album">Play album</string>
+    <string name="cd_search">Search</string>
+    <string name="cd_delete_snippet">Delete snippet</string>
 </resources>
