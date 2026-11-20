@@ -395,7 +395,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="@dimen/space_md"
                     android:text="Danger Zone"
-                    android:textColor="@color/danger"
+                    android:textColor="@color/danger_text"
                     android:textSize="@dimen/text_title"
                     android:textStyle="bold" />
 

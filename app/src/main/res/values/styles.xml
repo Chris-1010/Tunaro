@@ -30,9 +30,57 @@
         <item name="boxCornerRadiusTopEnd">@dimen/radius_row</item>
         <item name="boxCornerRadiusBottomStart">@dimen/radius_row</item>
         <item name="boxCornerRadiusBottomEnd">@dimen/radius_row</item>
-        <item name="errorTextColor">@color/danger</item>
-        <item name="boxStrokeErrorColor">@color/danger</item>
-        <item name="errorIconTint">@color/danger</item>
+        <item name="errorTextColor">@color/danger_text</item>
+        <item name="boxStrokeErrorColor">@color/danger_text</item>
+        <item name="errorIconTint">@color/danger_text</item>
+    </style>
+
+    <!-- Alert dialogs: raised surface with 16dp corners, white text, accent buttons. -->
+    <style name="ThemeOverlay.Tunaro.Dialog" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/dialog_background</item>
+        <item name="colorSurface">@color/surface_raised</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorSecondary">@color/accent</item>
+        <item name="colorControlActivated">@color/accent</item>
+        <item name="colorControlNormal">@color/text_secondary</item>
+        <item name="colorError">@color/danger_text</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="android:textColorHint">@color/text_tertiary</item>
+        <item name="android:textColorAlertDialogListItem">@color/text_primary</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.Tunaro.DialogButton</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.Tunaro.DialogButton</item>
+        <item name="buttonBarNeutralButtonStyle">@style/Widget.Tunaro.DialogButton</item>
+    </style>
+
+    <style name="Widget.Tunaro.DialogButton" parent="Widget.MaterialComponents.Button.TextButton.Dialog">
+        <item name="android:textColor">@color/accent</item>
+    </style>
+
+    <!-- Bottom sheets: raised surface, 16dp top corners, transparent content roots. -->
+    <style name="ThemeOverlay.Tunaro.BottomSheet" parent="ThemeOverlay.MaterialComponents.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/Widget.Tunaro.BottomSheet</item>
+        <item name="colorSurface">@color/surface_raised</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorSecondary">@color/accent</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="android:navigationBarColor">@color/surface_raised</item>
+    </style>
+
+    <style name="Widget.Tunaro.BottomSheet" parent="Widget.MaterialComponents.BottomSheet.Modal">
+        <item name="backgroundTint">@color/surface_raised</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.Tunaro.Sheet</item>
+    </style>
+
+    <style name="ShapeAppearance.Tunaro.Sheet" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSizeTopLeft">@dimen/radius_card</item>
+        <item name="cornerSizeTopRight">@dimen/radius_card</item>
+        <item name="cornerSizeBottomLeft">0dp</item>
+        <item name="cornerSizeBottomRight">0dp</item>
     </style>
 
     <!-- Type scale. Default font family; colours are the text tokens. -->

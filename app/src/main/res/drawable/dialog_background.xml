@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Alert dialog window: raised surface with card corners, inset from the screen edges. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="@dimen/space_md"
+    android:insetTop="@dimen/space_lg"
+    android:insetRight="@dimen/space_md"
+    android:insetBottom="@dimen/space_lg">
+    <shape android:shape="rectangle">
+        <solid android:color="@color/surface_raised" />
+        <corners android:radius="@dimen/radius_card" />
+    </shape>
+</inset>

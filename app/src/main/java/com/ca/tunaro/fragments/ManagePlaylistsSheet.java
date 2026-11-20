@@ -16,7 +16,10 @@ import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.content.Context;
+
 import com.ca.tunaro.R;
+import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.UiFeedback;
 import com.ca.tunaro.activites.MainActivity;
 import com.ca.tunaro.adapters.ManagablePlaylistAdapter;
@@ -49,6 +52,8 @@ public class ManagePlaylistsSheet extends BottomSheetDialogFragment {
     private String songUri;
     private List<String> variantUris;
     private boolean includeArchived = false;
+    // Bumped on each load so a slower, superseded read never overwrites a newer one.
+    private int loadGeneration = 0;
 
     private RecyclerView recycler;
     private TextView emptyLabel;
@@ -140,11 +145,27 @@ public class ManagePlaylistsSheet extends BottomSheetDialogFragment {
         super.onDestroyView();
     }
 
+    // Read the playlists off the main thread, then bind on the UI thread if the sheet is
+    // still showing and no newer load (e.g. toggling archived) has started.
     private void loadPlaylists() {
-        DatabaseHelper db = DatabaseHelper.getInstance(requireContext());
-        List<DatabaseHelper.ManagablePlaylist> playlists =
-                db.getManagablePlaylists(variantUris, includeArchived);
+        final int generation = ++loadGeneration;
+        final boolean archived = includeArchived;
+        final List<String> uris = new ArrayList<>(variantUris);
+        final Context ctx = requireContext().getApplicationContext();
+        if (saveButton != null) saveButton.setVisibility(View.GONE);
+        AppExecutors.io().execute(() -> {
+            List<DatabaseHelper.ManagablePlaylist> playlists =
+                    DatabaseHelper.getInstance(ctx).getManagablePlaylists(uris, archived);
+            View root = getView();
+            if (root == null) return;
+            root.post(() -> {
+                if (getView() == null || getContext() == null || generation != loadGeneration) return;
+                bindPlaylists(playlists);
+            });
+        });
+    }
 
+    private void bindPlaylists(List<DatabaseHelper.ManagablePlaylist> playlists) {
         if (playlists.isEmpty()) {
             recycler.setVisibility(View.GONE);
             emptyLabel.setVisibility(View.VISIBLE);
@@ -153,14 +174,16 @@ public class ManagePlaylistsSheet extends BottomSheetDialogFragment {
             emptyLabel.setVisibility(View.GONE);
         }
 
-        adapter = new ManagablePlaylistAdapter(getContext(), playlists,
-                hasPendingChanges -> saveButton.setVisibility(hasPendingChanges ? View.VISIBLE : View.GONE));
+        adapter = new ManagablePlaylistAdapter(getContext(), playlists, hasPendingChanges -> {
+            if (saveButton != null) saveButton.setVisibility(hasPendingChanges ? View.VISIBLE : View.GONE);
+        });
         recycler.setAdapter(adapter);
         // Reloading (e.g. toggling archived) resets selection to membership, so hide Save.
-        saveButton.setVisibility(View.GONE);
+        if (saveButton != null) saveButton.setVisibility(View.GONE);
     }
 
     private void saveChanges() {
+        if (adapter == null) return;
         List<DatabaseHelper.ManagablePlaylist> additions = adapter.getAdditions();
         List<DatabaseHelper.ManagablePlaylist> removals = adapter.getRemovals();
         if (additions.isEmpty() && removals.isEmpty()) {
@@ -175,6 +198,8 @@ public class ManagePlaylistsSheet extends BottomSheetDialogFragment {
         }
 
         saveButton.setEnabled(false);
+        // Resolved once here: later chain steps may run after the sheet has detached.
+        final DatabaseHelper db = DatabaseHelper.getInstance(requireContext().getApplicationContext());
 
         AtomicInteger added = new AtomicInteger(0);
         AtomicInteger removed = new AtomicInteger(0);
@@ -187,7 +212,7 @@ public class ManagePlaylistsSheet extends BottomSheetDialogFragment {
 
         for (DatabaseHelper.ManagablePlaylist playlist : additions) {
             chain = chain.thenCompose(ignored ->
-                    addToPlaylist(mainActivity, playlist.playlistId)
+                    addToPlaylist(mainActivity, db, playlist.playlistId)
                             .handle((ok, err) -> {
                                 if (err == null) added.incrementAndGet(); else failed.incrementAndGet();
                                 return null;
@@ -196,7 +221,7 @@ public class ManagePlaylistsSheet extends BottomSheetDialogFragment {
 
         for (DatabaseHelper.ManagablePlaylist playlist : removals) {
             chain = chain.thenCompose(ignored ->
-                    removeFromPlaylist(mainActivity, playlist.playlistId)
+                    removeFromPlaylist(mainActivity, db, playlist.playlistId)
                             .handle((ok, err) -> {
                                 if (err == null) removed.incrementAndGet(); else failed.incrementAndGet();
                                 return null;
@@ -207,11 +232,11 @@ public class ManagePlaylistsSheet extends BottomSheetDialogFragment {
     }
 
     /** Adds the displayed song URI to the playlist on Spotify, then mirrors it locally. */
-    private CompletableFuture<Void> addToPlaylist(MainActivity mainActivity, String playlistId) {
+    private CompletableFuture<Void> addToPlaylist(MainActivity mainActivity, DatabaseHelper db,
+                                                  String playlistId) {
         return mainActivity.executeWithTokenRefresh(
                 () -> mainActivity.getSpotifyApi().addItemsToPlaylist(playlistId, new String[]{songUri}).build())
                 .thenAccept(snapshot -> {
-                    DatabaseHelper db = DatabaseHelper.getInstance(requireContext().getApplicationContext());
                     db.upsertSongPlaylistLink(songUri, playlistId, utcTimestamp());
                 });
     }
@@ -221,26 +246,28 @@ public class ManagePlaylistsSheet extends BottomSheetDialogFragment {
      * marks each removed variant in the local DB. This handles the case where more than
      * one variant of the same recording is in the playlist.
      */
-    private CompletableFuture<Void> removeFromPlaylist(MainActivity mainActivity, String playlistId) {
-        DatabaseHelper db = DatabaseHelper.getInstance(requireContext().getApplicationContext());
-        List<String> variantsInPlaylist = db.getActiveVariantsInPlaylist(variantUris, playlistId);
+    private CompletableFuture<Void> removeFromPlaylist(MainActivity mainActivity, DatabaseHelper db,
+                                                       String playlistId) {
+        // Look up the linked variants off the main thread before calling Spotify.
+        return CompletableFuture.supplyAsync(
+                () -> db.getActiveVariantsInPlaylist(variantUris, playlistId), AppExecutors.io())
+                .thenCompose(variantsInPlaylist -> {
+                    // Fall back to the displayed URI when there is no record of which variants are linked.
+                    if (variantsInPlaylist.isEmpty()) variantsInPlaylist.add(songUri);
 
-        // Fall back to the displayed URI when there is no record of which variants are linked.
-        if (variantsInPlaylist.isEmpty()) variantsInPlaylist.add(songUri);
+                    JsonArray tracks = new JsonArray();
+                    for (String uri : variantsInPlaylist) {
+                        JsonObject obj = new JsonObject();
+                        obj.addProperty("uri", uri);
+                        tracks.add(obj);
+                    }
 
-        JsonArray tracks = new JsonArray();
-        for (String uri : variantsInPlaylist) {
-            JsonObject obj = new JsonObject();
-            obj.addProperty("uri", uri);
-            tracks.add(obj);
-        }
-
-        final List<String> removedUris = variantsInPlaylist;
-        return mainActivity.executeWithTokenRefresh(
-                () -> mainActivity.getSpotifyApi().removeItemsFromPlaylist(playlistId, tracks).build())
-                .thenAccept(snapshot -> {
-                    DatabaseHelper db2 = DatabaseHelper.getInstance(requireContext().getApplicationContext());
-                    for (String uri : removedUris) db2.markSongRemovedFromPlaylist(uri, playlistId);
+                    final List<String> removedUris = variantsInPlaylist;
+                    return mainActivity.executeWithTokenRefresh(
+                            () -> mainActivity.getSpotifyApi().removeItemsFromPlaylist(playlistId, tracks).build())
+                            .thenAccept(snapshot -> {
+                                for (String uri : removedUris) db.markSongRemovedFromPlaylist(uri, playlistId);
+                            });
                 });
     }
 

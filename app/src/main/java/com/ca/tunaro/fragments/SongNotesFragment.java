@@ -393,27 +393,26 @@ public class SongNotesFragment extends Fragment {
 
     /**
      * Tint an AlertDialog's window background and buttons to the album theme. Call once shown.
+     * Without an album theme the app's alertDialogTheme already styles the dialog.
      */
     private void themeDialog(AlertDialog dialog) {
+        if (currentTheme == null) return;
         int base = ContextCompat.getColor(requireContext(), R.color.surface_raised);
-        int cardColor = currentTheme == null ? base
-                : androidx.core.graphics.ColorUtils.compositeColors(currentTheme.rowBackground, base);
+        int cardColor = androidx.core.graphics.ColorUtils.compositeColors(currentTheme.rowBackground, base);
         if (dialog.getWindow() != null) {
             GradientDrawable bg = new GradientDrawable();
             bg.setColor(cardColor);
             bg.setCornerRadius(getResources().getDimension(R.dimen.radius_card));
-            dialog.getWindow().setBackgroundDrawable(bg);
+            // Match the inset of the themed dialog_background so the width is unchanged.
+            int side = getResources().getDimensionPixelSize(R.dimen.space_md);
+            int vertical = getResources().getDimensionPixelSize(R.dimen.space_lg);
+            dialog.getWindow().setBackgroundDrawable(
+                    new android.graphics.drawable.InsetDrawable(bg, side, vertical, side, vertical));
         }
-        int textPrimary = ContextCompat.getColor(requireContext(), R.color.text_primary);
         Button pos = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
         Button neg = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
-        if (pos != null) pos.setTextColor(currentTheme != null ? currentTheme.seekbarProgress
-                : ContextCompat.getColor(requireContext(), R.color.accent));
-        if (neg != null) neg.setTextColor(currentTheme != null ? currentTheme.primaryText : textPrimary);
-
-        // AppCompat dialogs use the support "alertTitle" id, not the framework one.
-        View title = dialog.findViewById(androidx.appcompat.R.id.alertTitle);
-        if (title instanceof TextView) ((TextView) title).setTextColor(textPrimary);
+        if (pos != null) pos.setTextColor(currentTheme.seekbarProgress);
+        if (neg != null) neg.setTextColor(currentTheme.primaryText);
     }
 
     private void updateNotesBadge(int count) {

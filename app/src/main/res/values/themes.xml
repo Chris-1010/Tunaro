@@ -14,7 +14,12 @@
         <item name="colorOnSurface">@color/text_primary</item>
         <item name="android:colorBackground">@color/bg_base</item>
         <item name="colorOnBackground">@color/text_primary</item>
-        <item name="colorError">@color/danger</item>
+        <!-- Readable red: error text and field outlines sit on dark surfaces. -->
+        <item name="colorError">@color/danger_text</item>
+        <!-- Dialogs and bottom sheets share one surface treatment (see styles.xml). -->
+        <item name="alertDialogTheme">@style/ThemeOverlay.Tunaro.Dialog</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.Tunaro.Dialog</item>
+        <item name="bottomSheetDialogTheme">@style/ThemeOverlay.Tunaro.BottomSheet</item>
         <item name="android:textColorPrimary">@color/text_primary</item>
         <item name="android:textColorSecondary">@color/text_secondary</item>
         <item name="android:textColorHint">@color/text_tertiary</item>
