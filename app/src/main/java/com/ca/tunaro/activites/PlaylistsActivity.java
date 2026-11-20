@@ -10,6 +10,7 @@ import android.widget.PopupMenu;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
@@ -17,6 +18,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.ca.tunaro.BaseActivity;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.models.PlaylistModel;
+import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.PlaylistSetup;
 import com.ca.tunaro.adapters.Playlist_RecyclerViewAdapter;
 import com.ca.tunaro.interfaces.Playlist_RecyclerViewInterface;
@@ -25,6 +27,7 @@ import com.ca.tunaro.utils.SelectedPlaylistHolder;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 public class PlaylistsActivity extends BaseActivity implements Playlist_RecyclerViewInterface {
     private static final String TAG = "PlaylistsActivity";
@@ -38,6 +41,13 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
     private ImageView archiveToggleButton;
     private boolean showingArchived = false;
     private PopupMenu activePopupMenu;
+    // Latest unfiltered playlist list (cached or fresh); null until something has loaded.
+    private ArrayList<PlaylistModel> allPlaylists;
+    private boolean fetchInFlight = false;
+    // Discards filter results that a newer filter pass has superseded.
+    private int filterGeneration = 0;
+    // Content keys of the rendered rows, so a refresh can diff in instead of redrawing.
+    private final ArrayList<String> renderedKeys = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -71,23 +81,23 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
         }
     }
 
+    /** Show cached playlists immediately, then revalidate against Spotify and diff in changes. */
     private void loadPlaylists() {
         if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
             showToast("Spotify API not ready");
             return;
         }
 
-        swipeRefreshLayout.setRefreshing(true);
-
-        PlaylistSetup.getPlaylistData(mainActivity.getSpotifyApi())
-                .thenAccept(this::updateUIWithFilteredPlaylists)
-                .exceptionally(e -> {
-                    runOnUiThread(() -> {
-                        showToast("Error loading playlists: " + e.getMessage());
-                        swipeRefreshLayout.setRefreshing(false);
-                    });
-                    return null;
-                });
+        PlaylistSetup.getCachedPlaylists().thenAccept(cached -> runOnUiThread(() -> {
+            if (isDestroyed()) return;
+            if (cached != null && !cached.isEmpty()) {
+                if (allPlaylists == null) showPlaylists(cached);
+            } else if (fetchInFlight) {
+                // Nothing cached: show progress until the network answers.
+                swipeRefreshLayout.setRefreshing(true);
+            }
+        }));
+        fetchPlaylists(false);
     }
 
     private void refreshData() {
@@ -95,16 +105,36 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
             swipeRefreshLayout.setRefreshing(false);
             return;
         }
+        fetchPlaylists(true);
+    }
 
+    private void fetchPlaylists(boolean userInitiated) {
+        fetchInFlight = true;
         PlaylistSetup.refreshPlaylists(mainActivity.getSpotifyApi())
-                .thenAccept(this::updateUIWithFilteredPlaylists)
+                .thenAccept(playlists -> runOnUiThread(() -> {
+                    fetchInFlight = false;
+                    if (isDestroyed()) return;
+                    showPlaylists(playlists);
+                }))
                 .exceptionally(e -> {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    Log.e(TAG, "Playlist refresh failed", cause);
                     runOnUiThread(() -> {
-                        showToast("Error refreshing playlists: " + e.getMessage());
+                        fetchInFlight = false;
+                        if (isDestroyed()) return;
                         swipeRefreshLayout.setRefreshing(false);
+                        // A background revalidation that fails quietly keeps the cached list.
+                        if (userInitiated || allPlaylists == null) {
+                            showToast("Error refreshing playlists: " + cause.getMessage());
+                        }
                     });
                     return null;
                 });
+    }
+
+    private void showPlaylists(ArrayList<PlaylistModel> playlists) {
+        allPlaylists = playlists;
+        applyFilter();
     }
 
     private void showPlaylistOptions(View itemView, int position) {
@@ -146,7 +176,7 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
                     dbHelper.favouritePlaylist(playlist.getId());
                     showToast("Playlist favourited");
                 }
-                refreshPlaylists();
+                applyFilter();
                 return true;
             } else if (itemId == R.id.action_archive) {
                 if (showingArchived) {
@@ -156,7 +186,7 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
                     dbHelper.archivePlaylist(playlist.getId());
                     showToast("Playlist archived");
                 }
-                refreshPlaylists();
+                applyFilter();
                 return true;
             }
             return false;
@@ -174,74 +204,80 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
         archiveToggleButton.setImageResource(showingArchived ?
                 R.drawable.playlists :
                 R.drawable.archived_playlists);
-        refreshPlaylists();
+        applyFilter();
     }
 
-    private void refreshPlaylists() {
-        if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
-            return;
-        }
+    /** Re-filter the loaded playlists by archive/favourite state (read off the main thread). */
+    private void applyFilter() {
+        ArrayList<PlaylistModel> source = allPlaylists;
+        if (source == null) return;
+        boolean archived = showingArchived;
+        int generation = ++filterGeneration;
 
-        swipeRefreshLayout.setRefreshing(true);
-
-        if (showingArchived) {
-            PlaylistSetup.getPlaylistData(mainActivity.getSpotifyApi())
-                    .thenAccept(this::updateUIWithFilteredPlaylists)
-                    .exceptionally(e -> {
-                        runOnUiThread(() -> {
-                            showToast("Error loading playlists: " + e.getMessage());
-                            swipeRefreshLayout.setRefreshing(false);
-                        });
-                        return null;
-                    });
-        } else {
-            PlaylistSetup.refreshPlaylists(mainActivity.getSpotifyApi())
-                    .thenAccept(this::updateUIWithFilteredPlaylists)
-                    .exceptionally(e -> {
-                        runOnUiThread(() -> {
-                            showToast("Error refreshing playlists: " + e.getMessage());
-                            swipeRefreshLayout.setRefreshing(false);
-                        });
-                        return null;
-                    });
-        }
+        CompletableFuture.supplyAsync(() -> filterPlaylists(source, archived), AppExecutors.io())
+                .thenAccept(filtered -> runOnUiThread(() -> {
+                    if (isDestroyed() || generation != filterGeneration) return;
+                    renderPlaylists(filtered);
+                }))
+                .exceptionally(e -> {
+                    Log.e(TAG, "Filtering playlists failed", e);
+                    runOnUiThread(() -> swipeRefreshLayout.setRefreshing(false));
+                    return null;
+                });
     }
 
-    private void updateUIWithFilteredPlaylists(ArrayList<PlaylistModel> playlists) {
+    private ArrayList<PlaylistModel> filterPlaylists(ArrayList<PlaylistModel> playlists, boolean archived) {
         List<String> archivedIds = dbHelper.getArchivedPlaylistIds();
         List<String> favouritedIds = dbHelper.getFavouritedPlaylistIds();
         ArrayList<PlaylistModel> filteredPlaylists = new ArrayList<>();
 
         for (PlaylistModel playlist : playlists) {
-            boolean isArchived = archivedIds.contains(playlist.getId());
-            boolean isFavourited = favouritedIds.contains(playlist.getId());
-
-            playlist.setFavourite(isFavourited);
-
-            if (isArchived == showingArchived) {
+            playlist.setFavourite(favouritedIds.contains(playlist.getId()));
+            if (archivedIds.contains(playlist.getId()) == archived) {
                 filteredPlaylists.add(playlist);
             }
         }
 
         // Favourite Playlists come first
-        filteredPlaylists.sort((p1, p2) -> {
-            if (p1.isFavourite() && !p2.isFavourite()) return -1;
-            if (!p1.isFavourite() && p2.isFavourite()) return 1;
-            return 0;
-        });
+        filteredPlaylists.sort((p1, p2) -> Boolean.compare(p2.isFavourite(), p1.isFavourite()));
+        return filteredPlaylists;
+    }
 
-        runOnUiThread(() -> {
-            // Update title to show if in archived mode
-            TextView titleView = findViewById(R.id.playlists_title);
-            if (titleView != null) {
-                titleView.setText(showingArchived ? "Archived Playlists" : "Your Playlists");
+    private void renderPlaylists(ArrayList<PlaylistModel> filtered) {
+        TextView titleView = findViewById(R.id.playlists_title);
+        if (titleView != null) {
+            titleView.setText(showingArchived ? "Archived Playlists" : "Your Playlists");
+        }
+
+        final List<String> oldIds = new ArrayList<>();
+        for (PlaylistModel p : playlistModels) oldIds.add(p.getId());
+        final List<String> oldKeys = new ArrayList<>(renderedKeys);
+        final List<String> newKeys = new ArrayList<>();
+        for (PlaylistModel p : filtered) newKeys.add(contentKey(p));
+
+        DiffUtil.DiffResult diff = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+            @Override public int getOldListSize() { return oldIds.size(); }
+            @Override public int getNewListSize() { return filtered.size(); }
+            @Override public boolean areItemsTheSame(int o, int n) {
+                return oldIds.get(o).equals(filtered.get(n).getId());
             }
-
-            playlistModels.clear();
-            playlistModels.addAll(filteredPlaylists);
-            adapter.notifyDataSetChanged();
-            swipeRefreshLayout.setRefreshing(false);
+            @Override public boolean areContentsTheSame(int o, int n) {
+                return o < oldKeys.size() && oldKeys.get(o).equals(newKeys.get(n));
+            }
         });
+
+        playlistModels.clear();
+        playlistModels.addAll(filtered);
+        renderedKeys.clear();
+        renderedKeys.addAll(newKeys);
+        diff.dispatchUpdatesTo(adapter);
+        if (!fetchInFlight) swipeRefreshLayout.setRefreshing(false);
+    }
+
+    /** Everything a playlist row displays; a change here rebinds the row. */
+    private static String contentKey(PlaylistModel p) {
+        return p.getPlaylistName() + '\u0000' + p.getSongCount() + '\u0000' + p.getImage()
+                + '\u0000' + p.isFavourite();
     }
 
     @Override

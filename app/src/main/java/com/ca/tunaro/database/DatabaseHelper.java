@@ -46,7 +46,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     private static final String TAG = "DatabaseHelper";
     private static final String DATABASE_NAME = "TunaroDB";
-    private static final int DATABASE_VERSION = 17;
+    private static final int DATABASE_VERSION = 18;
 
     // Table names
     private static final String TABLE_ARTISTS = "artists";
@@ -105,6 +105,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String COLUMN_TRACK_COUNT = "track_count";
     private static final String COLUMN_REMOTE_TRACK_COUNT = "remote_track_count";
     private static final String COLUMN_OWNER = "owner";
+    // Spotify snapshot_id: latest seen on Spotify, and the one the stored song links were scanned at.
+    private static final String COLUMN_SNAPSHOT_ID = "snapshot_id";
+    private static final String COLUMN_SCANNED_SNAPSHOT_ID = "scanned_snapshot_id";
     private static final String COLUMN_IS_FAVOURITE = "is_favourite";
     private static final String COLUMN_IS_ARCHIVED = "is_archived";
 
@@ -213,6 +216,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     + COLUMN_TRACK_COUNT + " INTEGER DEFAULT 0,"
                     + COLUMN_REMOTE_TRACK_COUNT + " INTEGER DEFAULT 0,"
                     + COLUMN_OWNER + " TEXT,"
+                    + COLUMN_SNAPSHOT_ID + " TEXT,"
+                    + COLUMN_SCANNED_SNAPSHOT_ID + " TEXT,"
                     + COLUMN_IS_FAVOURITE + " INTEGER DEFAULT 0,"
                     + COLUMN_IS_ARCHIVED + " INTEGER DEFAULT 0"
                     + ")";
@@ -557,6 +562,15 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             createIndexes(db);
             Log.i(TAG, "DB v17 migration complete");
             oldVersion = 17;
+        }
+
+        if (oldVersion == 17) {
+            // v17→v18: playlist snapshot ids, so content changes with an unchanged track
+            // count still trigger a rescan. Additive only.
+            db.execSQL("ALTER TABLE " + TABLE_PLAYLISTS + " ADD COLUMN " + COLUMN_SNAPSHOT_ID + " TEXT");
+            db.execSQL("ALTER TABLE " + TABLE_PLAYLISTS + " ADD COLUMN " + COLUMN_SCANNED_SNAPSHOT_ID + " TEXT");
+            Log.i(TAG, "DB v18 migration complete");
+            oldVersion = 18;
         }
 
         if (oldVersion < newVersion) {
@@ -1222,7 +1236,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     //#region ======== PLAYLISTS ========
 
     public void upsertPlaylist(String playlistId, String name, String description,
-                               String imageUrl, int trackCount, String owner) {
+                               String imageUrl, int trackCount, String owner, String snapshotId) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
         values.put(COLUMN_PLAYLIST_ID, playlistId);
@@ -1232,6 +1246,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_TRACK_COUNT, trackCount);
         values.put(COLUMN_REMOTE_TRACK_COUNT, trackCount);
         values.put(COLUMN_OWNER, owner);
+        values.put(COLUMN_SNAPSHOT_ID, snapshotId);
         // track_count is managed by updatePlaylistTrackCount after scanning; remote_track_count always reflects latest Spotify total
         long result = db.insertWithOnConflict(TABLE_PLAYLISTS, null, values, SQLiteDatabase.CONFLICT_IGNORE);
         if (result == -1) {
@@ -1241,6 +1256,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             update.put(COLUMN_IMAGE_URL, imageUrl);
             update.put(COLUMN_REMOTE_TRACK_COUNT, trackCount);
             update.put(COLUMN_OWNER, owner);
+            if (snapshotId != null) update.put(COLUMN_SNAPSHOT_ID, snapshotId);
             db.update(TABLE_PLAYLISTS, update, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
         }
     }
@@ -1250,15 +1266,21 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         // Read the current remote_track_count to stamp track_count to match it.
         // This way the skip check (track_count == remote_track_count) will pass on the next
         // launch even when the playlist has duplicates (remote=1143, distinct=1128).
+        // The latest snapshot_id is stamped the same way, marking the stored links as current.
         int remoteCount = trackCount;
+        String snapshotId = null;
         Cursor c = db.rawQuery(
-                "SELECT " + COLUMN_REMOTE_TRACK_COUNT + " FROM " + TABLE_PLAYLISTS +
+                "SELECT " + COLUMN_REMOTE_TRACK_COUNT + ", " + COLUMN_SNAPSHOT_ID + " FROM " + TABLE_PLAYLISTS +
                 " WHERE " + COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
-        if (c.moveToFirst()) remoteCount = c.getInt(0);
+        if (c.moveToFirst()) {
+            remoteCount = c.getInt(0);
+            snapshotId = c.getString(1);
+        }
         c.close();
 
         ContentValues values = new ContentValues();
         values.put(COLUMN_TRACK_COUNT, remoteCount);
+        values.put(COLUMN_SCANNED_SNAPSHOT_ID, snapshotId);
         db.update(TABLE_PLAYLISTS, values, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
     }
 
@@ -1392,10 +1414,15 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         public final int remoteCount;   // latest Spotify tracks.total
         public final int scannedCount;  // remote total at the time of last scan (== remoteCount when up to date)
         public final String name;
-        public PlaylistScanInfo(int remoteCount, int scannedCount, String name) {
+        public final String snapshotId;         // latest Spotify snapshot_id (null if never seen)
+        public final String scannedSnapshotId;  // snapshot_id at the time of last scan
+        public PlaylistScanInfo(int remoteCount, int scannedCount, String name,
+                                String snapshotId, String scannedSnapshotId) {
             this.remoteCount = remoteCount;
             this.scannedCount = scannedCount;
             this.name = name;
+            this.snapshotId = snapshotId;
+            this.scannedSnapshotId = scannedSnapshotId;
         }
     }
 
@@ -1406,16 +1433,26 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 "SELECT p." + COLUMN_PLAYLIST_ID + ", p." + COLUMN_REMOTE_TRACK_COUNT +
                 ", p." + COLUMN_TRACK_COUNT +
                 ", p." + COLUMN_PLAYLIST_NAME +
+                ", p." + COLUMN_SNAPSHOT_ID +
+                ", p." + COLUMN_SCANNED_SNAPSHOT_ID +
                 " FROM " + TABLE_PLAYLISTS + " p",
                 null);
         if (cursor.moveToFirst()) {
             do {
                 result.put(cursor.getString(0),
-                        new PlaylistScanInfo(cursor.getInt(1), cursor.getInt(2), cursor.getString(3)));
+                        new PlaylistScanInfo(cursor.getInt(1), cursor.getInt(2), cursor.getString(3),
+                                cursor.getString(4), cursor.getString(5)));
             } while (cursor.moveToNext());
         }
         cursor.close();
         return result;
+    }
+
+    /** Mark a playlist's stored links as current for {@code snapshotId} without rescanning. */
+    public void adoptPlaylistSnapshot(String playlistId, String snapshotId) {
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_SCANNED_SNAPSHOT_ID, snapshotId);
+        getWritableDatabase().update(TABLE_PLAYLISTS, values, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
     }
 
     public void upsertSongPlaylistLink(String spotifyUri, String playlistId, String addedAt) {
