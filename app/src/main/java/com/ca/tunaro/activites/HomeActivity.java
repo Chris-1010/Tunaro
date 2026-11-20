@@ -5,7 +5,6 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.ImageView;
-import android.widget.Toast;
 
 import androidx.cardview.widget.CardView;
 
@@ -67,9 +66,9 @@ public class HomeActivity extends BaseActivity {
             overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out);
         });
 
-        thisSeasonButton.setOnClickListener(view -> showToast("This Season feature coming soon"));
+        thisSeasonButton.setOnClickListener(view -> showMessage("This Season feature coming soon"));
 
-        similarButton.setOnClickListener(view -> showToast("Similar Songs feature coming soon"));
+        similarButton.setOnClickListener(view -> showMessage("Similar Songs feature coming soon"));
 
         playlistsButton.setOnClickListener(view -> {
             Intent intent = new Intent(HomeActivity.this, PlaylistsActivity.class);
@@ -89,11 +88,7 @@ public class HomeActivity extends BaseActivity {
             overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out);
         });
 
-        playEarliestButton.setOnClickListener(view -> showToast("Play from Earliest feature coming soon"));
+        playEarliestButton.setOnClickListener(view -> showMessage("Play from Earliest feature coming soon"));
     }
 
-    private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "showed Toast: " + message);
-    }
 }

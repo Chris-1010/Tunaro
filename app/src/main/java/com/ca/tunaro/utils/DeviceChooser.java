@@ -2,10 +2,10 @@ package com.ca.tunaro.utils;
 
 import android.app.Activity;
 import android.util.Log;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 
+import com.ca.tunaro.R;
 import com.ca.tunaro.activites.MainActivity;
 import com.google.gson.JsonArray;
 
@@ -25,7 +25,7 @@ public class DeviceChooser {
 
     public static void showDeviceChooser(Activity activity, MainActivity mainActivity) {
         if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
-            Toast.makeText(activity, "Spotify API not available", Toast.LENGTH_SHORT).show();
+            UiFeedback.show(activity, "Not connected to Spotify yet");
             return;
         }
 
@@ -33,8 +33,9 @@ public class DeviceChooser {
         mainActivity.executeWithTokenRefresh(() -> mainActivity.getSpotifyApi().getUsersAvailableDevices().build())
                 .thenAccept(devices -> runIfAlive(activity, () -> showDeviceDialog(activity, mainActivity, devices)))
                 .exceptionally(throwable -> {
-                    runIfAlive(activity, () ->
-                            Toast.makeText(activity, "Error getting devices: " + throwable.getMessage(), Toast.LENGTH_SHORT).show());
+                    Log.e(TAG, "Failed to list devices", throwable);
+                    runIfAlive(activity, () -> UiFeedback.show(activity, "Couldn't load devices",
+                            R.string.retry, () -> showDeviceChooser(activity, mainActivity)));
                     return null;
                 });
     }
@@ -51,7 +52,7 @@ public class DeviceChooser {
 
     private static void showDeviceDialog(Activity activity, MainActivity mainActivity, Device[] devices) {
         if (devices == null || devices.length == 0) {
-            Toast.makeText(activity, "No available devices found. Open Spotify on a device and try again.", Toast.LENGTH_SHORT).show();
+            UiFeedback.show(activity, "No devices found. Open Spotify on a device and try again.");
             return;
         }
 
@@ -77,13 +78,13 @@ public class DeviceChooser {
 
     private static void transferPlayback(Activity activity, MainActivity mainActivity, Device device) {
         if (device.getIs_active()) {
-            Toast.makeText(activity, "Already playing on " + device.getName(), Toast.LENGTH_SHORT).show();
+            UiFeedback.show(activity, "Already playing on " + device.getName());
             return;
         }
 
         String deviceId = device.getId();
         if (deviceId == null) {
-            Toast.makeText(activity, "Could not identify this device", Toast.LENGTH_SHORT).show();
+            UiFeedback.show(activity, "Couldn't switch to that device");
             return;
         }
 
@@ -99,7 +100,7 @@ public class DeviceChooser {
         mainActivity.executeWithTokenRefresh(
                 () -> mainActivity.getSpotifyApi().transferUsersPlayback(deviceIds).play(true).build())
                 .thenRun(() -> runIfAlive(activity, () ->
-                        Toast.makeText(activity, "Switched playback to " + device.getName(), Toast.LENGTH_SHORT).show()))
+                        UiFeedback.show(activity, "Playing on " + device.getName())))
                 .exceptionally(throwable -> {
                     Log.w(TAG, "Transfer attempt " + attempt + " failed: " + throwable.getMessage());
                     if (attempt < MAX_TRANSFER_ATTEMPTS) {
@@ -107,8 +108,10 @@ public class DeviceChooser {
                                 .postDelayed(() -> attemptTransfer(activity, mainActivity, device, deviceIds, attempt + 1),
                                         RETRY_DELAY_MS));
                     } else {
-                        runIfAlive(activity, () ->
-                                Toast.makeText(activity, "Couldn't switch device: " + throwable.getMessage(), Toast.LENGTH_SHORT).show());
+                        Log.e(TAG, "Transfer failed", throwable);
+                        runIfAlive(activity, () -> UiFeedback.show(activity,
+                                "Couldn't switch to " + device.getName(), R.string.retry,
+                                () -> attemptTransfer(activity, mainActivity, device, deviceIds, 1)));
                     }
                     return null;
                 });

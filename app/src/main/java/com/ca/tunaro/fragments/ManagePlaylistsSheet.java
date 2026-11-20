@@ -17,6 +17,7 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.ca.tunaro.R;
+import com.ca.tunaro.utils.UiFeedback;
 import com.ca.tunaro.activites.MainActivity;
 import com.ca.tunaro.adapters.ManagablePlaylistAdapter;
 import com.ca.tunaro.database.DatabaseHelper;
@@ -169,7 +170,7 @@ public class ManagePlaylistsSheet extends BottomSheetDialogFragment {
 
         MainActivity mainActivity = MainActivity.getInstance();
         if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
-            Toast.makeText(getContext(), "Not connected to Spotify", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getContext(), "Not connected to Spotify yet", Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -246,22 +247,31 @@ public class ManagePlaylistsSheet extends BottomSheetDialogFragment {
     private void finishSave(int added, int removed, int failed) {
         if (!isAdded()) return;
         requireActivity().runOnUiThread(() -> {
-            StringBuilder msg = new StringBuilder();
-            if (added > 0) msg.append("Added to ").append(added);
-            if (removed > 0) {
-                if (msg.length() > 0) msg.append(", ");
-                msg.append("Removed from ").append(removed);
-            }
-            if (failed > 0) {
-                if (msg.length() > 0) msg.append(". ");
-                msg.append(failed).append(" failed");
-            }
-            if (msg.length() == 0) msg.append("No changes");
-            Toast.makeText(getContext(), msg.toString(), Toast.LENGTH_SHORT).show();
+            // Show on the host Activity so the message outlives the sheet.
+            UiFeedback.show(requireActivity(), saveSummary(added, removed, failed));
 
             if (savedListener != null) savedListener.onChangesSaved();
             dismiss();
         });
+    }
+
+    /** Friendly summary of a save, e.g. "Added to 2 playlists, removed from 1". */
+    static String saveSummary(int added, int removed, int failed) {
+        StringBuilder msg = new StringBuilder();
+        if (added > 0) msg.append("Added to ").append(playlists(added));
+        if (removed > 0) {
+            msg.append(msg.length() > 0 ? ", removed from " : "Removed from ").append(playlists(removed));
+        }
+        if (failed > 0) {
+            if (msg.length() > 0) msg.append(". ");
+            msg.append(failed == 1 ? "1 change failed" : failed + " changes failed");
+        }
+        if (msg.length() == 0) msg.append("No changes");
+        return msg.toString();
+    }
+
+    private static String playlists(int n) {
+        return n == 1 ? "1 playlist" : n + " playlists";
     }
 
     private static String utcTimestamp() {

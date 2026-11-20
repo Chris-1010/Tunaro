@@ -6,7 +6,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
-import android.widget.Toast;
 
 import androidx.core.content.ContextCompat;
 
@@ -18,6 +17,7 @@ import com.ca.tunaro.models.SongSnippet;
 import com.ca.tunaro.services.PlaybackService;
 import com.ca.tunaro.utils.DeviceChecker;
 import com.ca.tunaro.utils.SongCache;
+import com.ca.tunaro.utils.UiFeedback;
 import com.spotify.android.appremote.api.ConnectionParams;
 import com.spotify.android.appremote.api.Connector;
 import com.spotify.android.appremote.api.SpotifyAppRemote;
@@ -314,7 +314,7 @@ public class PlaybackManager {
         } else {
             connectRetryCount = 0;
             Log.e(TAG, "Failed to connect to Spotify after " + (MAX_CONNECT_RETRIES + 1) + " attempts");
-            showToast("Couldn't connect to Spotify. Make sure Spotify is open, then try again.");
+            showMessage("Couldn't connect to Spotify. Make sure Spotify is open, then try again.");
             notifyConnectionStateChanged();
         }
     }
@@ -582,7 +582,7 @@ public class PlaybackManager {
                             @Override
                             public void onDeviceCheckResult(boolean isCorrectDevice, String message) {
                                 if (!isCorrectDevice && PlaybackManager.instance.isPlaying() && DeviceChecker.isDeviceCheckEnabled(applicationContext)) {
-                                    showToast(message);
+                                    showMessage(message);
                                 }
                             }
 
@@ -804,7 +804,6 @@ public class PlaybackManager {
                 Log.d(TAG, "Recent listen found for song '" + currentSong.getName() + "'. Skipping recording.");
             } else {
                 dbHelper.addListenRecord(songId);
-                showToast("Recorded listen for song");
                 Log.d(TAG, "Recorded listen for song: " + currentSong.getName() + " (" + currentSong.getArtist() + ")");
             }
         }
@@ -815,7 +814,7 @@ public class PlaybackManager {
     //#region Snippet Playback Methods
     public void playSnippet(SongSnippet snippet) {
         if (!isConnected || spotifyAppRemote == null) {
-            showToast("Connecting to Spotify...");
+            showMessage("Connecting to Spotify…");
             connectSpotify(applicationContext, () -> playSnippet(snippet));
             return;
         }
@@ -849,7 +848,8 @@ public class PlaybackManager {
         SongModel song = dbHelper.getLeanSong(snippet.getSongId());
         String uri = song != null ? song.getUri() : null;
         if (uri == null) {
-            showToast("Song URI not found");
+            Log.w(TAG, "No URI for snippet song " + snippet.getSongId());
+            showMessage("Couldn't play this snippet");
             stopSnippetPlayback();
             return;
         }
@@ -863,7 +863,8 @@ public class PlaybackManager {
                                                     seekToSnippetStart(snippet), 100)), 100);
                 })
                 .setErrorCallback(throwable -> {
-                    showToast("Error playing song: " + throwable.getMessage());
+                    Log.e(TAG, "Failed to play song for snippet", throwable);
+                    showMessage("Couldn't play this snippet. Is Spotify open?");
                     stopSnippetPlayback();
                 });
     }
@@ -1291,10 +1292,10 @@ public class PlaybackManager {
 
     //#endregion
 
-    private void showToast(String message) {
+    /** Show a message on the foreground screen, or as a Toast when none is visible. */
+    private void showMessage(String message) {
         if (applicationContext != null) {
-            Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show();
-            Log.v(TAG, "showed Toast: " + message);
+            UiFeedback.show(applicationContext, message);
         }
     }
 

@@ -14,7 +14,6 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -23,6 +22,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
 import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.R;
+import com.ca.tunaro.utils.UiFeedback;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.models.SongSnippet;
 import com.ca.tunaro.adapters.SongSnippetsAdapter;
@@ -370,7 +370,7 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
                 updateSnippetMarkers();
                 updateButtonStates();
             } else {
-                showToast("End time must be after start time");
+                showMessage("End time must be after start time");
             }
         });
 
@@ -399,7 +399,7 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
             boolean includeRankings = includeInRankings.isChecked();
 
             if (snippetStartTime == -1 || snippetEndTime == -1) {
-                showToast("Please set both start and end times");
+                showMessage("Please set both start and end times");
                 return;
             }
 
@@ -421,7 +421,7 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
                 }
 
                 snippetAdapter.updateSnippets(snippets);
-                showToast("Snippet updated");
+                showMessage("Snippet updated");
                 editingSnippet = null; // Clear the editing state
             } else {
                 // Create new snippet (existing code)
@@ -441,9 +441,9 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
                     snippets.add(newSnippet);
                     snippetAdapter.updateSnippets(snippets);
                     updateSnippetsBadge();
-                    showToast("Snippet saved");
+                    showMessage("Snippet saved");
                 } else {
-                    showToast("Error saving snippet");
+                    showMessage("Couldn't save the snippet");
                 }
             }
 
@@ -464,7 +464,7 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
                             snippets.removeIf(snippet -> snippet.getId() == editingSnippet.getId());
                             snippetAdapter.updateSnippets(snippets);
                             updateSnippetsBadge();
-                            showToast("Snippet deleted");
+                            showMessage("Snippet deleted");
                             hideSnippetCreationOverlay();
                         })
                         .setNegativeButton("Cancel", null)
@@ -479,11 +479,9 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
                 // Wrong song is playing, play the correct song
                 if (playbackManager.isConnected()) {
                     playbackManager.playSong(song);
-                    showToast("Playing " + song.getName() + " for snippet creation");
                 } else {
                     playbackManager.connectSpotify(requireContext(), () -> {
                         playbackManager.playSong(song);
-                        showToast("Playing " + song.getName() + " for snippet creation");
                     });
                 }
             } else {
@@ -497,11 +495,9 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
         warningPlayButton.setOnClickListener(v -> {
             if (playbackManager.isConnected()) {
                 playbackManager.playSong(song);
-                showToast("Playing " + song.getName() + " for snippet creation");
             } else {
                 playbackManager.connectSpotify(requireContext(), () -> {
                     playbackManager.playSong(song);
-                    showToast("Playing " + song.getName() + " for snippet creation");
                 });
             }
         });
@@ -517,7 +513,7 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
                 updateButtonStates();
                 return true;
             } else {
-                showToast("Invalid start time format. Use M:SS.mmm");
+                showMessage("Enter the start time as M:SS.mmm");
                 updateTimeDisplays();
                 return false;
             }
@@ -532,7 +528,7 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
                 updateButtonStates();
                 return true;
             } else {
-                showToast("Invalid end time format or must be after start time");
+                showMessage("Enter an end time after the start, as M:SS.mmm");
                 updateTimeDisplays();
                 return false;
             }
@@ -841,9 +837,9 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
         }
     }
 
-    private void showToast(String message) {
-            Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show();
-            Log.v(TAG, "showed Toast: " + message);
+    private void showMessage(String message) {
+        if (!isAdded()) return;
+        UiFeedback.show(requireActivity(), message);
     }
 
     @Override

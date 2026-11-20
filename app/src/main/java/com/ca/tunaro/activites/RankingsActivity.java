@@ -7,7 +7,6 @@ import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.cardview.widget.CardView;
@@ -145,7 +144,7 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
         setContentView(R.layout.activity_rankings);
 
         if (MainActivity.getInstance() == null) {
-            showToast("Could not connect to Spotify");
+            showMessage("Couldn't connect to Spotify");
             finish();
             return;
         }
@@ -393,7 +392,7 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
 
             if (entrants.size() < 2) {
                 runOnUiThread(() -> {
-                    showToast("Those playlists have fewer than two songs between them");
+                    showMessage("Those playlists have fewer than two songs between them");
                     showSetupPhase();
                 });
                 return;
@@ -711,7 +710,7 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
 
     private void playSnippetPreview(SongSnippet snippet) {
         if (!playbackManager.isConnected()) {
-            showToast("Connecting to Spotify…");
+            showMessage("Connecting to Spotify…");
             playbackManager.connectSpotify(getApplicationContext(),
                     () -> playbackManager.playSnippet(snippet));
             return;
@@ -821,7 +820,7 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
                     .error(R.drawable.playlist_placeholder)
                     .into(icon);
             icon.setOnLongClickListener(v -> {
-                showToast(name);
+                showMessage(name);
                 return true;
             });
             resultsPlaylistIcons.addView(icon);
@@ -921,8 +920,4 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
         overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out);
     }
 
-    private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "showed Toast: " + message);
-    }
 }

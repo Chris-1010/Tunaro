@@ -20,6 +20,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.ca.tunaro.R;
+import com.ca.tunaro.utils.UiFeedback;
 import com.ca.tunaro.activites.AlbumView;
 import com.ca.tunaro.activites.ArtistView;
 import com.ca.tunaro.activites.MainActivity;
@@ -277,8 +278,7 @@ public class ArtistAlbumsFragment extends Fragment
         MainActivity mainActivity = MainActivity.getInstance();
         if (mainActivity == null || mainActivity.getSpotifyApi() == null) return;
 
-        android.widget.Toast.makeText(requireContext(),
-                "Playing " + album.getName(), android.widget.Toast.LENGTH_SHORT).show();
+        UiFeedback.show(requireActivity(), "Playing " + album.getName());
 
         mainActivity.executeWithTokenRefresh(() -> mainActivity.getSpotifyApi()
                         .getAlbumsTracks(album.getAlbumId()).limit(50).build())

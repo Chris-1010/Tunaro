@@ -8,7 +8,6 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.splashscreen.SplashScreen;
@@ -20,6 +19,7 @@ import com.ca.tunaro.services.SongRefreshService;
 import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.DeviceChecker;
 import com.ca.tunaro.utils.SecurePrefs;
+import com.ca.tunaro.utils.UiFeedback;
 import com.ca.tunaro.utils.LaunchRouting;
 import com.ca.tunaro.utils.PlaylistSetup;
 import com.ca.tunaro.utils.PoolingSpotifyHttpManager;
@@ -177,7 +177,10 @@ public class MainActivity extends AppCompatActivity {
                         if (loadingDialog != null && loadingDialog.isShowing()) {
                             loadingDialog.dismiss();
                         }
-                        showToast("Error: " + throwable.getMessage());
+                        Log.e(TAG, "Sign-in failed", throwable);
+                        showMessage(isCancellation(throwable)
+                                ? "Spotify sign-in was cancelled"
+                                : "Couldn't sign in to Spotify. Please try again.");
                         finish(); // Close app if authentication fails
                     });
                     return null;
@@ -388,7 +391,7 @@ public class MainActivity extends AppCompatActivity {
                         throw new RuntimeException("Account mismatch");
                     }
 
-                    runOnUiThread(() -> showToast("Logged in as " + userDisplayName));
+                    Log.d(TAG, "Logged in as " + userDisplayName);
                 })
                 .exceptionally(throwable -> {
                     String message = throwable.getMessage();
@@ -396,7 +399,7 @@ public class MainActivity extends AppCompatActivity {
                     if (message != null && message.contains("Account mismatch")) {
                         return null;
                     }
-                    runOnUiThread(() -> showToast("Failed to load profile: " + message));
+                    // The sign-in chain reports the failure to the user.
                     throw new RuntimeException("Failed to load profile", throwable);
                 });
     }
@@ -430,14 +433,13 @@ public class MainActivity extends AppCompatActivity {
                 case ERROR:
                     // Authentication failed
                     String errorMessage = response.getError();
-                    showToast("Authorization failed: " + errorMessage);
+                    Log.e(TAG, "Authorization failed: " + errorMessage);
                     // Complete the future exceptionally to signal authentication failure
                     if (authenticationFuture != null) {
                         authenticationFuture.completeExceptionally(new Exception(errorMessage));
                     }
                     break;
                 default:
-                    showToast("Spotify login was cancelled");
                     // Complete the future exceptionally to signal authentication cancellation
                     if (authenticationFuture != null) {
                         authenticationFuture.completeExceptionally(new Exception("Authentication cancelled"));
@@ -534,7 +536,6 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) {
                 Log.e(TAG, "Error exchanging code for tokens", e);
                 runOnUiThread(() -> {
-                    showToast("Failed to obtain tokens: " + e.getMessage());
                     if (authenticationFuture != null) {
                         authenticationFuture.completeExceptionally(e);
                     }
@@ -546,7 +547,7 @@ public class MainActivity extends AppCompatActivity {
     private void performInitialDeviceCheck() {
         DeviceChecker.checkPlaybackDevice(this, buildFreshSpotifyApi(), (isCorrectDevice, message) -> runOnUiThread(() -> {
             if (!isCorrectDevice && PlaybackManager.getInstance().isPlaying() && DeviceChecker.isDeviceCheckEnabled(this)) {
-                showToast(message);
+                showMessage(message);
             }
         }));
     }
@@ -882,8 +883,14 @@ public class MainActivity extends AppCompatActivity {
         return userID;
     }
 
-    private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "showed Toast: " + message);
+    private void showMessage(String message) {
+        UiFeedback.show(this, message);
+    }
+
+    private static boolean isCancellation(Throwable throwable) {
+        for (Throwable t = throwable; t != null; t = t.getCause()) {
+            if ("Authentication cancelled".equals(t.getMessage())) return true;
+        }
+        return false;
     }
 }

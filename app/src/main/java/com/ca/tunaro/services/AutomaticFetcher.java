@@ -2,16 +2,14 @@ package com.ca.tunaro.services;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.os.Handler;
-import android.os.Looper;
 import android.util.Log;
-import android.widget.Toast;
 
 import com.ca.tunaro.activites.MainActivity;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.database.SqlUtils;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.utils.SecurePrefs;
+import com.ca.tunaro.utils.UiFeedback;
 
 import java.text.ParseException;
 import java.util.ArrayList;
@@ -165,20 +163,19 @@ public class AutomaticFetcher {
     }
 
     public void registerAutomaticFetcher(RegistrationCallback callback) {
-        showToast("Registering for automatic fetching...");
 
         CompletableFuture.runAsync(() -> {
             try {
                 MainActivity mainActivity = MainActivity.getInstance();
                 if (mainActivity == null) {
-                    showToast("Registration failed: MainActivity not available");
+                    showMessage("Couldn't register: not connected to Spotify yet");
                     callback.onError("MainActivity not available");
                     return;
                 }
 
                 String spotifyUserId = mainActivity.getUserID();
                 if (spotifyUserId == null) {
-                    showToast("Registration failed: Spotify user ID not available");
+                    showMessage("Couldn't register: Spotify account not loaded yet");
                     callback.onError("Spotify user ID not available");
                     return;
                 }
@@ -189,7 +186,7 @@ public class AutomaticFetcher {
                     // Re-registration with existing credentials
                     try {
                         registerWithExistingCredentials(existingCreds);
-                        showToast("Automatic fetching registered successfully");
+                        showMessage("Automatic history sync is on");
                         callback.onSuccess();
                     } catch (Exception e) {
                         Log.w(TAG, "Re-registration failed, trying new registration", e);
@@ -204,7 +201,7 @@ public class AutomaticFetcher {
 
             } catch (Exception e) {
                 Log.e(TAG, "Registration error", e);
-                showToast("Registration failed: " + e.getMessage());
+                showMessage("Couldn't register for history sync. Try again later.");
                 callback.onError("Registration failed: " + e.getMessage());
             }
         });
@@ -232,7 +229,7 @@ public class AutomaticFetcher {
             // Step 6: Initial fetch to import any existing listens
             performInitialFetch(jwtToken);
 
-            showToast("Automatic fetching registered successfully");
+            showMessage("Automatic history sync is on");
             callback.onSuccess();
 
         } catch (Exception e) {
@@ -243,7 +240,7 @@ public class AutomaticFetcher {
                 // Try adding number suffix
                 retryWithModifiedUsername(username, callback);
             } else {
-                showToast("Registration failed: " + (errorMessage != null ? errorMessage : "Unknown error"));
+                showMessage("Couldn't register for history sync. Try again later.");
                 callback.onError(errorMessage != null ? errorMessage : "Unknown error");
             }
         }
@@ -418,7 +415,7 @@ public class AutomaticFetcher {
 
                 int count = importResults.getSuccessCount();
                 if (count > 0) {
-                    showToast("Imported " + count + " new listens");
+                    showMessage(count == 1 ? "Synced 1 new listen" : "Synced " + count + " new listens");
                 }
                 notifyFetchCompleted(count);
                 callback.onSuccess(count);
@@ -439,13 +436,13 @@ public class AutomaticFetcher {
 
                     int count = results.getSuccessCount();
                     if (count > 0) {
-                        showToast("Imported " + count + " new listens");
+                        showMessage(count == 1 ? "Synced 1 new listen" : "Synced " + count + " new listens");
                     }
                     notifyFetchCompleted(count);
                     callback.onSuccess(count);
                 } catch (Exception retryError) {
                     Log.e(TAG, "Fetch failed on retry", retryError);
-                    showToast("Failed to fetch listening history");
+                    // Launch-time sync fails quietly; callers that started it explicitly report it.
                     notifyFetchCompleted(0);
                     callback.onError("Failed to fetch listening history");
                 }
@@ -643,7 +640,7 @@ public class AutomaticFetcher {
     public CompletableFuture<Void> deregisterFetcher(DeregistrationCallback callback) {
         FetcherCredentials creds = getStoredCredentials();
         if (creds == null) {
-            showToast("Not registered");
+            showMessage("History sync isn't set up");
             callback.onError("Not registered");
             return CompletableFuture.completedFuture(null);
         }
@@ -656,22 +653,19 @@ public class AutomaticFetcher {
                 // Mark as not registered (keep credentials for re-registration)
                 markAsDeregistered();
 
-                showToast("Deregistered successfully");
+                showMessage("Automatic history sync is off");
                 callback.onSuccess();
 
             } catch (Exception e) {
                 Log.e(TAG, "Deregistration failed", e);
-                showToast("Deregistration failed: " + e.getMessage());
+                showMessage("Couldn't turn off history sync. Try again later.");
                 callback.onError("Deregistration failed: " + e.getMessage());
             }
         });
     }
     //#endregion
 
-    private void showToast(String message) {
-        new Handler(Looper.getMainLooper()).post(() -> {
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
-            Log.v(TAG, "showed Toast: " + message);
-        });
+    private void showMessage(String message) {
+        UiFeedback.show(context, message);
     }
 }

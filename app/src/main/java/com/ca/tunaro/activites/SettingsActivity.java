@@ -11,7 +11,6 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -103,12 +102,13 @@ public class SettingsActivity extends BaseActivity {
                             DatabaseHelper.ImportStats stats = DatabaseHelper.importFromUri(this, uri);
                             runOnUiThread(() -> {
                                 progressDialog.dismiss();
-                                showToast(stats.getSummary());
+                                showMessage(stats.getSummary());
                             });
                         } catch (Exception e) {
+                            Log.e(TAG, "Import failed", e);
                             runOnUiThread(() -> {
                                 progressDialog.dismiss();
-                                showToast("Import failed: " + e.getMessage());
+                                showMessage("Import failed. Check that the file is a Tunaro backup.");
                             });
                         }
                     }).start();
@@ -140,12 +140,13 @@ public class SettingsActivity extends BaseActivity {
                             DatabaseHelper.writeExportToUri(this, uri);
                             runOnUiThread(() -> {
                                 progressDialog.dismiss();
-                                showToast("Data exported successfully!");
+                                showMessage("Data exported");
                             });
                         } catch (Exception e) {
+                            Log.e(TAG, "Export failed", e);
                             runOnUiThread(() -> {
                                 progressDialog.dismiss();
-                                showToast("Export failed: " + e.getMessage());
+                                showMessage("Export failed. Try again or pick another location.");
                             });
                         }
                     }).start();
@@ -266,11 +267,11 @@ public class SettingsActivity extends BaseActivity {
     private void discoverAvailableDevices() {
         MainActivity mainActivity = MainActivity.getInstance();
         if (mainActivity == null) {
-            showToast("MainActivity not available");
+            showMessage("Not connected to Spotify yet");
             return;
         }
         if (mainActivity.getSpotifyApi() == null) {
-            showToast("Spotify API not available");
+            showMessage("Not connected to Spotify yet");
             return;
         }
 
@@ -290,9 +291,9 @@ public class SettingsActivity extends BaseActivity {
                     });
                 })
                 .exceptionally(throwable -> {
-                    runOnUiThread(() -> {
-                        showToast("Error getting devices: " + throwable.getMessage());
-                    });
+                    Log.e(TAG, "Failed to list devices", throwable);
+                    runOnUiThread(() -> showMessage("Couldn't load devices",
+                            R.string.retry, this::discoverAvailableDevices));
                     return null;
                 });
     }
@@ -338,7 +339,7 @@ public class SettingsActivity extends BaseActivity {
 
                 @Override
                 public void onError(String error) {
-                    // Toast is shown by AutomaticFetcher
+                    // Message is shown by AutomaticFetcher
                 }
             });
         });
@@ -352,11 +353,8 @@ public class SettingsActivity extends BaseActivity {
             automaticFetcher.setEnabled(isChecked);
 
             if (isChecked) {
-                showToast("Automatic fetching enabled");
                 // Perform immediate fetch
                 performFetch();
-            } else {
-                showToast("Automatic fetching disabled");
             }
         });
 
@@ -374,7 +372,7 @@ public class SettingsActivity extends BaseActivity {
 
                             @Override
                             public void onError(String error) {
-                                // Toast is shown by AutomaticFetcher
+                                // Message is shown by AutomaticFetcher
                             }
                         });
                     })
@@ -422,7 +420,7 @@ public class SettingsActivity extends BaseActivity {
             public void onSuccess(int importedCount) {
                 runOnUiThread(() -> {
                     showFetchProgress(false);
-                    // Toast is shown by AutomaticFetcher
+                    // Message is shown by AutomaticFetcher
                     // Update statistics display
                     TextView statisticsText = findViewById(R.id.fetcher_statistics);
                     statisticsText.setText(automaticFetcher.getStatisticsDisplay());
@@ -431,8 +429,11 @@ public class SettingsActivity extends BaseActivity {
 
             @Override
             public void onError(String error) {
-                runOnUiThread(() -> showFetchProgress(false));
-                // Toast is shown by AutomaticFetcher
+                runOnUiThread(() -> {
+                    showFetchProgress(false);
+                    showMessage("Couldn't sync listening history",
+                            R.string.retry, SettingsActivity.this::performFetch);
+                });
             }
         });
     }
@@ -447,7 +448,7 @@ public class SettingsActivity extends BaseActivity {
     private void onFetchCompleted(int importedCount) {
         runOnUiThread(() -> {
             showFetchProgress(false);
-            // Toast is shown by AutomaticFetcher
+            // Message is shown by AutomaticFetcher
             // Update statistics display
             TextView statisticsText = findViewById(R.id.fetcher_statistics);
             if (statisticsText != null && automaticFetcher != null) {
@@ -478,7 +479,7 @@ public class SettingsActivity extends BaseActivity {
                     // Clear song cache
                     SongCache.getInstance(this).clearCache();
 
-                    Toast.makeText(this, "Cache cleared successfully", Toast.LENGTH_SHORT).show();
+                    showMessage("Cache cleared");
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
@@ -504,8 +505,4 @@ public class SettingsActivity extends BaseActivity {
         // No cleanup needed for automatic fetcher
     }
 
-    private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "showed Toast: " + message);
-    }
 }

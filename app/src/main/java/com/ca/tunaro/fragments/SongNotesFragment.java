@@ -17,7 +17,6 @@ import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.ItemTouchHelper;
@@ -25,6 +24,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.ca.tunaro.R;
+import com.ca.tunaro.utils.UiFeedback;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.models.SongNote;
 import com.ca.tunaro.adapters.SongNotesAdapter;
@@ -136,7 +136,7 @@ public class SongNotesFragment extends Fragment {
                         dbHelper.deleteNote(noteToDelete.getId());
                         notesAdapter.removeNote(position);
                         updateNotesBadge();
-                        showToast("Note deleted");
+                        showMessage("Note deleted");
                     }
 
                     @Override
@@ -150,7 +150,7 @@ public class SongNotesFragment extends Fragment {
     private void saveNote() {
         String content = noteInput.getText().toString().trim();
         if (content.isEmpty()) {
-            showToast("Please enter a note");
+            showMessage("Please enter a note");
             return;
         }
 
@@ -163,7 +163,7 @@ public class SongNotesFragment extends Fragment {
             loadNotes(); // Refresh the notes list
             updateNotesBadge();
         } else {
-            showToast("Error saving note");
+            showMessage("Couldn't save the note");
         }
     }
 
@@ -281,12 +281,12 @@ public class SongNotesFragment extends Fragment {
                     String content = contentInput.getText().toString().trim();
 
                     if (noteType.isEmpty()) {
-                        showToast("Please enter a note type");
+                        showMessage("Please enter a note type");
                         return;
                     }
 
                     if (content.isEmpty()) {
-                        showToast("Please enter a note");
+                        showMessage("Please enter a note");
                         return;
                     }
 
@@ -297,7 +297,7 @@ public class SongNotesFragment extends Fragment {
                         loadNotes(); // Refresh the notes list
                         updateNotesBadge();
                     } else {
-                        showToast("Error saving note");
+                        showMessage("Couldn't save the note");
                     }
                 })
                 .setNegativeButton("Cancel", null)
@@ -473,12 +473,12 @@ public class SongNotesFragment extends Fragment {
                     String content = contentInput.getText().toString().trim();
 
                     if (noteType.isEmpty()) {
-                        showToast("Please enter a note type");
+                        showMessage("Please enter a note type");
                         return;
                     }
 
                     if (content.isEmpty()) {
-                        showToast("Please enter a note");
+                        showMessage("Please enter a note");
                         return;
                     }
 
@@ -486,7 +486,7 @@ public class SongNotesFragment extends Fragment {
                     note.setContent(content);
                     dbHelper.editNote(note);
                     loadNotes();
-                    showToast("Note updated");
+                    showMessage("Note updated");
                 })
                 .setNegativeButton("Cancel", (d, which) -> {
                     // Reset the view state by notifying adapter of change
@@ -510,8 +510,8 @@ public class SongNotesFragment extends Fragment {
         }
     }
 
-    private void showToast(String message) {
-        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "showed Toast: " + message);
+    private void showMessage(String message) {
+        if (!isAdded()) return;
+        UiFeedback.show(requireActivity(), message);
     }
 }

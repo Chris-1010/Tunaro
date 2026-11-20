@@ -6,7 +6,6 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -181,7 +180,6 @@ public class SpotifyHistoryImportActivity extends AppCompatActivity {
                         selectedFileUris.size(), finalTotal, finalAdded, finalSkipped
                 ));
                 selectFilesButton.setEnabled(true);
-                Toast.makeText(this, "Import completed: " + finalAdded + " listens added", Toast.LENGTH_LONG).show();
             });
         });
     }

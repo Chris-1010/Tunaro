@@ -11,7 +11,6 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -518,7 +517,7 @@ public class SongView extends BaseActivity {
                     if (!link.isActive() && link.removedAt != null) {
                         tooltip += "\nRemoved " + formatRemovedAt(link.removedAt);
                     }
-                    showToast(tooltip);
+                    showMessage(tooltip);
                     return true;
                 });
 
@@ -776,16 +775,14 @@ public class SongView extends BaseActivity {
 
     private void playSong() {
         if (!playbackManager.isConnected()) {
-            showToast("Connecting to Spotify...");
+            showMessage("Connecting to Spotify…");
             playbackManager.connectSpotify(this, () -> {
                 if (selectedSong != null) {
                     playbackManager.playSong(selectedSong);
-                    showToast("Playing " + selectedSong.getName());
                 }
             });
         } else if (selectedSong != null) {
             playbackManager.playSong(selectedSong);
-            showToast("Playing " + selectedSong.getName());
         }
     }
 
@@ -821,8 +818,4 @@ public class SongView extends BaseActivity {
         }
     }
 
-    private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "showed Toast: " + message);
-    }
 }

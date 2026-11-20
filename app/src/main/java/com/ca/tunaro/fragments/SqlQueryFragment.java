@@ -15,13 +15,13 @@ import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
 import com.ca.tunaro.R;
+import com.ca.tunaro.utils.UiFeedback;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.DeveloperHistory;
@@ -68,7 +68,7 @@ public class SqlQueryFragment extends Fragment {
     private void showHistory() {
         List<String> history = DeveloperHistory.getSqlQueries(requireContext());
         if (history.isEmpty()) {
-            Toast.makeText(requireContext(), "No query history yet", Toast.LENGTH_SHORT).show();
+            UiFeedback.show(requireActivity(), "No query history yet");
             return;
         }
 

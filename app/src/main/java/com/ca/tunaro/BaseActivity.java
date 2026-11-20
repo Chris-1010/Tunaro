@@ -20,9 +20,9 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.dynamicanimation.animation.DynamicAnimation;
 import androidx.dynamicanimation.animation.SpringAnimation;
@@ -37,6 +37,7 @@ import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.utils.ColorExtractor;
 import com.ca.tunaro.utils.SelectedSongHolder;
+import com.ca.tunaro.utils.UiFeedback;
 
 import java.util.Locale;
 import java.util.Objects;
@@ -113,6 +114,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         super.onResume();
 
         Log.d(TAG, "onResume");
+        UiFeedback.setForegroundActivity(this);
 
         if (checkForRecovery()) return;
 
@@ -127,6 +129,12 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
 
         // Re-sync playback bar state
         syncPlaybackBarState();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        UiFeedback.clearForegroundActivity(this);
     }
 
     @Override
@@ -536,7 +544,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         if (currentSong == null) return;
         MainActivity mainActivity = MainActivity.getInstance();
         if (mainActivity == null) {
-            showToast("Unable to open song view");
+            showMessage("Couldn't open this song right now");
             return;
         }
         // Skip if the SongView for this song is already the selected one.
@@ -930,8 +938,13 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         return String.format(Locale.getDefault(), "%d:%02d", minutes, seconds);
     }
 
-    private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "showed Toast: " + message);
+    /** Show a short message as a Snackbar above the playback bar. */
+    protected void showMessage(CharSequence message) {
+        UiFeedback.show(this, message);
+    }
+
+    /** Show a message with an action button (e.g. Retry) above the playback bar. */
+    protected void showMessage(CharSequence message, @StringRes int actionLabel, Runnable action) {
+        UiFeedback.show(this, message, actionLabel, action);
     }
 }

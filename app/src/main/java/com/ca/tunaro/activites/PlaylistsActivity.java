@@ -8,7 +8,6 @@ import android.view.View;
 import android.widget.ImageView;
 import android.widget.PopupMenu;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -75,7 +74,7 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
         if (mainActivity != null) {
             loadPlaylists();
         } else {
-            showToast("Error: Could not connect to Spotify");
+            showMessage("Couldn't connect to Spotify");
             finish();
         }
     }
@@ -83,7 +82,7 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
     /** Show cached playlists immediately, then revalidate against Spotify and diff in changes. */
     private void loadPlaylists() {
         if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
-            showToast("Spotify API not ready");
+            showMessage("Not connected to Spotify yet");
             return;
         }
 
@@ -124,7 +123,13 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
                         swipeRefreshLayout.setRefreshing(false);
                         // A background revalidation that fails quietly keeps the cached list.
                         if (userInitiated || allPlaylists == null) {
-                            showToast("Error refreshing playlists: " + cause.getMessage());
+                            showMessage("Couldn't refresh playlists",
+                                    R.string.retry, () -> {
+                                        if (!fetchInFlight) {
+                                            swipeRefreshLayout.setRefreshing(true);
+                                            refreshData();
+                                        }
+                                    });
                         }
                     });
                     return null;
@@ -170,20 +175,20 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
             if (itemId == R.id.action_favourite) {
                 if (dbHelper.isPlaylistFavourited(playlist.getId())) {
                     dbHelper.unfavouritePlaylist(playlist.getId());
-                    showToast("Playlist unfavourited");
+                    showMessage("Playlist unfavourited");
                 } else {
                     dbHelper.favouritePlaylist(playlist.getId());
-                    showToast("Playlist favourited");
+                    showMessage("Playlist favourited");
                 }
                 applyFilter();
                 return true;
             } else if (itemId == R.id.action_archive) {
                 if (showingArchived) {
                     dbHelper.unarchivePlaylist(playlist.getId());
-                    showToast("Playlist unarchived");
+                    showMessage("Playlist unarchived");
                 } else {
                     dbHelper.archivePlaylist(playlist.getId());
-                    showToast("Playlist archived");
+                    showMessage("Playlist archived");
                 }
                 applyFilter();
                 return true;
@@ -277,8 +282,4 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
         overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out);
     }
 
-    private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "showed Toast: " + message);
-    }
 }

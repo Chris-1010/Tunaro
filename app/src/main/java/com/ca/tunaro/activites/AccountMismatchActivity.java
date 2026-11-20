@@ -15,6 +15,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.ca.tunaro.R;
+import com.ca.tunaro.utils.UiFeedback;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.utils.SecurePrefs;
 
@@ -83,12 +84,13 @@ public class AccountMismatchActivity extends AppCompatActivity {
                             DatabaseHelper.writeExportToUri(this, uri);
                             runOnUiThread(() -> {
                                 progressDialog.dismiss();
-                                Toast.makeText(this, "Data exported successfully!", Toast.LENGTH_SHORT).show();
+                                UiFeedback.show(this, "Data exported");
                             });
                         } catch (Exception e) {
+                            Log.e(TAG, "Export failed", e);
                             runOnUiThread(() -> {
                                 progressDialog.dismiss();
-                                Toast.makeText(this, "Export failed: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                                UiFeedback.show(this, "Export failed. Try again or pick another location.");
                             });
                         }
                     }).start();
@@ -120,13 +122,15 @@ public class AccountMismatchActivity extends AppCompatActivity {
                             DatabaseHelper.writeExportToUri(this, uri);
                             runOnUiThread(() -> {
                                 progressDialog.dismiss();
-                                Toast.makeText(this, "Data exported successfully!", Toast.LENGTH_SHORT).show();
+                                // Toast: this screen is torn down by the reset straight after.
+                                Toast.makeText(this, "Data exported", Toast.LENGTH_SHORT).show();
                                 performReset();
                             });
                         } catch (Exception e) {
+                            Log.e(TAG, "Export failed", e);
                             runOnUiThread(() -> {
                                 progressDialog.dismiss();
-                                Toast.makeText(this, "Export failed: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                                UiFeedback.show(this, "Export failed. Try again or pick another location.");
                             });
                         }
                     }).start();

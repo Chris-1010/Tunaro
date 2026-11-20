@@ -16,7 +16,6 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.Spinner;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.widget.Toolbar;
@@ -109,7 +108,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
         if (selectedPlaylist == null) {
             // Handle error - playlist not found
-            showToast("Error: No playlist selected");
+            showMessage("Couldn't open that playlist");
             finish();
             return;
         }
@@ -131,7 +130,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
         // Swipe an album cover right to add/remove the song from the queue.
         adapter.setOnQueueChangeListener((position, added) -> {
-            showToast(added ? "Added to queue" : "Removed from queue");
+            showMessage(added ? "Added to queue" : "Removed from queue");
             recyclerView.invalidateItemDecorations();
         });
 
@@ -189,8 +188,9 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 })
                 .exceptionally(throwable -> {
                     runOnUiThread(() -> {
+                        Log.e(TAG, "Failed to load playlist songs", throwable);
                         showShimmerLoading(false);
-                        showToast("Error loading songs: " + throwable.getMessage());
+                        showMessage("Couldn't load songs. Check your connection and try again.");
                     });
                     return null;
                 });
@@ -222,20 +222,18 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         imageView.setOnClickListener(v -> {
             ArrayList<SongModel> currentList = adapter.getSongs();
             if (currentList == null || currentList.isEmpty()) {
-                showToast("No songs loaded yet");
+                showMessage("No songs loaded yet");
                 return;
             }
             if (!playbackManager.isConnected()) {
-                showToast("Connecting to Spotify...");
+                showMessage("Connecting to Spotify…");
                 playbackManager.connectSpotify(this, () -> {
                     playbackManager.playQueue(currentList, 0);
                     onQueueCreated();
-                    showToast("Playing from " + currentList.get(0).getName());
                 });
             } else {
                 playbackManager.playQueue(currentList, 0);
                 onQueueCreated();
-                showToast("Playing from " + currentList.get(0).getName());
             }
         });
 
@@ -856,7 +854,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     public void onAlbumCoverClick(int position) {
         ArrayList<SongModel> currentList = adapter.getSongs();
         if (!playbackManager.isConnected()) {
-            showToast("Connecting to Spotify...");
+            showMessage("Connecting to Spotify…");
             playbackManager.connectSpotify(this, () -> {
                 playbackManager.playQueue(currentList, position);
                 onQueueCreated();
@@ -873,19 +871,13 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         SongModel clickedSong = adapter.getSongs().get(position);
 
         if (!playbackManager.isConnected()) {
-            showToast("Connecting to Spotify...");
+            showMessage("Connecting to Spotify…");
             playbackManager.connectSpotify(this, () -> {
                 playbackManager.playSong(clickedSong);
-                showToast("Playing " + clickedSong.getName());
             });
         } else {
             playbackManager.playSong(clickedSong);
-            showToast("Playing " + clickedSong.getName());
         }
     }
 
-    private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "showed Toast: " + message);
-    }
 }

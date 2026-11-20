@@ -8,7 +8,6 @@ import android.util.Log;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -43,7 +42,7 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
 
         Log.d(TAG, "LibraryActivity onCreate MainActivity.getInstance()");
         if (MainActivity.getInstance() == null) {
-            showToast("Could not connect to Spotify");
+            showMessage("Couldn't connect to Spotify");
             finish();
             return;
         }
@@ -152,8 +151,4 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
         emptyView.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
     }
 
-    private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "showed Toast: " + message);
-    }
 }
