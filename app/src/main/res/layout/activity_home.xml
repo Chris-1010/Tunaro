@@ -14,9 +14,8 @@
         android:layout_marginTop="40dp"
         android:letterSpacing="0.2"
         android:text="@string/app_name"
+        android:textAppearance="@style/TextAppearance.Tunaro.Display"
         android:textColor="@color/text_primary"
-        android:textSize="48sp"
-        android:textStyle="bold"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -25,35 +24,37 @@
         android:id="@+id/settings_icon"
         android:layout_width="48dp"
         android:layout_height="48dp"
-        android:layout_marginTop="40dp"
-        android:layout_marginEnd="@dimen/space_md"
-        android:contentDescription="Settings"
+        android:layout_marginEnd="@dimen/space_sm"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:contentDescription="@string/home_settings"
+        android:focusable="true"
         android:padding="12dp"
         android:src="@drawable/settings"
-        android:clickable="true"
-        android:focusable="true"
+        app:layout_constraintBottom_toBottomOf="@+id/title_text"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="@+id/title_text"
+        app:tint="@color/text_secondary" />
 
     <ImageView
         android:id="@+id/user_profile_image"
         android:layout_width="36dp"
         android:layout_height="36dp"
         android:layout_marginStart="@dimen/space_md"
-        android:layout_marginTop="44dp"
-        android:contentDescription="User profile"
+        android:contentDescription="@string/home_profile"
         android:src="@drawable/playlist_placeholder"
+        app:layout_constraintBottom_toBottomOf="@+id/title_text"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="@+id/title_text" />
 
     <TextView
         android:id="@+id/home_text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_lg"
+        android:layout_marginTop="@dimen/space_xs"
         android:text="@string/title_home"
-        android:textColor="@color/text_primary"
-        android:textSize="32sp"
+        android:textAppearance="@style/TextAppearance.Tunaro.Title"
+        android:textColor="@color/text_secondary"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/title_text" />
@@ -62,12 +63,12 @@
         android:id="@+id/menu_card"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="@dimen/space_lg"
+        android:layout_marginStart="@dimen/space_md"
         android:layout_marginTop="@dimen/space_lg"
-        android:layout_marginEnd="@dimen/space_lg"
-        app:cardBackgroundColor="#503D3D3D"
-        app:cardCornerRadius="20dp"
-        app:cardElevation="8dp"
+        android:layout_marginEnd="@dimen/space_md"
+        app:cardBackgroundColor="@color/surface_raised"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="0dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/home_text">
@@ -76,28 +77,31 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:columnCount="2"
-            android:padding="@dimen/space_md"
+            android:padding="@dimen/space_sm"
             android:rowCount="3">
 
-            <!-- Notes Button -->
+            <!-- Library -->
             <androidx.cardview.widget.CardView
                 android:id="@+id/library_button"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_rowWeight="1"
                 android:layout_columnWeight="1"
-                android:layout_margin="@dimen/space_sm"
+                android:layout_gravity="fill"
+                android:layout_margin="@dimen/space_xs"
                 android:clickable="true"
                 android:focusable="true"
                 android:foreground="?attr/selectableItemBackground"
                 android:stateListAnimator="@animator/press_scale"
-                app:cardBackgroundColor="#E0E0E0"
+                app:cardBackgroundColor="@color/surface"
                 app:cardCornerRadius="12dp"
-                app:cardElevation="4dp">
+                app:cardElevation="0dp">
 
                 <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:minHeight="112dp"
                     android:orientation="vertical"
                     android:padding="@dimen/space_md">
 
@@ -106,37 +110,38 @@
                         android:layout_height="wrap_content"
                         android:text="@string/library"
                         android:textAlignment="center"
-                        android:textColor="@color/black"
-                        android:textSize="@dimen/text_title"
-                        android:textStyle="bold" />
+                        android:textAppearance="@style/TextAppearance.Tunaro.Title"
+                        android:textColor="@color/text_primary" />
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="View songs which have notes/snippets added"
+                        android:layout_marginTop="@dimen/space_xs"
+                        android:text="@string/home_library_caption"
                         android:textAlignment="center"
-                        android:textColor="@color/black"
-                        android:textSize="@dimen/text_caption" />
+                        android:textAppearance="@style/TextAppearance.Tunaro.Caption"
+                        android:textColor="@color/text_secondary" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
-            <!-- Snippets Button -->
-
-            <!-- This Season Button -->
+            <!-- This Season (coming soon) -->
             <androidx.cardview.widget.CardView
                 android:id="@+id/this_season_button"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_rowWeight="1"
                 android:layout_columnWeight="1"
-                android:layout_margin="@dimen/space_sm"
-                app:cardBackgroundColor="#E0E0E0"
+                android:layout_gravity="fill"
+                android:layout_margin="@dimen/space_xs"
+                app:cardBackgroundColor="@color/surface"
                 app:cardCornerRadius="12dp"
-                app:cardElevation="4dp">
+                app:cardElevation="0dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:minHeight="112dp"
                     android:orientation="vertical"
                     android:padding="@dimen/space_md">
 
@@ -144,20 +149,20 @@
                         android:id="@+id/this_season_title"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="This Season"
+                        android:text="@string/home_this_season"
                         android:textAlignment="center"
-                        android:textColor="@color/black"
-                        android:textSize="@dimen/text_title"
-                        android:textStyle="bold" />
+                        android:textAppearance="@style/TextAppearance.Tunaro.Title"
+                        android:textColor="@color/text_primary" />
 
                     <TextView
                         android:id="@+id/this_season_caption"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="View songs added this season"
+                        android:layout_marginTop="@dimen/space_xs"
+                        android:text="@string/home_this_season_caption"
                         android:textAlignment="center"
-                        android:textColor="@color/black"
-                        android:textSize="@dimen/text_caption" />
+                        android:textAppearance="@style/TextAppearance.Tunaro.Caption"
+                        android:textColor="@color/text_secondary" />
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -175,21 +180,24 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
-            <!-- Similar Button -->
+            <!-- Similar (coming soon) -->
             <androidx.cardview.widget.CardView
                 android:id="@+id/similar_button"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_rowWeight="1"
                 android:layout_columnWeight="1"
-                android:layout_margin="@dimen/space_sm"
-                app:cardBackgroundColor="#E0E0E0"
+                android:layout_gravity="fill"
+                android:layout_margin="@dimen/space_xs"
+                app:cardBackgroundColor="@color/surface"
                 app:cardCornerRadius="12dp"
-                app:cardElevation="4dp">
+                app:cardElevation="0dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:minHeight="112dp"
                     android:orientation="vertical"
                     android:padding="@dimen/space_md">
 
@@ -197,20 +205,20 @@
                         android:id="@+id/similar_title"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Similar"
+                        android:text="@string/home_similar"
                         android:textAlignment="center"
-                        android:textColor="@color/black"
-                        android:textSize="@dimen/text_title"
-                        android:textStyle="bold" />
+                        android:textAppearance="@style/TextAppearance.Tunaro.Title"
+                        android:textColor="@color/text_primary" />
 
                     <TextView
                         android:id="@+id/similar_caption"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="View created similar song parts"
+                        android:layout_marginTop="@dimen/space_xs"
+                        android:text="@string/home_similar_caption"
                         android:textAlignment="center"
-                        android:textColor="@color/black"
-                        android:textSize="@dimen/text_caption" />
+                        android:textAppearance="@style/TextAppearance.Tunaro.Caption"
+                        android:textColor="@color/text_secondary" />
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -228,126 +236,135 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
-            <!-- Playlists Button -->
+            <!-- Playlists -->
             <androidx.cardview.widget.CardView
                 android:id="@+id/playlists_button"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_rowWeight="1"
                 android:layout_columnWeight="1"
-                android:layout_margin="@dimen/space_sm"
+                android:layout_gravity="fill"
+                android:layout_margin="@dimen/space_xs"
                 android:clickable="true"
                 android:focusable="true"
                 android:foreground="?attr/selectableItemBackground"
                 android:stateListAnimator="@animator/press_scale"
-                app:cardBackgroundColor="#E0E0E0"
+                app:cardBackgroundColor="@color/surface"
                 app:cardCornerRadius="12dp"
-                app:cardElevation="4dp">
+                app:cardElevation="0dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:minHeight="112dp"
                     android:orientation="vertical"
                     android:padding="@dimen/space_md">
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Playlists"
+                        android:text="@string/home_playlists"
                         android:textAlignment="center"
-                        android:textColor="@color/black"
-                        android:textSize="@dimen/text_title"
-                        android:textStyle="bold" />
+                        android:textAppearance="@style/TextAppearance.Tunaro.Title"
+                        android:textColor="@color/text_primary" />
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="View your playlists"
+                        android:layout_marginTop="@dimen/space_xs"
+                        android:text="@string/home_playlists_caption"
                         android:textAlignment="center"
-                        android:textColor="@color/black"
-                        android:textSize="@dimen/text_caption" />
+                        android:textAppearance="@style/TextAppearance.Tunaro.Caption"
+                        android:textColor="@color/text_secondary" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
-            <!-- Developer Button -->
+            <!-- Developer -->
             <androidx.cardview.widget.CardView
                 android:id="@+id/developer_button"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_rowWeight="1"
                 android:layout_columnWeight="1"
-                android:layout_margin="@dimen/space_sm"
+                android:layout_gravity="fill"
+                android:layout_margin="@dimen/space_xs"
                 android:clickable="true"
                 android:focusable="true"
                 android:foreground="?attr/selectableItemBackground"
                 android:stateListAnimator="@animator/press_scale"
-                app:cardBackgroundColor="#333333"
+                app:cardBackgroundColor="@color/surface"
                 app:cardCornerRadius="12dp"
-                app:cardElevation="4dp">
+                app:cardElevation="0dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:minHeight="112dp"
                     android:orientation="vertical"
                     android:padding="@dimen/space_md">
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Developer"
+                        android:text="@string/home_developer"
                         android:textAlignment="center"
-                        android:textColor="@color/text_primary"
-                        android:textSize="@dimen/text_title"
-                        android:textStyle="bold" />
+                        android:textAppearance="@style/TextAppearance.Tunaro.Title"
+                        android:textColor="@color/text_primary" />
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="SQL queries and API requests"
+                        android:layout_marginTop="@dimen/space_xs"
+                        android:text="@string/home_developer_caption"
                         android:textAlignment="center"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="@dimen/text_caption" />
+                        android:textAppearance="@style/TextAppearance.Tunaro.Caption"
+                        android:textColor="@color/text_secondary" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
-            <!-- Rankings Button -->
+            <!-- Rankings -->
             <androidx.cardview.widget.CardView
                 android:id="@+id/rankings_button"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_rowWeight="1"
                 android:layout_columnWeight="1"
-                android:layout_margin="@dimen/space_sm"
+                android:layout_gravity="fill"
+                android:layout_margin="@dimen/space_xs"
                 android:clickable="true"
                 android:focusable="true"
                 android:foreground="?attr/selectableItemBackground"
                 android:stateListAnimator="@animator/press_scale"
-                app:cardBackgroundColor="#E0E0E0"
+                app:cardBackgroundColor="@color/surface"
                 app:cardCornerRadius="12dp"
-                app:cardElevation="4dp">
+                app:cardElevation="0dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:minHeight="112dp"
                     android:orientation="vertical"
                     android:padding="@dimen/space_md">
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Rankings"
+                        android:text="@string/rankings"
                         android:textAlignment="center"
-                        android:textColor="@color/black"
-                        android:textSize="@dimen/text_title"
-                        android:textStyle="bold" />
+                        android:textAppearance="@style/TextAppearance.Tunaro.Title"
+                        android:textColor="@color/text_primary" />
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Play a ranking game to find your favourite songs"
+                        android:layout_marginTop="@dimen/space_xs"
+                        android:text="@string/home_rankings_caption"
                         android:textAlignment="center"
-                        android:textColor="@color/black"
-                        android:textSize="@dimen/text_caption" />
+                        android:textAppearance="@style/TextAppearance.Tunaro.Caption"
+                        android:textColor="@color/text_secondary" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
@@ -361,12 +378,12 @@
         android:layout_marginStart="@dimen/space_xl"
         android:layout_marginEnd="@dimen/space_xl"
         android:layout_marginBottom="100dp"
-        android:backgroundTint="#00BFFF"
         android:padding="12dp"
-        android:text="Play from Earliest Listened To"
-        android:textColor="@color/black"
+        android:text="@string/home_play_earliest"
+        android:textColor="?attr/colorOnPrimary"
         android:textSize="@dimen/text_body"
         android:visibility="gone"
+        app:backgroundTint="@color/accent"
         app:cornerRadius="24dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"

@@ -89,4 +89,19 @@
     <string name="rankings_empty">No standings to show</string>
     <string name="rankings_empty_hint">The songs from this game are no longer in your library.</string>
     <string name="coming_soon_badge">Soon</string>
+
+    <!-- Home screen. -->
+    <string name="home_settings">Settings</string>
+    <string name="home_profile">Your Spotify profile</string>
+    <string name="home_library_caption">View songs which have notes/snippets added</string>
+    <string name="home_this_season">This Season</string>
+    <string name="home_this_season_caption">View songs added this season</string>
+    <string name="home_similar">Similar</string>
+    <string name="home_similar_caption">View created similar song parts</string>
+    <string name="home_playlists">Playlists</string>
+    <string name="home_playlists_caption">View your playlists</string>
+    <string name="home_developer">Developer</string>
+    <string name="home_developer_caption">SQL queries and API requests</string>
+    <string name="home_rankings_caption">Play a ranking game to find your favourite songs</string>
+    <string name="home_play_earliest">Play from Earliest Listened To</string>
 </resources>
