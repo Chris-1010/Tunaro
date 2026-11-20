@@ -13,9 +13,8 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="40dp"
         android:text="Settings"
+        android:textAppearance="@style/TextAppearance.Tunaro.Display"
         android:textColor="@color/text_primary"
-        android:textSize="30sp"
-        android:textStyle="bold"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -152,6 +151,17 @@
                 android:textColor="@color/text_primary"
                 android:textSize="@dimen/text_title"
                 android:textStyle="bold" />
+
+            <com.google.android.material.progressindicator.LinearProgressIndicator
+                android:id="@+id/data_progress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/space_sm"
+                android:indeterminate="true"
+                android:visibility="gone"
+                app:indicatorColor="@color/accent"
+                app:trackColor="@color/divider"
+                app:trackCornerRadius="2dp" />
 
             <Button
                 android:id="@+id/import_button"
@@ -342,6 +352,8 @@
                 android:layout_marginBottom="@dimen/space_md"
                 style="@style/Widget.Tunaro.Input"
                 android:hint="Enter your device name (e.g., iPhone, PC)"
+                android:imeOptions="actionDone"
+                android:inputType="text"
                 android:padding="12dp"
                 android:visibility="gone" />
 
@@ -374,7 +386,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"
                 android:layout_marginBottom="@dimen/space_md"
-                android:background="#33FF0000"
+                android:background="@drawable/danger_zone_background"
                 android:orientation="vertical"
                 android:padding="@dimen/space_md">
 
@@ -383,7 +395,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="@dimen/space_md"
                     android:text="Danger Zone"
-                    android:textColor="#FF6666"
+                    android:textColor="@color/danger"
                     android:textSize="@dimen/text_title"
                     android:textStyle="bold" />
 

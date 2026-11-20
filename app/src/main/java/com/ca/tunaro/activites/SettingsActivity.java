@@ -1,6 +1,5 @@
 package com.ca.tunaro.activites;
 
-import android.app.ProgressDialog;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.Editable;
@@ -36,6 +35,12 @@ public class SettingsActivity extends BaseActivity {
     private Button discoverDevicesButton;
     private TextView availableDevicesText;
     private SharedPreferences prefs;
+    private final AutomaticFetcher.FetchCompletionListener fetchListener = this::onFetchCompleted;
+    private Button importButton;
+    private Button exportButton;
+    private Button restoreBackupButton;
+    private View dataProgress;
+    private boolean dataJobRunning;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -70,10 +75,11 @@ public class SettingsActivity extends BaseActivity {
     //#region Import/Export Option
 
     private void setupImportExportButtons() {
-        Button importButton = findViewById(R.id.import_button);
-        Button exportButton = findViewById(R.id.export_button);
+        importButton = findViewById(R.id.import_button);
+        exportButton = findViewById(R.id.export_button);
         Button clearCacheButton = findViewById(R.id.clear_cache_button);
-        Button restoreBackupButton = findViewById(R.id.restore_backup_button);
+        restoreBackupButton = findViewById(R.id.restore_backup_button);
+        dataProgress = findViewById(R.id.data_progress);
         clearCacheButton.setOnClickListener(v -> clearAllCaches());
 
         importButton.setOnClickListener(v -> importData());
@@ -90,30 +96,17 @@ public class SettingsActivity extends BaseActivity {
     private final ActivityResultLauncher<String[]> importLauncher = registerForActivityResult(
             new ActivityResultContracts.OpenDocument(),
             uri -> {
-                if (uri != null) {
-                    // Show progress dialog to keep user on screen
-                    ProgressDialog progressDialog = new ProgressDialog(this);
-                    progressDialog.setMessage("Importing data...");
-                    progressDialog.setCancelable(false);
-                    progressDialog.show();
-
-                    // Run import on background thread to avoid freezing UI
-                    new Thread(() -> {
-                        try {
-                            DatabaseHelper.ImportStats stats = DatabaseHelper.importFromUri(this, uri);
-                            runOnUiThread(() -> {
-                                progressDialog.dismiss();
-                                showMessage(stats.getSummary());
-                            });
-                        } catch (Exception e) {
-                            Log.e(TAG, "Import failed", e);
-                            runOnUiThread(() -> {
-                                progressDialog.dismiss();
-                                showMessage("Import failed. Check that the file is a Tunaro backup.");
-                            });
-                        }
-                    }).start();
-                }
+                if (uri == null) return;
+                android.content.Context appContext = getApplicationContext();
+                runDataJob(importButton, "Importing\u2026", () -> {
+                    try {
+                        DatabaseHelper.ImportStats stats = DatabaseHelper.importFromUri(appContext, uri);
+                        return stats.getSummary();
+                    } catch (Exception e) {
+                        Log.e(TAG, "Import failed", e);
+                        return "Import failed. Check that the file is a Tunaro backup.";
+                    }
+                });
             }
     );
 
@@ -128,32 +121,58 @@ public class SettingsActivity extends BaseActivity {
     private final ActivityResultLauncher<String> exportLauncher = registerForActivityResult(
             new ActivityResultContracts.CreateDocument("application/json"),
             uri -> {
-                if (uri != null) {
-                    // Show progress dialog to keep user on screen
-                    ProgressDialog progressDialog = new ProgressDialog(this);
-                    progressDialog.setMessage("Exporting data...");
-                    progressDialog.setCancelable(false);
-                    progressDialog.show();
-
-                    // Run export on background thread to avoid freezing UI
-                    new Thread(() -> {
-                        try {
-                            DatabaseHelper.writeExportToUri(this, uri);
-                            runOnUiThread(() -> {
-                                progressDialog.dismiss();
-                                showMessage("Data exported");
-                            });
-                        } catch (Exception e) {
-                            Log.e(TAG, "Export failed", e);
-                            runOnUiThread(() -> {
-                                progressDialog.dismiss();
-                                showMessage("Export failed. Try again or pick another location.");
-                            });
-                        }
-                    }).start();
-                }
+                if (uri == null) return;
+                android.content.Context appContext = getApplicationContext();
+                runDataJob(exportButton, "Exporting\u2026", () -> {
+                    try {
+                        DatabaseHelper.writeExportToUri(appContext, uri);
+                        return "Data exported";
+                    } catch (Exception e) {
+                        Log.e(TAG, "Export failed", e);
+                        return "Export failed. Try again or pick another location.";
+                    }
+                });
             }
     );
+
+    /**
+     * Runs an import/export on the I/O pool with inline progress: the data buttons are disabled,
+     * {@code busyButton} shows {@code busyLabel}, and the job's result message is shown when done.
+     */
+    private void runDataJob(Button busyButton, String busyLabel,
+                            java.util.concurrent.Callable<String> job) {
+        if (dataJobRunning) return;
+        dataJobRunning = true;
+        CharSequence idleLabel = busyButton.getText();
+        setDataButtonsEnabled(false);
+        busyButton.setText(busyLabel);
+        dataProgress.setVisibility(View.VISIBLE);
+
+        AppExecutors.io().execute(() -> {
+            String message;
+            try {
+                message = job.call();
+            } catch (Exception e) {
+                Log.e(TAG, "Data job failed", e);
+                message = "Something went wrong. Try again.";
+            }
+            String result = message;
+            runOnUiThread(() -> {
+                dataJobRunning = false;
+                if (isDestroyed()) return;
+                busyButton.setText(idleLabel);
+                setDataButtonsEnabled(true);
+                dataProgress.setVisibility(View.GONE);
+                showMessage(result);
+            });
+        });
+    }
+
+    private void setDataButtonsEnabled(boolean enabled) {
+        importButton.setEnabled(enabled);
+        exportButton.setEnabled(enabled);
+        restoreBackupButton.setEnabled(enabled);
+    }
 
     //#endregion
 
@@ -327,7 +346,7 @@ public class SettingsActivity extends BaseActivity {
         if (isRegistered && AutomaticFetcher.isFetchInProgress()) {
             showFetchProgress(true);
             // Register to be notified when fetch completes
-            AutomaticFetcher.setFetchCompletionListener(this::onFetchCompleted);
+            AutomaticFetcher.setFetchCompletionListener(fetchListener);
         }
 
         // Setup registration button
@@ -446,16 +465,15 @@ public class SettingsActivity extends BaseActivity {
         }
     }
 
+    // Delivered on the main thread by AutomaticFetcher.
     private void onFetchCompleted(int importedCount) {
-        runOnUiThread(() -> {
-            showFetchProgress(false);
-            // Message is shown by AutomaticFetcher
-            // Update statistics display
-            TextView statisticsText = findViewById(R.id.fetcher_statistics);
-            if (statisticsText != null && automaticFetcher != null) {
-                statisticsText.setText(automaticFetcher.getStatisticsDisplay());
-            }
-        });
+        if (isDestroyed()) return;
+        showFetchProgress(false);
+        // Message is shown by AutomaticFetcher
+        TextView statisticsText = findViewById(R.id.fetcher_statistics);
+        if (statisticsText != null && automaticFetcher != null) {
+            statisticsText.setText(automaticFetcher.getStatisticsDisplay());
+        }
     }
 
     //#endregion
@@ -505,7 +523,8 @@ public class SettingsActivity extends BaseActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // No cleanup needed for automatic fetcher
+        // The fetcher holds the listener statically: drop it so this screen is not leaked.
+        AutomaticFetcher.clearFetchCompletionListener(fetchListener);
     }
 
 }

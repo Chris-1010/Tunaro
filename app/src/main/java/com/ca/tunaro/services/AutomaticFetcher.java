@@ -2,6 +2,8 @@ package com.ca.tunaro.services;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
 import com.ca.tunaro.activites.MainActivity;
@@ -38,7 +40,9 @@ public class AutomaticFetcher {
 
     // Static fetch state tracking for cross-activity visibility
     private static volatile boolean fetchInProgress = false;
+    // Read and written on the main thread only.
     private static FetchCompletionListener completionListener = null;
+    private static Handler mainHandler;
 
     public interface FetchCompletionListener {
         void onFetchCompleted(int importedCount);
@@ -48,16 +52,39 @@ public class AutomaticFetcher {
         return fetchInProgress;
     }
 
+    /** Registers the one-shot completion listener. Call on the main thread. */
     public static void setFetchCompletionListener(FetchCompletionListener listener) {
         completionListener = listener;
     }
 
+    /**
+     * Drops {@code listener} if it is still registered, so a destroyed screen is neither leaked
+     * nor called back. Call on the main thread, typically from onDestroy.
+     */
+    public static void clearFetchCompletionListener(FetchCompletionListener listener) {
+        if (completionListener == listener) {
+            completionListener = null;
+        }
+    }
+
+    private static synchronized Handler mainHandler() {
+        if (mainHandler == null) {
+            mainHandler = new Handler(Looper.getMainLooper());
+        }
+        return mainHandler;
+    }
+
     private static void notifyFetchCompleted(int importedCount) {
         fetchInProgress = false;
-        if (completionListener != null) {
-            completionListener.onFetchCompleted(importedCount);
-            completionListener = null; // Clear after notifying
-        }
+        // Deliver on the main thread; reading the listener there also covers a screen that
+        // registers between the in-progress check and this post.
+        mainHandler().post(() -> {
+            FetchCompletionListener listener = completionListener;
+            completionListener = null; // One-shot
+            if (listener != null) {
+                listener.onFetchCompleted(importedCount);
+            }
+        });
     }
 
     public AutomaticFetcher(Context context) {

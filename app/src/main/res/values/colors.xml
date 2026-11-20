@@ -22,6 +22,8 @@
     <!-- Status. -->
     <color name="success">#2E7D32</color>
     <color name="danger">#C62828</color>
+    <!-- Danger tint for destructive-action panels (danger at ~12% alpha). -->
+    <color name="danger_surface">#1FC62828</color>
     <color name="warning">#FF9800</color>
 
     <!-- Text and lines on dark surfaces. -->
