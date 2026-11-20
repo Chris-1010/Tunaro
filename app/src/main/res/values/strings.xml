@@ -79,4 +79,5 @@
     <string name="snippets_empty_hint">Save a favourite part of this song to replay it any time.</string>
     <string name="rankings_empty">No standings to show</string>
     <string name="rankings_empty_hint">The songs from this game are no longer in your library.</string>
+    <string name="coming_soon_badge">Soon</string>
 </resources>

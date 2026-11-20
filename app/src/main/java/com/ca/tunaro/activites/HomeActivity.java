@@ -65,9 +65,12 @@ public class HomeActivity extends BaseActivity {
             startActivity(intent);
         });
 
-        thisSeasonButton.setOnClickListener(view -> showMessage("This Season feature coming soon"));
-
-        similarButton.setOnClickListener(view -> showMessage("Similar Songs feature coming soon"));
+        // Not built yet: shown disabled with a "Soon" badge rather than toasting on tap.
+        markComingSoon(thisSeasonButton,
+                findViewById(R.id.this_season_title), findViewById(R.id.this_season_caption));
+        markComingSoon(similarButton,
+                findViewById(R.id.similar_title), findViewById(R.id.similar_caption));
+        markComingSoon(playEarliestButton);
 
         playlistsButton.setOnClickListener(view -> {
             Intent intent = new Intent(HomeActivity.this, PlaylistsActivity.class);
@@ -83,8 +86,6 @@ public class HomeActivity extends BaseActivity {
             Intent intent = new Intent(HomeActivity.this, DeveloperActivity.class);
             startActivity(intent);
         });
-
-        playEarliestButton.setOnClickListener(view -> showMessage("Play from Earliest feature coming soon"));
     }
 
 }

@@ -128,6 +128,27 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         }
     }
 
+    /** Alpha applied to the content of entry points that are not built yet. */
+    protected static final float COMING_SOON_ALPHA = 0.45f;
+
+    /**
+     * Render an entry point that is not built yet as visibly disabled: no taps,
+     * ripple, focus or press-scale, with the given content views dimmed. A "Soon"
+     * badge, if the layout has one, is left out of {@code dimmed} so it stays legible.
+     */
+    protected static void markComingSoon(@Nullable View tile, View... dimmed) {
+        if (tile == null) return;
+        tile.setEnabled(false);
+        tile.setClickable(false);
+        tile.setLongClickable(false);
+        tile.setFocusable(false);
+        tile.setStateListAnimator(null);
+        tile.setForeground(null);
+        for (View view : dimmed) {
+            if (view != null) view.setAlpha(COMING_SOON_ALPHA);
+        }
+    }
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);

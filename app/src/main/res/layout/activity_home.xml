@@ -130,10 +130,6 @@
                 android:layout_rowWeight="1"
                 android:layout_columnWeight="1"
                 android:layout_margin="@dimen/space_sm"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?attr/selectableItemBackground"
-                android:stateListAnimator="@animator/press_scale"
                 app:cardBackgroundColor="#E0E0E0"
                 app:cardCornerRadius="12dp"
                 app:cardElevation="4dp">
@@ -145,6 +141,7 @@
                     android:padding="@dimen/space_md">
 
                     <TextView
+                        android:id="@+id/this_season_title"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="This Season"
@@ -154,12 +151,27 @@
                         android:textStyle="bold" />
 
                     <TextView
+                        android:id="@+id/this_season_caption"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="View songs added this season"
                         android:textAlignment="center"
                         android:textColor="@color/black"
                         android:textSize="@dimen/text_caption" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginTop="@dimen/space_sm"
+                        android:background="@drawable/soon_badge"
+                        android:paddingStart="@dimen/space_sm"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="@dimen/space_sm"
+                        android:paddingBottom="2dp"
+                        android:text="@string/coming_soon_badge"
+                        android:textAppearance="@style/TextAppearance.Tunaro.Caption"
+                        android:textColor="@color/accent" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
@@ -171,10 +183,6 @@
                 android:layout_rowWeight="1"
                 android:layout_columnWeight="1"
                 android:layout_margin="@dimen/space_sm"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?attr/selectableItemBackground"
-                android:stateListAnimator="@animator/press_scale"
                 app:cardBackgroundColor="#E0E0E0"
                 app:cardCornerRadius="12dp"
                 app:cardElevation="4dp">
@@ -186,6 +194,7 @@
                     android:padding="@dimen/space_md">
 
                     <TextView
+                        android:id="@+id/similar_title"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Similar"
@@ -195,12 +204,27 @@
                         android:textStyle="bold" />
 
                     <TextView
+                        android:id="@+id/similar_caption"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="View created similar song parts"
                         android:textAlignment="center"
                         android:textColor="@color/black"
                         android:textSize="@dimen/text_caption" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginTop="@dimen/space_sm"
+                        android:background="@drawable/soon_badge"
+                        android:paddingStart="@dimen/space_sm"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="@dimen/space_sm"
+                        android:paddingBottom="2dp"
+                        android:text="@string/coming_soon_badge"
+                        android:textAppearance="@style/TextAppearance.Tunaro.Caption"
+                        android:textColor="@color/accent" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
