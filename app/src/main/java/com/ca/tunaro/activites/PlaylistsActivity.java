@@ -10,7 +10,6 @@ import android.widget.PopupMenu;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
@@ -47,7 +46,6 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
     // Discards filter results that a newer filter pass has superseded.
     private int filterGeneration = 0;
     // Content keys of the rendered rows, so a refresh can diff in instead of redrawing.
-    private final ArrayList<String> renderedKeys = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -67,6 +65,7 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
 
         adapter = new Playlist_RecyclerViewAdapter(this, playlistModels, this, this::showPlaylistOptions);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        recyclerView.setHasFixedSize(true);
         recyclerView.setAdapter(adapter);
 
         swipeRefreshLayout.setOnRefreshListener(this::refreshData);
@@ -249,36 +248,10 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
             titleView.setText(showingArchived ? "Archived Playlists" : "Your Playlists");
         }
 
-        final List<String> oldIds = new ArrayList<>();
-        for (PlaylistModel p : playlistModels) oldIds.add(p.getId());
-        final List<String> oldKeys = new ArrayList<>(renderedKeys);
-        final List<String> newKeys = new ArrayList<>();
-        for (PlaylistModel p : filtered) newKeys.add(contentKey(p));
-
-        DiffUtil.DiffResult diff = DiffUtil.calculateDiff(new DiffUtil.Callback() {
-            @Override public int getOldListSize() { return oldIds.size(); }
-            @Override public int getNewListSize() { return filtered.size(); }
-            @Override public boolean areItemsTheSame(int o, int n) {
-                return oldIds.get(o).equals(filtered.get(n).getId());
-            }
-            @Override public boolean areContentsTheSame(int o, int n) {
-                return o < oldKeys.size() && oldKeys.get(o).equals(newKeys.get(n));
-            }
-        });
-
-        playlistModels.clear();
-        playlistModels.addAll(filtered);
-        renderedKeys.clear();
-        renderedKeys.addAll(newKeys);
-        diff.dispatchUpdatesTo(adapter);
+        adapter.submitPlaylists(filtered);
         if (!fetchInFlight) swipeRefreshLayout.setRefreshing(false);
     }
 
-    /** Everything a playlist row displays; a change here rebinds the row. */
-    private static String contentKey(PlaylistModel p) {
-        return p.getPlaylistName() + '\u0000' + p.getSongCount() + '\u0000' + p.getImage()
-                + '\u0000' + p.isFavourite();
-    }
 
     @Override
     public void onItemClick(int position, View itemView) {

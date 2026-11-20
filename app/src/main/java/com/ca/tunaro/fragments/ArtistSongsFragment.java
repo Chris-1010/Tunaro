@@ -56,6 +56,7 @@ public class ArtistSongsFragment extends Fragment
     private View rootView;
     private RecyclerView recyclerView;
     private Song_RecyclerViewAdapter adapter;
+    private boolean firstResume = true;
     private QueueLineDecoration queueLineDecoration;
     // URI of the row currently highlighted as now-playing; drives targeted decoration refreshes.
     private String highlightedUri;
@@ -110,6 +111,7 @@ public class ArtistSongsFragment extends Fragment
 
         recyclerView = rootView.findViewById(R.id.songs_recycler_view);
         recyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
+        recyclerView.setHasFixedSize(true);
         adapter = new Song_RecyclerViewAdapter(requireContext(), this, displayed);
         adapter.setShowArtist(false); // The page already belongs to this artist.
         recyclerView.setAdapter(adapter);
@@ -467,7 +469,7 @@ public class ArtistSongsFragment extends Fragment
     // can now be trusted to run through consecutive queued rows. Mirrors PlaylistView.onQueueCreated.
     private void onQueueCreated() {
         if (queueLineDecoration != null) queueLineDecoration.setQueueMatchesDisplay(true);
-        if (adapter != null) adapter.notifyDataSetChanged();
+        if (adapter != null) adapter.refreshPlaybackState();
         recyclerView.invalidateItemDecorations();
         SongModel current = PlaybackManager.getInstance().getCurrentSong();
         highlightedUri = current != null ? current.getUri() : null;
@@ -494,7 +496,7 @@ public class ArtistSongsFragment extends Fragment
         SongModel current = PlaybackManager.getInstance().getCurrentSong();
         String newUri = current != null ? current.getUri() : null;
         if (!java.util.Objects.equals(newUri, highlightedUri)) {
-            adapter.notifyDataSetChanged();
+            adapter.refreshPlaybackState();
             recyclerView.invalidateItemDecorations();
             highlightedUri = newUri;
         }
@@ -558,11 +560,22 @@ public class ArtistSongsFragment extends Fragment
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        // A note or snippet may have changed in SongView; refresh the row icons.
+        // The adapter loaded them on creation, so the first resume is skipped.
+        if (firstResume) firstResume = false;
+        else if (adapter != null) adapter.refreshAnnotationFlags();
+    }
+
+    @Override
     public void onDestroyView() {
         super.onDestroyView();
+        firstResume = true;
         ArtistView host = host();
         if (host != null) host.removeDiscographyListener(this);
     }
+
 
     //#endregion
 }

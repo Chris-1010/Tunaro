@@ -8,6 +8,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
@@ -66,9 +67,21 @@ public class LibrarySongAdapter extends RecyclerView.Adapter<LibrarySongAdapter.
         return songs.size();
     }
 
+    /**
+     * Replaces the list via a URI-keyed diff so unchanged rows are not rebound.
+     * The list is copied, so a caller's list is never aliased by later addSong calls.
+     */
     public void updateSongs(List<SongModel> newSongs) {
-        this.songs = newSongs;
-        notifyDataSetChanged();
+        List<SongModel> next = new ArrayList<>(newSongs);
+        List<SongModel> previous = this.songs;
+        this.songs = next;
+        if (!SongListDiff.shouldDiff(previous.size(), next.size())) {
+            notifyDataSetChanged();
+            return;
+        }
+        DiffUtil.calculateDiff(new SongListDiff(previous, next),
+                        SongListDiff.shouldDetectMoves(previous.size(), next.size()))
+                .dispatchUpdatesTo(this);
     }
 
     public List<SongModel> getSongs() {
