@@ -19,6 +19,7 @@ import com.ca.tunaro.R;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.ca.tunaro.utils.ImageLoads;
 
 public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_RecyclerViewAdapter.ViewHolder> {
     public interface OnItemLongClickListener {
@@ -65,6 +66,7 @@ public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_
         // Load image using Glide
         Glide.with(context)
                 .load(model.getImage())
+                .apply(ImageLoads.thumbnail(context, 100))
                 .placeholder(R.drawable.playlist_placeholder)
                 .error(R.drawable.playlist_placeholder)
                 .transition(DrawableTransitionOptions.withCrossFade())

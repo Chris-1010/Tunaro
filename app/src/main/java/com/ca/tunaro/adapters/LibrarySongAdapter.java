@@ -18,6 +18,7 @@ import com.ca.tunaro.models.SongModel;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.ca.tunaro.utils.ImageLoads;
 
 public class LibrarySongAdapter extends RecyclerView.Adapter<LibrarySongAdapter.ViewHolder> {
     private final Context context;
@@ -45,6 +46,7 @@ public class LibrarySongAdapter extends RecyclerView.Adapter<LibrarySongAdapter.
         // Load album cover using Glide
         Glide.with(context)
                 .load(model.getAlbumCoverUrl())
+                .apply(ImageLoads.thumbnail(context, 56))
                 .into(holder.albumCoverImage);
 
         // Show note indicator

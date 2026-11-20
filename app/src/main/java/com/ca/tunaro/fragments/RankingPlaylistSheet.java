@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import com.ca.tunaro.utils.ImageLoads;
 
 /**
  * Playlist picker for starting a ranking game. Reuses the "add to playlist" grid
@@ -176,6 +177,7 @@ public class RankingPlaylistSheet extends BottomSheetDialogFragment {
             icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
             Glide.with(this)
                     .load(playlist.imageUrl)
+                    .apply(ImageLoads.thumbnailPx(size))
                     .placeholder(R.drawable.playlist_placeholder)
                     .error(R.drawable.playlist_placeholder)
                     .into(icon);

@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import com.ca.tunaro.utils.ImageLoads;
 
 public class RankingsLeaderboardAdapter extends RecyclerView.Adapter<RankingsLeaderboardAdapter.ViewHolder> {
     private final Context context;
@@ -52,6 +53,7 @@ public class RankingsLeaderboardAdapter extends RecyclerView.Adapter<RankingsLea
 
         Glide.with(context)
                 .load(entry.song.getAlbumCoverUrl())
+                .apply(ImageLoads.thumbnail(context, 48))
                 .placeholder(R.drawable.playlist_placeholder)
                 .error(R.drawable.playlist_placeholder)
                 .into(holder.albumCoverImage);

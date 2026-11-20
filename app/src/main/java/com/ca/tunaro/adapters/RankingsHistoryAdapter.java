@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import com.ca.tunaro.utils.ImageLoads;
 
 /** Lists completed ranking games; a tap opens that game's final standings. */
 public class RankingsHistoryAdapter extends RecyclerView.Adapter<RankingsHistoryAdapter.ViewHolder> {
@@ -89,6 +90,7 @@ public class RankingsHistoryAdapter extends RecyclerView.Adapter<RankingsHistory
             icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
             Glide.with(context)
                     .load(coverForPlaylist(id))
+                    .apply(ImageLoads.thumbnailPx(iconSize))
                     .placeholder(R.drawable.playlist_placeholder)
                     .error(R.drawable.playlist_placeholder)
                     .into(icon);
@@ -101,6 +103,7 @@ public class RankingsHistoryAdapter extends RecyclerView.Adapter<RankingsHistory
 
         Glide.with(context)
                 .load(coverUrl)
+                .apply(ImageLoads.thumbnail(context, 48))
                 .placeholder(R.drawable.playlist_placeholder)
                 .error(R.drawable.playlist_placeholder)
                 .into(holder.cover);

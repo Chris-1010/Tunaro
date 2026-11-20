@@ -18,6 +18,7 @@ import com.ca.tunaro.database.DatabaseHelper;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.ca.tunaro.utils.ImageLoads;
 
 /**
  * Grid of playlists for the "Add to playlist" sheet. Each cell is tap-to-toggle:
@@ -89,6 +90,7 @@ public class ManagablePlaylistAdapter extends RecyclerView.Adapter<ManagablePlay
         holder.name.setText(playlist.name);
         Glide.with(context)
                 .load(playlist.imageUrl)
+                .apply(ImageLoads.thumbnailPx(gridCellPx(context)))
                 .placeholder(R.drawable.playlist_placeholder)
                 .error(R.drawable.playlist_placeholder)
                 .into(holder.image);
@@ -144,5 +146,10 @@ public class ManagablePlaylistAdapter extends RecyclerView.Adapter<ManagablePlay
             tick = itemView.findViewById(R.id.managable_tick);
             name = itemView.findViewById(R.id.managable_name);
         }
+    }
+
+    /** Approximate cell width of the 3-column grid this adapter is shown in. */
+    private static int gridCellPx(Context context) {
+        return context.getResources().getDisplayMetrics().widthPixels / 3;
     }
 }

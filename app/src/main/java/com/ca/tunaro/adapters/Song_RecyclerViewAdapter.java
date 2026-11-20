@@ -38,6 +38,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import com.ca.tunaro.utils.ImageLoads;
 
 public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_RecyclerViewAdapter.ViewHolder> {
     private static final String TAG = "SongAdapter";
@@ -144,6 +145,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         // Load image using Glide
         Glide.with(context)
                 .load(model.getAlbumCoverUrl())
+                .apply(ImageLoads.thumbnail(context, 60))
                 .placeholder(R.drawable.song_placeholder)
                 .error(R.drawable.song_placeholder)
                 .transition(DrawableTransitionOptions.withCrossFade())
