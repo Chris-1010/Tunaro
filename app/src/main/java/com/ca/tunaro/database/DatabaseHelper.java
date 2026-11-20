@@ -956,6 +956,46 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return song;
     }
 
+    /**
+     * Batched {@link #getLeanSong}: one query per chunk of URIs instead of one per song.
+     * Results follow the order of {@code spotifyUris}; URIs with no songs row are omitted.
+     */
+    public List<SongModel> getLeanSongs(List<String> spotifyUris) {
+        List<SongModel> result = new ArrayList<>();
+        if (spotifyUris == null || spotifyUris.isEmpty()) return result;
+        Map<String, SongModel> byUri = new HashMap<>();
+        SQLiteDatabase db = this.getReadableDatabase();
+        final int chunkSize = 900; // stay under SQLite's 999 bound-parameter limit
+        for (int start = 0; start < spotifyUris.size(); start += chunkSize) {
+            List<String> chunk = spotifyUris.subList(start, Math.min(start + chunkSize, spotifyUris.size()));
+            String[] args = chunk.toArray(new String[0]);
+            StringBuilder placeholders = new StringBuilder();
+            for (int i = 0; i < args.length; i++) placeholders.append(i == 0 ? "?" : ",?");
+            try (Cursor cursor = db.rawQuery(
+                    "SELECT s." + COLUMN_SPOTIFY_URI + ", s." + COLUMN_SONG_NAME +
+                            ", s." + COLUMN_DURATION_MS + ", s." + COLUMN_SPOTIFY_URI +
+                            ", s." + COLUMN_POPULARITY + ", a." + COLUMN_COVER_IMAGE_URL +
+                            ", a." + COLUMN_ALBUM_NAME + ", a." + COLUMN_RELEASE_DATE +
+                            ", ar." + COLUMN_ARTIST_NAME +
+                            " FROM " + TABLE_SONGS + " s" +
+                            " LEFT JOIN " + TABLE_ALBUMS + " a ON s." + COLUMN_ALBUM_ID + " = a." + COLUMN_ALBUM_ID +
+                            " LEFT JOIN " + TABLE_SONG_ARTISTS + " sa ON s." + COLUMN_SPOTIFY_URI + " = sa." + COLUMN_SPOTIFY_URI + " AND sa." + COLUMN_POSITION + " = 0" +
+                            " LEFT JOIN " + TABLE_ARTISTS + " ar ON sa." + COLUMN_ARTIST_ID + " = ar." + COLUMN_ARTIST_ID +
+                            " WHERE s." + COLUMN_SPOTIFY_URI + " IN (" + placeholders + ")",
+                    args)) {
+                while (cursor.moveToNext()) {
+                    SongModel song = leanSongFromCursor(cursor);
+                    if (!byUri.containsKey(song.getId())) byUri.put(song.getId(), song);
+                }
+            }
+        }
+        for (String uri : spotifyUris) {
+            SongModel song = byUri.remove(uri); // remove() also drops duplicate input URIs
+            if (song != null) result.add(song);
+        }
+        return result;
+    }
+
     // Full SongModel — for SongView
     public SongModel getFullSong(String spotifyUri) {
         SQLiteDatabase db = this.getReadableDatabase();

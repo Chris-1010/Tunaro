@@ -44,4 +44,7 @@
 
     <string name="popularity_value">%d%%</string>
     <string name="more_details_url">https://songstats.com/</string>
+
+    <string name="library_empty">No annotated songs yet — add a note from any song</string>
+    <string name="library_no_matches">No songs match your search</string>
 </resources>

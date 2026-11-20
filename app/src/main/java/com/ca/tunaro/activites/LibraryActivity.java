@@ -2,13 +2,12 @@ package com.ca.tunaro.activites;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
 import android.view.View;
 import android.widget.EditText;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -21,6 +20,7 @@ import com.ca.tunaro.interfaces.Library_RecyclerViewInterface;
 import com.ca.tunaro.R;
 import com.ca.tunaro.utils.SelectedSongHolder;
 import com.ca.tunaro.models.SongModel;
+import com.ca.tunaro.utils.AppExecutors;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -72,44 +72,29 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
     }
 
     private void loadSongsWithNotes() {
-        List<String> songIds = dbHelper.getSongIdsWithNotes();
-
         setLoadingState(true);
-        allSongs.clear();
-        adapter.clearSongs();
-
-        // Load from DB first, fall back to Spotify API for any unknown songs
-        loadSongsSequentially(songIds, 0);
-    }
-
-    private void loadSongsSequentially(List<String> songIds, int index) {
-        if (index >= songIds.size()) {
-            setLoadingState(false);
-            return;
-        }
-
-        String songId = songIds.get(index);
-
-        // Try DB first
-        SongModel dbSong = dbHelper.getLeanSong(songId);
-        if (dbSong != null) {
+        setEmptyState(false);
+        AppExecutors.io().execute(() -> {
+            List<String> songIds = dbHelper.getSongIdsWithNotes();
+            List<SongModel> songs = dbHelper.getLeanSongs(songIds);
+            if (songs.size() < songIds.size()) {
+                // Songs missing from the DB are back-filled by the next playlist sync / orphan pass.
+                Log.w(TAG, "Skipped " + (songIds.size() - songs.size()) + " library songs not in DB");
+            }
             runOnUiThread(() -> {
-                allSongs.add(dbSong);
-                adapter.addSong(dbSong);
-                loadSongsSequentially(songIds, index + 1);
+                if (isFinishing() || isDestroyed()) return;
+                allSongs.clear();
+                allSongs.addAll(songs);
+                setLoadingState(false);
+                filterSongs(searchBar.getText().toString());
             });
-            return;
-        }
-
-        // Not in DB — should not happen in normal flow. Skip; song data will be
-        // populated on the next playlist sync / orphan back-fill.
-        Log.w(TAG, "Song not in DB, skipping library entry: " + songId);
-        new Handler(Looper.getMainLooper()).post(() -> loadSongsSequentially(songIds, index + 1));
+        });
     }
 
     private void filterSongs(String query) {
         if (query == null || query.isEmpty()) {
             adapter.updateSongs(allSongs);
+            setEmptyState(allSongs.isEmpty());
             return;
         }
 
@@ -117,14 +102,20 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
         String lowercaseQuery = query.toLowerCase().trim();
 
         for (SongModel song : allSongs) {
-            if (song.getName().toLowerCase().contains(lowercaseQuery) ||
-                    song.getArtist().toLowerCase().contains(lowercaseQuery) ||
-                    song.getAlbumName().toLowerCase().contains(lowercaseQuery)) {
+            if (matches(song.getName(), lowercaseQuery) ||
+                    matches(song.getArtist(), lowercaseQuery) ||
+                    matches(song.getAlbumName(), lowercaseQuery)) {
                 filteredList.add(song);
             }
         }
 
         adapter.updateSongs(filteredList);
+        setEmptyState(filteredList.isEmpty());
+    }
+
+    // Lean rows come from LEFT JOINs, so artist/album can be null.
+    private static boolean matches(String field, String lowercaseQuery) {
+        return field != null && field.toLowerCase().contains(lowercaseQuery);
     }
 
     @Override
@@ -148,6 +139,17 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
         if (loadingView != null) {
             loadingView.setVisibility(isLoading ? View.VISIBLE : View.GONE);
         }
+    }
+
+    // Shows the empty message: "no annotated songs" when the library is empty, "no matches" when
+    // only the current search filters everything out.
+    private void setEmptyState(boolean isEmpty) {
+        TextView emptyView = findViewById(R.id.empty_view);
+        if (emptyView == null) return;
+        if (isEmpty) {
+            emptyView.setText(allSongs.isEmpty() ? R.string.library_empty : R.string.library_no_matches);
+        }
+        emptyView.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
     }
 
     private void showToast(String message) {

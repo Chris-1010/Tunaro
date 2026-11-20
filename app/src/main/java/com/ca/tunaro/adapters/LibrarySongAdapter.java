@@ -51,17 +51,6 @@ public class LibrarySongAdapter extends RecyclerView.Adapter<LibrarySongAdapter.
         holder.hasNotesIcon.setVisibility(View.VISIBLE);
     }
 
-    public void addSong(SongModel song) {
-        this.songs.add(song);
-        notifyItemInserted(songs.size() - 1);
-    }
-
-    public void clearSongs() {
-        int size = songs.size();
-        songs.clear();
-        notifyItemRangeRemoved(0, size);
-    }
-
     @Override
     public int getItemCount() {
         return songs.size();
@@ -69,7 +58,7 @@ public class LibrarySongAdapter extends RecyclerView.Adapter<LibrarySongAdapter.
 
     /**
      * Replaces the list via a URI-keyed diff so unchanged rows are not rebound.
-     * The list is copied, so a caller's list is never aliased by later addSong calls.
+     * The list is copied, so later changes to the caller's list never alias the adapter's.
      */
     public void updateSongs(List<SongModel> newSongs) {
         List<SongModel> next = new ArrayList<>(newSongs);

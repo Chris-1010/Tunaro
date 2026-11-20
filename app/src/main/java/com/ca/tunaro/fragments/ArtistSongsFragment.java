@@ -30,6 +30,7 @@ import com.ca.tunaro.interfaces.Song_RecyclerViewInterface;
 import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.models.AlbumModel;
 import com.ca.tunaro.models.SongModel;
+import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.SelectedSongHolder;
 import com.google.android.material.button.MaterialButton;
 
@@ -121,10 +122,7 @@ public class ArtistSongsFragment extends Fragment
         // Swipe an album cover right to add/remove the song from the queue: refresh the line.
         adapter.setOnQueueChangeListener((position, added) -> recyclerView.invalidateItemDecorations());
 
-        DatabaseHelper db = DatabaseHelper.getInstance(requireContext());
-        localUris = db.getArtistLocalSongUris(artistId);
-        localSongs.addAll(db.getArtistLocalSongs(artistId));
-        adapter.setAddedUris(localUris);
+        loadLocalSongs();
 
         // Reflect any toggle already flipped on the host before this tab was created.
         if (host() != null) addedOnlyFilter = host().isAddedFilterActive();
@@ -137,6 +135,27 @@ public class ArtistSongsFragment extends Fragment
         fetchTopTracks();
 
         return rootView;
+    }
+
+    // Reads the artist's locally-added songs off the main thread, then refreshes the added
+    // markers and (when the added-only filter is on) the rendered list.
+    private void loadLocalSongs() {
+        DatabaseHelper db = DatabaseHelper.getInstance(requireContext());
+        final String id = artistId;
+        AppExecutors.io().execute(() -> {
+            Set<String> uris = db.getArtistLocalSongUris(id);
+            List<SongModel> added = db.getArtistLocalSongs(id);
+            android.app.Activity activity = getActivity();
+            if (activity == null) return;
+            activity.runOnUiThread(() -> {
+                if (!isAdded() || adapter == null) return;
+                localUris = uris;
+                localSongs.clear();
+                localSongs.addAll(added);
+                adapter.setAddedUris(localUris);
+                if (addedOnlyFilter) applySort();
+            });
+        });
     }
 
     //#region Sorting
