@@ -25,8 +25,10 @@ import com.spotify.android.appremote.api.error.UserNotAuthorizedException;
 import com.spotify.protocol.types.PlayerState;
 import com.spotify.protocol.types.Track;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class PlaybackManager {
     private static final String TAG = "PlaybackManager";
@@ -151,7 +153,19 @@ public class PlaybackManager {
     //#endregion
 
     // Listeners
-    private final List<PlaybackListener> listeners = new ArrayList<>();
+    // Copy-on-write so a listener that adds/removes itself during a callback
+    // can't break the fan-out with a ConcurrentModificationException.
+    private final List<PlaybackListener> listeners = new CopyOnWriteArrayList<>();
+
+    // Single background thread for DB work triggered by Spotify callbacks. One
+    // thread keeps writes in submission order (song upsert before its listen)
+    // and serializes the listen check-then-insert.
+    private final ExecutorService dbExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "PlaybackDb");
+        t.setDaemon(true);
+        return t;
+    });
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     public interface PlaybackListener {
         void onPlaybackStateChanged(boolean isPlaying, SongModel currentSong);
@@ -345,7 +359,9 @@ public class PlaybackManager {
                 trackChanged = true;
                 checkPlaybackDevice();
                 if (applicationContext != null) {
-                    DatabaseHelper.getInstance(applicationContext).upsertSong(currentSong);
+                    final SongModel songToStore = currentSong;
+                    final DatabaseHelper db = DatabaseHelper.getInstance(applicationContext);
+                    dbExecutor.execute(() -> db.upsertSong(songToStore));
                 }
             }
 
@@ -800,16 +816,24 @@ public class PlaybackManager {
     }
 
     private void recordListen() {
-        if (applicationContext != null && !isDeviceWarningActive) {
+        if (applicationContext != null && !isDeviceWarningActive && currentSong != null) {
             DatabaseHelper dbHelper = DatabaseHelper.getInstance(applicationContext);
-            String songId = currentSong.getId();
+            // Snapshot on the main thread so a track change while the write is
+            // queued can't redirect it to the next song.
+            final String songId = currentSong.getId();
+            final String songName = currentSong.getName();
+            final String songArtist = currentSong.getArtist();
+            final int songDuration = currentSong.getDuration();
+            final long nowMs = System.currentTimeMillis();
 
-            if (dbHelper.hasListenWithinDuration(currentSong.getId(), System.currentTimeMillis(), currentSong.getDuration())) {
-                Log.d(TAG, "Recent listen found for song '" + currentSong.getName() + "'. Skipping recording.");
-            } else {
-                dbHelper.addListenRecord(songId);
-                Log.d(TAG, "Recorded listen for song: " + currentSong.getName() + " (" + currentSong.getArtist() + ")");
-            }
+            dbExecutor.execute(() -> {
+                if (dbHelper.hasListenWithinDuration(songId, nowMs, songDuration)) {
+                    Log.d(TAG, "Recent listen found for song '" + songName + "'. Skipping recording.");
+                } else {
+                    dbHelper.addListenRecord(songId);
+                    Log.d(TAG, "Recorded listen for song: " + songName + " (" + songArtist + ")");
+                }
+            });
         }
     }
 
@@ -849,8 +873,21 @@ public class PlaybackManager {
 
     private void playSongForSnippet(SongSnippet snippet) {
         DatabaseHelper dbHelper = DatabaseHelper.getInstance(applicationContext);
-        SongModel song = dbHelper.getLeanSong(snippet.getSongId());
-        String uri = song != null ? song.getUri() : null;
+        dbExecutor.execute(() -> {
+            SongModel song = dbHelper.getLeanSong(snippet.getSongId());
+            String uri = song != null ? song.getUri() : null;
+            mainHandler.post(() -> playResolvedSnippetSong(snippet, uri));
+        });
+    }
+
+    private void playResolvedSnippetSong(SongSnippet snippet, String uri) {
+        // Drop the result if the snippet was stopped or replaced while the
+        // lookup ran, or the remote went away.
+        if (snippet != currentSnippet || !isSnippetPlaying) return;
+        if (!isConnected || spotifyAppRemote == null) {
+            stopSnippetPlayback();
+            return;
+        }
         if (uri == null) {
             Log.w(TAG, "No URI for snippet song " + snippet.getSongId());
             showMessage("Couldn't play this snippet");
