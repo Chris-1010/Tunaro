@@ -24,6 +24,7 @@ import com.ca.tunaro.services.AutomaticFetcher;
 import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.DeviceChooser;
 import com.ca.tunaro.utils.PlaylistCache;
+import com.ca.tunaro.utils.RunningJobGuard;
 import com.ca.tunaro.utils.SongCache;
 
 public class SettingsActivity extends BaseActivity {
@@ -41,6 +42,7 @@ public class SettingsActivity extends BaseActivity {
     private Button restoreBackupButton;
     private View dataProgress;
     private boolean dataJobRunning;
+    private RunningJobGuard jobGuard;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,6 +51,9 @@ public class SettingsActivity extends BaseActivity {
         if (checkForRecovery()) return;
 
         setContentView(R.layout.activity_settings);
+        jobGuard = new RunningJobGuard(this, "Data job in progress",
+                "The import or export keeps running if you leave, but its result won't be "
+                        + "shown. Leave anyway?");
 
         prefs = getSharedPreferences("TunaroPrefs", MODE_PRIVATE);
 
@@ -143,6 +148,7 @@ public class SettingsActivity extends BaseActivity {
                             java.util.concurrent.Callable<String> job) {
         if (dataJobRunning) return;
         dataJobRunning = true;
+        jobGuard.start();
         CharSequence idleLabel = busyButton.getText();
         setDataButtonsEnabled(false);
         busyButton.setText(busyLabel);
@@ -160,6 +166,7 @@ public class SettingsActivity extends BaseActivity {
             runOnUiThread(() -> {
                 dataJobRunning = false;
                 if (isDestroyed()) return;
+                jobGuard.stop();
                 busyButton.setText(idleLabel);
                 setDataButtonsEnabled(true);
                 dataProgress.setVisibility(View.GONE);
@@ -516,7 +523,8 @@ public class SettingsActivity extends BaseActivity {
 
     @Override
     public boolean onSupportNavigateUp() {
-        finish();
+        if (jobGuard != null) jobGuard.navigateUp();
+        else finish();
         return true;
     }
 

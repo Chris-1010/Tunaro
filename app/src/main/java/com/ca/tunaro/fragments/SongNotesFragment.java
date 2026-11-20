@@ -167,12 +167,15 @@ public class SongNotesFragment extends Fragment {
                     @Override
                     public void onDelete(int position) {
                         SongNote noteToDelete = notesAdapter.getNote(position);
+                        // Drop any load already in flight so it cannot restore the deleted row.
+                        ++loadGeneration;
                         notesAdapter.removeNote(position);
                         updateNotesBadge(notesAdapter.getItemCount());
                         final long noteId = noteToDelete.getId();
                         AppExecutors.io().execute(() -> {
                             dbHelper.deleteNote(noteId);
                             UiFeedback.show(appContext, "Note deleted");
+                            postToUi(SongNotesFragment.this::loadNotes);
                         });
                     }
 

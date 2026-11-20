@@ -541,6 +541,8 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
                         .setPositiveButton("Delete", (dialog, which) -> {
                             if (editingSnippet == null) return;
                             final long snippetId = editingSnippet.getId();
+                            // Drop any load already in flight so it cannot restore the deleted row.
+                            ++loadGeneration;
                             snippets.removeIf(snippet -> snippet.getId() == snippetId);
                             snippetAdapter.updateSnippets(snippets);
                             updateSnippetsBadge(snippets.size());
@@ -548,6 +550,7 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
                             AppExecutors.io().execute(() -> {
                                 dbHelper.deleteSnippet(snippetId);
                                 UiFeedback.show(appContext, "Snippet deleted");
+                                postToUi(this::loadSnippets);
                             });
                         })
                         .setNegativeButton("Cancel", null)

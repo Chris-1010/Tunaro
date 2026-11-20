@@ -183,6 +183,8 @@ public class AccountMismatchActivity extends AppCompatActivity {
     public void onBackPressed() {
         // Deliberately does not call super: back must not return to the splash screen
         // or to whatever screen was showing under the mismatch prompt.
+        // Ignore Back while an export runs, so a pending reset is not dropped silently.
+        if (exportProgress.getVisibility() == View.VISIBLE) return;
         finishAffinity();
     }
 }
