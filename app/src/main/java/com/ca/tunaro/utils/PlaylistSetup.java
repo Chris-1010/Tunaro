@@ -255,19 +255,24 @@ public class PlaylistSetup {
                         DatabaseHelper dbHelper = appContext != null ? DatabaseHelper.getInstance(appContext) : null;
                         List<String> batchSongIds = new ArrayList<>();
 
-                        for (PlaylistTrack playlistTrack : playlistTrackPaging.getItems()) {
-                            if (playlistTrack.getTrack() instanceof Track) {
-                                SongModel songModel = getSongModel(playlistTrack);
-                                accumulatedSongs.add(songModel);
-                                batchSongIds.add(songModel.getId());
+                        Runnable processPage = () -> {
+                            for (PlaylistTrack playlistTrack : playlistTrackPaging.getItems()) {
+                                if (playlistTrack.getTrack() instanceof Track) {
+                                    SongModel songModel = getSongModel(playlistTrack);
+                                    accumulatedSongs.add(songModel);
+                                    batchSongIds.add(songModel.getId());
 
-                                if (dbHelper != null) {
-                                    upsertTrackToDb(dbHelper, (Track) playlistTrack.getTrack(), songModel);
-                                    String addedAtStr = formatDate(playlistTrack.getAddedAt());
-                                    dbHelper.upsertSongPlaylistLink(songModel.getId(), playlistId, addedAtStr);
+                                    if (dbHelper != null) {
+                                        upsertTrackToDb(dbHelper, (Track) playlistTrack.getTrack(), songModel);
+                                        String addedAtStr = formatDate(playlistTrack.getAddedAt());
+                                        dbHelper.upsertSongPlaylistLink(songModel.getId(), playlistId, addedAtStr);
+                                    }
                                 }
                             }
-                        }
+                        };
+                        // One transaction per page instead of one per statement.
+                        if (dbHelper != null) dbHelper.runInTransaction(processPage);
+                        else processPage.run();
 
                         // Reconcile removed songs once per batch (only on last page)
                         int total = totalCount == -1 ? playlistTrackPaging.getTotal() : totalCount;
@@ -429,9 +434,11 @@ public class PlaylistSetup {
     private static void ensurePlaylistLinksInDb(List<String> songIds, String playlistId) {
         if (appContext == null) return;
         DatabaseHelper dbHelper = DatabaseHelper.getInstance(appContext);
-        for (String songId : songIds) {
-            dbHelper.upsertSongPlaylistLink(songId, playlistId, null);
-        }
+        dbHelper.runInTransaction(() -> {
+            for (String songId : songIds) {
+                dbHelper.upsertSongPlaylistLink(songId, playlistId, null);
+            }
+        });
     }
 
     private static void upsertTrackToDb(DatabaseHelper dbHelper, Track track, SongModel songModel) {
@@ -568,16 +575,21 @@ public class PlaylistSetup {
                             .build()
                             .execute();
             if (total == -1) total = page.getTotal();
-            for (se.michaelthelin.spotify.model_objects.specification.PlaylistTrack pt : page.getItems()) {
-                if (pt.getTrack() instanceof se.michaelthelin.spotify.model_objects.specification.Track) {
-                    SongModel song = getSongModel(pt);
-                    accumulated.add(song);
-                    if (dbHelper != null) {
-                        upsertTrackToDb(dbHelper, (se.michaelthelin.spotify.model_objects.specification.Track) pt.getTrack(), song);
-                        dbHelper.upsertSongPlaylistLink(song.getId(), playlistId, formatDate(pt.getAddedAt()));
+            Runnable processPage = () -> {
+                for (se.michaelthelin.spotify.model_objects.specification.PlaylistTrack pt : page.getItems()) {
+                    if (pt.getTrack() instanceof se.michaelthelin.spotify.model_objects.specification.Track) {
+                        SongModel song = getSongModel(pt);
+                        accumulated.add(song);
+                        if (dbHelper != null) {
+                            upsertTrackToDb(dbHelper, (se.michaelthelin.spotify.model_objects.specification.Track) pt.getTrack(), song);
+                            dbHelper.upsertSongPlaylistLink(song.getId(), playlistId, formatDate(pt.getAddedAt()));
+                        }
                     }
                 }
-            }
+            };
+            // One transaction per page instead of one per statement.
+            if (dbHelper != null) dbHelper.runInTransaction(processPage);
+            else processPage.run();
             offset += MAX_BATCH_SIZE;
             if (page.getNext() == null) break;
         } while (true);
@@ -585,9 +597,11 @@ public class PlaylistSetup {
         if (dbHelper != null) {
             List<String> allIds = new ArrayList<>();
             for (SongModel s : accumulated) allIds.add(s.getId());
-            dbHelper.reconcilePlaylistSongs(playlistId, allIds);
             int distinctCount = (int) allIds.stream().distinct().count();
-            dbHelper.updatePlaylistTrackCount(playlistId, distinctCount);
+            dbHelper.runInTransaction(() -> {
+                dbHelper.reconcilePlaylistSongs(playlistId, allIds);
+                dbHelper.updatePlaylistTrackCount(playlistId, distinctCount);
+            });
 
         }
         return accumulated;

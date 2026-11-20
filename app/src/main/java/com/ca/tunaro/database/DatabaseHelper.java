@@ -17,6 +17,7 @@ import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.models.SongRankInfo;
 import com.ca.tunaro.models.SongNote;
 import com.ca.tunaro.models.SongSnippet;
+import com.ca.tunaro.utils.PlaylistDiff;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
@@ -45,7 +46,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     private static final String TAG = "DatabaseHelper";
     private static final String DATABASE_NAME = "TunaroDB";
-    private static final int DATABASE_VERSION = 16;
+    private static final int DATABASE_VERSION = 17;
 
     // Table names
     private static final String TABLE_ARTISTS = "artists";
@@ -278,6 +279,20 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     + COLUMN_COMPLETED_AT + " TEXT"
                     + ")";
 
+    // Secondary indexes for the hot per-song and per-playlist lookups. Composite
+    // primary keys already cover lookups on their leading column, so only the
+    // non-leading or non-key columns need one. IF NOT EXISTS keeps these safe to
+    // re-run from both onCreate and onUpgrade.
+    private static final String[] CREATE_INDEXES = {
+            "CREATE INDEX IF NOT EXISTS idx_listen_history_uri ON " + TABLE_LISTEN_HISTORY + "(" + COLUMN_SPOTIFY_URI + ")",
+            "CREATE INDEX IF NOT EXISTS idx_song_notes_uri ON " + TABLE_SONG_NOTES + "(" + COLUMN_SPOTIFY_URI + ")",
+            "CREATE INDEX IF NOT EXISTS idx_song_snippets_uri ON " + TABLE_SONG_SNIPPETS + "(" + COLUMN_SPOTIFY_URI + ")",
+            "CREATE INDEX IF NOT EXISTS idx_song_playlists_playlist ON " + TABLE_SONG_PLAYLISTS + "(" + COLUMN_PLAYLIST_ID + ")",
+            "CREATE INDEX IF NOT EXISTS idx_songs_album ON " + TABLE_SONGS + "(" + COLUMN_ALBUM_ID + ")",
+            "CREATE INDEX IF NOT EXISTS idx_song_artists_artist ON " + TABLE_SONG_ARTISTS + "(" + COLUMN_ARTIST_ID + ")",
+            "CREATE INDEX IF NOT EXISTS idx_song_isrc_links_uri ON " + TABLE_SONG_ISRC_LINKS + "(" + COLUMN_SPOTIFY_URI + ")"
+    };
+
     //#endregion
 
     private static volatile DatabaseHelper instance;
@@ -347,6 +362,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.execSQL(CREATE_TABLE_LISTEN_HISTORY);
         db.execSQL(CREATE_TABLE_SONG_RATINGS);
         db.execSQL(CREATE_TABLE_RANKING_GAMES);
+        createIndexes(db);
+    }
+
+    private static void createIndexes(SQLiteDatabase db) {
+        for (String sql : CREATE_INDEXES) db.execSQL(sql);
     }
 
     @Override
@@ -532,6 +552,13 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             oldVersion = 16;
         }
 
+        if (oldVersion == 16) {
+            // v16→v17: secondary indexes on hot lookup columns. Additive only.
+            createIndexes(db);
+            Log.i(TAG, "DB v17 migration complete");
+            oldVersion = 17;
+        }
+
         if (oldVersion < newVersion) {
             db.execSQL("DROP TABLE IF EXISTS favourite_playlists");
             db.execSQL("DROP TABLE IF EXISTS archived_playlists");
@@ -550,6 +577,26 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             db.execSQL("DROP TABLE IF EXISTS " + TABLE_SONG_RATINGS);
             db.execSQL("DROP TABLE IF EXISTS " + TABLE_RANKING_GAMES);
             onCreate(db);
+        }
+    }
+
+    //#endregion
+
+    //#region ======== TRANSACTIONS ========
+
+    /**
+     * Runs a group of writes as one transaction: a single fsync instead of one
+     * per statement, and all-or-nothing if the work throws. Nests safely, so
+     * helpers that already use a transaction can be called from inside one.
+     */
+    public void runInTransaction(Runnable work) {
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransactionNonExclusive();
+        try {
+            work.run();
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
         }
     }
 
@@ -780,6 +827,10 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     // upsertSong only stores the album_id column, and SongView relies on the album
     // join and artist links being present to tell complete songs from stubs.
     public void upsertFullTrack(Track track, SongModel songModel) {
+        runInTransaction(() -> upsertFullTrackInternal(track, songModel));
+    }
+
+    private void upsertFullTrackInternal(Track track, SongModel songModel) {
         AlbumSimplified trackAlbum = track.getAlbum();
         if (trackAlbum != null && trackAlbum.getId() != null) {
             Image[] images = trackAlbum.getImages();
@@ -1395,12 +1446,12 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     public void reconcilePlaylistSongs(String playlistId, List<String> currentSongUris) {
-        List<String> storedActive = getActiveSongUrisForPlaylist(playlistId);
-        for (String storedUri : storedActive) {
-            if (!currentSongUris.contains(storedUri)) {
-                markSongRemovedFromPlaylist(storedUri, playlistId);
-            }
-        }
+        List<String> removed = PlaylistDiff.removedUris(
+                getActiveSongUrisForPlaylist(playlistId), currentSongUris);
+        if (removed.isEmpty()) return;
+        runInTransaction(() -> {
+            for (String uri : removed) markSongRemovedFromPlaylist(uri, playlistId);
+        });
     }
 
     public static class PlaylistLink {

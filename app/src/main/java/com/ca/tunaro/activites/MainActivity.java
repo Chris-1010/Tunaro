@@ -571,30 +571,32 @@ public class MainActivity extends AppCompatActivity {
                                         .build().execute();
 
                         DatabaseHelper dbWrite = DatabaseHelper.getInstance(getApplicationContext());
-                        for (int j = 0; j < tracks.length; j++) {
-                            se.michaelthelin.spotify.model_objects.specification.Track track = tracks[j];
-                            if (track == null) continue;
+                        dbWrite.runInTransaction(() -> {
+                            for (int j = 0; j < tracks.length; j++) {
+                                se.michaelthelin.spotify.model_objects.specification.Track track = tracks[j];
+                                if (track == null) continue;
 
-                            se.michaelthelin.spotify.model_objects.specification.AlbumSimplified album = track.getAlbum();
-                            se.michaelthelin.spotify.model_objects.specification.Image[] images = album != null ? album.getImages() : null;
-                            String imageUrl = images != null && images.length > 0 ? images[0].getUrl() : null;
+                                se.michaelthelin.spotify.model_objects.specification.AlbumSimplified album = track.getAlbum();
+                                se.michaelthelin.spotify.model_objects.specification.Image[] images = album != null ? album.getImages() : null;
+                                String imageUrl = images != null && images.length > 0 ? images[0].getUrl() : null;
 
-                            com.ca.tunaro.models.SongModel.Album songAlbum = album != null ? new com.ca.tunaro.models.SongModel.Album(
-                                    album.getId(), album.getName(),
-                                    album.getAlbumType() != null ? album.getAlbumType().getType() : null,
-                                    album.getReleaseDate(), imageUrl) : null;
+                                com.ca.tunaro.models.SongModel.Album songAlbum = album != null ? new com.ca.tunaro.models.SongModel.Album(
+                                        album.getId(), album.getName(),
+                                        album.getAlbumType() != null ? album.getAlbumType().getType() : null,
+                                        album.getReleaseDate(), imageUrl) : null;
 
-                            String isrc = null;
-                            if (track.getExternalIds() != null && track.getExternalIds().getExternalIds() != null) {
-                                isrc = track.getExternalIds().getExternalIds().get("isrc");
+                                String isrc = null;
+                                if (track.getExternalIds() != null && track.getExternalIds().getExternalIds() != null) {
+                                    isrc = track.getExternalIds().getExternalIds().get("isrc");
+                                }
+
+                                Boolean playable = track.getIsPlayable();
+                                dbWrite.upsertFullTrack(track, new com.ca.tunaro.models.SongModel(
+                                        track.getUri(), track.getName(), track.getArtists(),
+                                        track.getDurationMs(), track.getUri(), track.getPopularity(),
+                                        songAlbum, isrc, null, playable == null || playable));
                             }
-
-                            Boolean playable = track.getIsPlayable();
-                            dbWrite.upsertFullTrack(track, new com.ca.tunaro.models.SongModel(
-                                    track.getUri(), track.getName(), track.getArtists(),
-                                    track.getDurationMs(), track.getUri(), track.getPopularity(),
-                                    songAlbum, isrc, null, playable == null || playable));
-                        }
+                        });
                     } catch (Exception e) {
                         Log.w(TAG, "Orphaned listen fetch batch failed at offset " + i, e);
                     }
