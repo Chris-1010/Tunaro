@@ -63,7 +63,6 @@ public class HomeActivity extends BaseActivity {
         libraryButton.setOnClickListener(view -> {
             Intent intent = new Intent(HomeActivity.this, LibraryActivity.class);
             startActivity(intent);
-            overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out);
         });
 
         thisSeasonButton.setOnClickListener(view -> showMessage("This Season feature coming soon"));
@@ -73,19 +72,16 @@ public class HomeActivity extends BaseActivity {
         playlistsButton.setOnClickListener(view -> {
             Intent intent = new Intent(HomeActivity.this, PlaylistsActivity.class);
             startActivity(intent);
-            overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out);
         });
 
         rankingsButton.setOnClickListener(view -> {
             Intent intent = new Intent(HomeActivity.this, RankingsActivity.class);
             startActivity(intent);
-            overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out);
         });
 
         findViewById(R.id.developer_button).setOnClickListener(view -> {
             Intent intent = new Intent(HomeActivity.this, DeveloperActivity.class);
             startActivity(intent);
-            overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out);
         });
 
         playEarliestButton.setOnClickListener(view -> showMessage("Play from Earliest feature coming soon"));

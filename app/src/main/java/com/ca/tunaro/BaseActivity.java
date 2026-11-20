@@ -36,6 +36,7 @@ import com.ca.tunaro.activites.SongView;
 import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.utils.ColorExtractor;
+import com.ca.tunaro.utils.ScreenTransitions;
 import com.ca.tunaro.utils.SelectedSongHolder;
 import com.ca.tunaro.utils.UiFeedback;
 
@@ -94,6 +95,38 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     private static final float CAROUSEL_FLING_VELOCITY = 1200f;
     private static final float CAROUSEL_RUBBER_BAND = 0.35f;
     private static final int CAROUSEL_GRADIENT_CROSSFADE_MS = 250;
+
+    // Set when this screen hands off to a fresh task (recovery, re-auth) so the
+    // finish() that follows does not replace the system animation with a back slide.
+    private boolean leavingForNewTask;
+
+    /**
+     * Every in-app navigation gets the shared forward slide. Screens that open as a
+     * sheet (settings, now-playing) call overridePendingTransition afterwards,
+     * which takes precedence.
+     */
+    @Override
+    public void startActivity(Intent intent, @Nullable Bundle options) {
+        super.startActivity(intent, options);
+        String target = intent.getComponent() != null ? intent.getComponent().getPackageName() : null;
+        if (ScreenTransitions.isInAppForward(getPackageName(), target, intent.getFlags())) {
+            overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+        } else if ((intent.getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK) != 0) {
+            leavingForNewTask = true;
+        }
+    }
+
+    /**
+     * The shared back slide, mirroring {@link #startActivity(Intent, Bundle)}. Sheet
+     * screens override finish() and apply their own exit after calling super.
+     */
+    @Override
+    public void finish() {
+        super.finish();
+        if (!leavingForNewTask && !isTaskRoot()) {
+            overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
+        }
+    }
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {

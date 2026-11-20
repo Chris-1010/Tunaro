@@ -365,7 +365,6 @@ public class SongView extends BaseActivity {
                 intent.putExtra("artist_id", artist.getArtistId());
                 intent.putExtra("artist_name", artist.getName());
                 startActivity(intent);
-                overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
             });
         }
         return chip;
@@ -811,10 +810,9 @@ public class SongView extends BaseActivity {
     @Override
     public void finish() {
         super.finish();
+        // Opened as a sheet from the playback bar: slide back down instead of the shared back slide.
         if (openedFromPlaybackBar) {
             overridePendingTransition(R.anim.no_animation, R.anim.slide_down_out);
-        } else {
-            overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
         }
     }
 

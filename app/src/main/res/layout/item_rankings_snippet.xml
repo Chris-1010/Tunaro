@@ -3,6 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/snippet_row"
     android:layout_width="match_parent"
+    android:foreground="?attr/selectableItemBackground"
     android:layout_height="wrap_content"
     android:layout_marginTop="@dimen/space_xs"
     android:background="@drawable/rankings_snippet_row_bg"

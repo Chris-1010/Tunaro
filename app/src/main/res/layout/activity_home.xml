@@ -89,6 +89,8 @@
                 android:layout_margin="@dimen/space_sm"
                 android:clickable="true"
                 android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:stateListAnimator="@animator/press_scale"
                 app:cardBackgroundColor="#E0E0E0"
                 app:cardCornerRadius="12dp"
                 app:cardElevation="4dp">
@@ -130,6 +132,8 @@
                 android:layout_margin="@dimen/space_sm"
                 android:clickable="true"
                 android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:stateListAnimator="@animator/press_scale"
                 app:cardBackgroundColor="#E0E0E0"
                 app:cardCornerRadius="12dp"
                 app:cardElevation="4dp">
@@ -169,6 +173,8 @@
                 android:layout_margin="@dimen/space_sm"
                 android:clickable="true"
                 android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:stateListAnimator="@animator/press_scale"
                 app:cardBackgroundColor="#E0E0E0"
                 app:cardCornerRadius="12dp"
                 app:cardElevation="4dp">
@@ -208,6 +214,8 @@
                 android:layout_margin="@dimen/space_sm"
                 android:clickable="true"
                 android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:stateListAnimator="@animator/press_scale"
                 app:cardBackgroundColor="#E0E0E0"
                 app:cardCornerRadius="12dp"
                 app:cardElevation="4dp">
@@ -247,6 +255,8 @@
                 android:layout_margin="@dimen/space_sm"
                 android:clickable="true"
                 android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:stateListAnimator="@animator/press_scale"
                 app:cardBackgroundColor="#333333"
                 app:cardCornerRadius="12dp"
                 app:cardElevation="4dp">
@@ -286,6 +296,8 @@
                 android:layout_margin="@dimen/space_sm"
                 android:clickable="true"
                 android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:stateListAnimator="@animator/press_scale"
                 app:cardBackgroundColor="#E0E0E0"
                 app:cardCornerRadius="12dp"
                 app:cardElevation="4dp">

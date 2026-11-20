@@ -908,19 +908,12 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
         Intent intent = new Intent(this, SongView.class);
         intent.putExtra("source", "rankings");
         startActivity(intent);
-        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         executor.shutdown();
-    }
-
-    @Override
-    public void finish() {
-        super.finish();
-        overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out);
     }
 
 }

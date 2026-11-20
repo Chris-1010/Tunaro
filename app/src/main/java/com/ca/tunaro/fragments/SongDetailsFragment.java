@@ -218,7 +218,6 @@ public class SongDetailsFragment extends Fragment {
         moreDetailsButton.setOnClickListener(v -> {
             Intent intent = new Intent(requireContext(), SongWebInfoActivity.class);
             startActivity(intent);
-            requireActivity().overridePendingTransition(R.anim.fade_in, R.anim.fade_out);
         });
     }
 
