@@ -150,8 +150,8 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
             return;
         }
 
-        dbHelper = new DatabaseHelper(this);
-        bgDbHelper = new DatabaseHelper(this);
+        dbHelper = DatabaseHelper.getInstance(this);
+        bgDbHelper = DatabaseHelper.getInstance(this);
 
         bindViews();
         setupRecyclerViews();

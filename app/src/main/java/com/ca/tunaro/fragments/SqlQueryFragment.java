@@ -93,7 +93,7 @@ public class SqlQueryFragment extends Fragment {
         android.os.AsyncTask.THREAD_POOL_EXECUTOR.execute(() -> {
             String resultText;
             String countText;
-            DatabaseHelper dbHelper = new DatabaseHelper(appContext);
+            DatabaseHelper dbHelper = DatabaseHelper.getInstance(appContext);
             SQLiteDatabase db = dbHelper.getWritableDatabase();
             try {
                 String upper = sql.toUpperCase();
@@ -110,9 +110,6 @@ public class SqlQueryFragment extends Fragment {
             } catch (Exception e) {
                 resultText = "Error: " + e.getMessage();
                 countText = "";
-            } finally {
-                db.close();
-                dbHelper.close();
             }
             String finalResult = resultText;
             String finalCount = countText;

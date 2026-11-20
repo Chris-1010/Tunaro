@@ -145,9 +145,8 @@ public class ArtistView extends BaseActivity {
         nameView.setSelected(true);
         if (artistName != null) nameView.setText(artistName);
 
-        DatabaseHelper db = new DatabaseHelper(this);
+        DatabaseHelper db = DatabaseHelper.getInstance(this);
         DatabaseHelper.ArtistStats cached = db.getArtistStats(artistId);
-        db.close();
 
         boolean firstEverVisit = cached == null || cached.fetchedAt == null;
         if (firstEverVisit) {
@@ -183,9 +182,8 @@ public class ArtistView extends BaseActivity {
                             ? java.util.Arrays.asList(artist.getGenres()) : new ArrayList<>();
                     String name = artist.getName() != null ? artist.getName() : artistName;
 
-                    DatabaseHelper writeDb = new DatabaseHelper(getApplicationContext());
+                    DatabaseHelper writeDb = DatabaseHelper.getInstance(getApplicationContext());
                     writeDb.upsertArtistStats(artistId, name, imageUrl, followers, popularity, genres);
-                    writeDb.close();
 
                     runOnUiThread(() -> {
                         showHeaderShimmer(false);
@@ -340,11 +338,10 @@ public class ArtistView extends BaseActivity {
         LinearLayout row = findViewById(R.id.added_songs_row);
         TextView label = findViewById(R.id.added_songs_label);
 
-        DatabaseHelper db = new DatabaseHelper(this);
+        DatabaseHelper db = DatabaseHelper.getInstance(this);
         // The toggle reveals exactly the locally-added songs the Songs tab flags with a tick,
         // so the label counts that same set.
         int count = db.getArtistLocalSongUris(artistId).size();
-        db.close();
 
         if (count == 0) {
             row.setVisibility(View.GONE);

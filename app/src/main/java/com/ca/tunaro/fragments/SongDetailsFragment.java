@@ -133,11 +133,10 @@ public class SongDetailsFragment extends Fragment {
         // Popularity — show the highest value across all variants
         LinearLayout popularityRow = rootView.findViewById(R.id.popularity_row);
         TextView popularityView = rootView.findViewById(R.id.SongView_SongPopularity);
-        DatabaseHelper dbHelper = new DatabaseHelper(requireContext());
+        DatabaseHelper dbHelper = DatabaseHelper.getInstance(requireContext());
         int popularity = variantUris != null && variantUris.size() > 1
                 ? dbHelper.getMaxPopularityForUris(variantUris)
                 : song.getPopularity();
-        dbHelper.close();
         if (popularity > 0) {
             popularityRow.setVisibility(View.VISIBLE);
             popularityView.setText(getString(R.string.popularity_value, popularity));
@@ -175,11 +174,10 @@ public class SongDetailsFragment extends Fragment {
         TextView listenCountView = rootView.findViewById(R.id.listen_count);
         ImageView expandCollapseIcon = rootView.findViewById(R.id.expand_collapse_icon);
 
-        DatabaseHelper dbHelper = new DatabaseHelper(requireContext());
+        DatabaseHelper dbHelper = DatabaseHelper.getInstance(requireContext());
         List<String> listenHistory = variantUris != null && variantUris.size() > 1
                 ? dbHelper.getListenHistoryForUris(variantUris)
                 : dbHelper.getListenHistory(song.getId());
-        dbHelper.close();
 
         if (listenHistory.isEmpty()) {
             historySection.setVisibility(View.GONE);
@@ -232,13 +230,12 @@ public class SongDetailsFragment extends Fragment {
     }
 
     private void openVariantPicker(List<String> otherUris) {
-        DatabaseHelper db = new DatabaseHelper(requireContext());
+        DatabaseHelper db = DatabaseHelper.getInstance(requireContext());
         List<SongModel> variants = new ArrayList<>();
         for (String uri : otherUris) {
             SongModel s = db.getLeanSong(uri);
             if (s != null) variants.add(s);
         }
-        db.close();
 
         if (variants.isEmpty()) return;
 

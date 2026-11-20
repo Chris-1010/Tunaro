@@ -83,7 +83,7 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
         spotifyAppRemote = PlaybackManager.getInstance().getSpotifyAppRemote();
 
 
-        dbHelper = new DatabaseHelper(requireContext());
+        dbHelper = DatabaseHelper.getInstance(requireContext());
         if (getArguments() != null) {
             variantUris = getArguments().getStringArrayList("variantUris");
         }

@@ -489,7 +489,7 @@ public class AutomaticFetcher {
     }
 
     private ImportResults importListens(List<ServerApiClient.Listen> listens) {
-        DatabaseHelper dbHelper = new DatabaseHelper(context);
+        DatabaseHelper dbHelper = DatabaseHelper.getInstance(context);
         List<String> successfulIds = new ArrayList<>();
         int successCount = 0;
         int failedCount = 0;

@@ -48,7 +48,7 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
         setContentView(R.layout.activity_playlists);
 
         mainActivity = MainActivity.getInstance();
-        dbHelper = new DatabaseHelper(this);
+        dbHelper = DatabaseHelper.getInstance(this);
 
         // Initialize RecyclerView
         recyclerView = findViewById(R.id.playlists_recycler_view);

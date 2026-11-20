@@ -65,7 +65,7 @@ public class SongNotesFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_song_notes, container, false);
 
-        dbHelper = new DatabaseHelper(requireContext());
+        dbHelper = DatabaseHelper.getInstance(requireContext());
         if (getArguments() != null) {
             variantUris = getArguments().getStringArrayList("variantUris");
         }

@@ -101,7 +101,7 @@ public class SongView extends BaseActivity {
         // Rows can be partial stubs: PlaybackManager writes name/duration only on
         // track change, and older writers stored album_id without the album row or
         // artist links. Treat any of those as missing to force a refetch from the API.
-        DatabaseHelper db = new DatabaseHelper(this);
+        DatabaseHelper db = DatabaseHelper.getInstance(this);
         SongModel fullSong = db.getFullSong(selectedSong.getId());
         boolean loadingFromApi = fullSong == null
                 || fullSong.getAlbumId() == null
@@ -114,7 +114,6 @@ public class SongView extends BaseActivity {
         } else {
             allVariantUris.add(selectedSong.getId());
         }
-        db.close();
 
         setupBackButton();
         setupBasicSongInfo();
@@ -237,9 +236,8 @@ public class SongView extends BaseActivity {
                             playable == null || playable
                     );
 
-                    DatabaseHelper dbHelper = new DatabaseHelper(getApplicationContext());
+                    DatabaseHelper dbHelper = DatabaseHelper.getInstance(getApplicationContext());
                     dbHelper.upsertFullTrack(track, fullSong);
-                    dbHelper.close();
 
                     runOnUiThread(() -> {
                         selectedSong = fullSong;
@@ -255,9 +253,8 @@ public class SongView extends BaseActivity {
                         // Recreate the adapter so the Details tab picks up the full metadata
                         allVariantUris.clear();
                         allVariantUris.add(fullSong.getId());
-                        DatabaseHelper dbHelper2 = new DatabaseHelper(getApplicationContext());
+                        DatabaseHelper dbHelper2 = DatabaseHelper.getInstance(getApplicationContext());
                         allVariantUris.addAll(dbHelper2.getIsrcLinkedUris(fullSong.getId()));
-                        dbHelper2.close();
                         int currentTab = viewPager.getCurrentItem();
                         tabAdapter = new SongTabAdapter(SongView.this, fullSong, false, allVariantUris);
                         viewPager.setAdapter(tabAdapter);
@@ -315,9 +312,8 @@ public class SongView extends BaseActivity {
         if (selectedSong == null) return;
         final String songId = selectedSong.getId();
         new Thread(() -> {
-            DatabaseHelper db = new DatabaseHelper(getApplicationContext());
+            DatabaseHelper db = DatabaseHelper.getInstance(getApplicationContext());
             List<com.ca.tunaro.models.Artist> artists = db.getSongArtists(songId);
-            db.close();
             runOnUiThread(() -> renderArtistChips(artists));
         }).start();
     }
@@ -472,7 +468,7 @@ public class SongView extends BaseActivity {
 
         iconsContainer.removeAllViews();
 
-        DatabaseHelper dbHelper = new DatabaseHelper(this);
+        DatabaseHelper dbHelper = DatabaseHelper.getInstance(this);
         List<DatabaseHelper.PlaylistLink> playlists = allVariantUris.size() > 1
                 ? dbHelper.getPlaylistsForUris(allVariantUris)
                 : dbHelper.getPlaylistsForSong(selectedSong.getId());
@@ -508,7 +504,7 @@ public class SongView extends BaseActivity {
 
                 icon.setOnClickListener(v -> {
                     PlaylistModel playlist =
-                            new DatabaseHelper(this).getPlaylistById(link.playlistId);
+                            DatabaseHelper.getInstance(this).getPlaylistById(link.playlistId);
                     if (playlist == null) return;
                     SelectedPlaylistHolder.getInstance()
                             .setSelectedPlaylist(playlist, MainActivity.getInstance());
@@ -701,7 +697,7 @@ public class SongView extends BaseActivity {
             }
 
             if (i > 0) {
-                DatabaseHelper dbHelper = new DatabaseHelper(this);
+                DatabaseHelper dbHelper = DatabaseHelper.getInstance(this);
                 int count = i == 1
                         ? dbHelper.getSongNotes(selectedSong.getId()).size()
                         : dbHelper.getSongSnippets(selectedSong.getId()).size();

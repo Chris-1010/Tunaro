@@ -34,7 +34,7 @@ public class SongRefreshService {
                 // would otherwise throw UnauthorizedException with no retry.
                 ensureFreshToken();
 
-                DatabaseHelper dbHelper = new DatabaseHelper(context);
+                DatabaseHelper dbHelper = DatabaseHelper.getInstance(context);
                 Map<String, String> songsToRefresh = dbHelper.getSongsNeedingRefresh();
 
                 if (songsToRefresh.isEmpty()) {

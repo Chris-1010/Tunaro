@@ -48,7 +48,7 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
             return;
         }
 
-        dbHelper = new DatabaseHelper(this);
+        dbHelper = DatabaseHelper.getInstance(this);
 
         RecyclerView recyclerView = findViewById(R.id.library_recycler_view);
         adapter = new LibrarySongAdapter(this, this);

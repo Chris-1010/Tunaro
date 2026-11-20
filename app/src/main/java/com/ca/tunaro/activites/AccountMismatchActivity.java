@@ -145,6 +145,8 @@ public class AccountMismatchActivity extends AppCompatActivity {
 
     private void performReset() {
         // Delete the database
+        // Release the shared connection so the file can be deleted cleanly.
+        DatabaseHelper.closeSharedInstance();
         deleteDatabase("TunaroDB");
 
         // Clear all SharedPreferences

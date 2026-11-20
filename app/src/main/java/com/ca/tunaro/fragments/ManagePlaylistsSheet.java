@@ -140,10 +140,9 @@ public class ManagePlaylistsSheet extends BottomSheetDialogFragment {
     }
 
     private void loadPlaylists() {
-        DatabaseHelper db = new DatabaseHelper(requireContext());
+        DatabaseHelper db = DatabaseHelper.getInstance(requireContext());
         List<DatabaseHelper.ManagablePlaylist> playlists =
                 db.getManagablePlaylists(variantUris, includeArchived);
-        db.close();
 
         if (playlists.isEmpty()) {
             recycler.setVisibility(View.GONE);
@@ -211,9 +210,8 @@ public class ManagePlaylistsSheet extends BottomSheetDialogFragment {
         return mainActivity.executeWithTokenRefresh(
                 () -> mainActivity.getSpotifyApi().addItemsToPlaylist(playlistId, new String[]{songUri}).build())
                 .thenAccept(snapshot -> {
-                    DatabaseHelper db = new DatabaseHelper(requireContext().getApplicationContext());
+                    DatabaseHelper db = DatabaseHelper.getInstance(requireContext().getApplicationContext());
                     db.upsertSongPlaylistLink(songUri, playlistId, utcTimestamp());
-                    db.close();
                 });
     }
 
@@ -223,9 +221,8 @@ public class ManagePlaylistsSheet extends BottomSheetDialogFragment {
      * one variant of the same recording is in the playlist.
      */
     private CompletableFuture<Void> removeFromPlaylist(MainActivity mainActivity, String playlistId) {
-        DatabaseHelper db = new DatabaseHelper(requireContext().getApplicationContext());
+        DatabaseHelper db = DatabaseHelper.getInstance(requireContext().getApplicationContext());
         List<String> variantsInPlaylist = db.getActiveVariantsInPlaylist(variantUris, playlistId);
-        db.close();
 
         // Fall back to the displayed URI when there is no record of which variants are linked.
         if (variantsInPlaylist.isEmpty()) variantsInPlaylist.add(songUri);
@@ -241,9 +238,8 @@ public class ManagePlaylistsSheet extends BottomSheetDialogFragment {
         return mainActivity.executeWithTokenRefresh(
                 () -> mainActivity.getSpotifyApi().removeItemsFromPlaylist(playlistId, tracks).build())
                 .thenAccept(snapshot -> {
-                    DatabaseHelper db2 = new DatabaseHelper(requireContext().getApplicationContext());
+                    DatabaseHelper db2 = DatabaseHelper.getInstance(requireContext().getApplicationContext());
                     for (String uri : removedUris) db2.markSongRemovedFromPlaylist(uri, playlistId);
-                    db2.close();
                 });
     }
 

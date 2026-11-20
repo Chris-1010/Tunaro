@@ -119,10 +119,9 @@ public class ArtistSongsFragment extends Fragment
         // Swipe an album cover right to add/remove the song from the queue: refresh the line.
         adapter.setOnQueueChangeListener((position, added) -> recyclerView.invalidateItemDecorations());
 
-        DatabaseHelper db = new DatabaseHelper(requireContext());
+        DatabaseHelper db = DatabaseHelper.getInstance(requireContext());
         localUris = db.getArtistLocalSongUris(artistId);
         localSongs.addAll(db.getArtistLocalSongs(artistId));
-        db.close();
         adapter.setAddedUris(localUris);
 
         // Reflect any toggle already flipped on the host before this tab was created.

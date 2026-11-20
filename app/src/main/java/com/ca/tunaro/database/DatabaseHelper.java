@@ -280,8 +280,57 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     //#endregion
 
-    public DatabaseHelper(Context context) {
+    private static volatile DatabaseHelper instance;
+
+    /**
+     * Returns the process-wide helper bound to the application context. A single
+     * connection is shared by every caller, so callers must not close it.
+     */
+    public static DatabaseHelper getInstance(Context context) {
+        DatabaseHelper local = instance;
+        if (local == null) {
+            synchronized (DatabaseHelper.class) {
+                local = instance;
+                if (local == null) {
+                    local = new DatabaseHelper(context.getApplicationContext());
+                    instance = local;
+                }
+            }
+        }
+        return local;
+    }
+
+    /**
+     * Closes the shared connection and drops the singleton. Only for flows that
+     * delete or replace the database file; the next getInstance() reopens it.
+     */
+    public static void closeSharedInstance() {
+        synchronized (DatabaseHelper.class) {
+            if (instance != null) {
+                instance.closeConnection();
+                instance = null;
+            }
+        }
+    }
+
+    private DatabaseHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
+    }
+
+    @Override
+    public void onConfigure(SQLiteDatabase db) {
+        super.onConfigure(db);
+        // WAL lets readers proceed while a background job writes.
+        db.enableWriteAheadLogging();
+    }
+
+    /** No-op: the connection is shared for the life of the process. */
+    @Override
+    public synchronized void close() {
+    }
+
+    private synchronized void closeConnection() {
+        super.close();
     }
 
     @Override
@@ -521,7 +570,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             update.put(COLUMN_ARTIST_NAME, name);
             db.update(TABLE_ARTISTS, update, COLUMN_ARTIST_ID + " = ?", new String[]{artistId});
         }
-        db.close();
     }
 
     /** Cached ArtistView header stats. {@code fetchedAt} is null only on a first-ever visit. */
@@ -563,7 +611,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         if (result == -1) {
             db.update(TABLE_ARTISTS, values, COLUMN_ARTIST_ID + " = ?", new String[]{artistId});
         }
-        db.close();
     }
 
     // Returns cached header stats, or null if the artist row doesn't exist yet.
@@ -594,7 +641,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     cursor.getString(6));
         }
         cursor.close();
-        db.close();
         return stats;
     }
 
@@ -627,7 +673,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { songs.add(leanSongFromCursor(cursor)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return songs;
     }
 
@@ -659,7 +704,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { songs.add(leanSongFromCursor(cursor)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return songs;
     }
 
@@ -680,7 +724,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { uris.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return uris;
     }
 
@@ -697,7 +740,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_RELEASE_DATE, releaseDate);
         values.put(COLUMN_COVER_IMAGE_URL, coverImageUrl);
         db.insertWithOnConflict(TABLE_ALBUMS, null, values, SQLiteDatabase.CONFLICT_REPLACE);
-        db.close();
     }
 
     //#endregion
@@ -726,7 +768,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             db.update(TABLE_SONGS, update, COLUMN_SPOTIFY_URI + " = ?", new String[]{song.getId()});
         }
 
-        db.close();
 
         // Upsert ISRC link if present
         if (song.getIsrc() != null && !song.getIsrc().isEmpty()) {
@@ -770,7 +811,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_ARTIST_ID, artistId);
         values.put(COLUMN_POSITION, position);
         db.insertWithOnConflict(TABLE_SONG_ARTISTS, null, values, SQLiteDatabase.CONFLICT_REPLACE);
-        db.close();
     }
 
     public void upsertIsrcLink(String isrc, String spotifyUri) {
@@ -779,7 +819,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_ISRC, isrc);
         values.put(COLUMN_SPOTIFY_URI, spotifyUri);
         db.insertWithOnConflict(TABLE_SONG_ISRC_LINKS, null, values, SQLiteDatabase.CONFLICT_IGNORE);
-        db.close();
     }
 
     public void updateSongPopularity(String spotifyUri, int popularity) {
@@ -788,7 +827,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_POPULARITY, popularity);
         values.put(COLUMN_LAST_REFRESHED_AT, utcNow());
         db.update(TABLE_SONGS, values, COLUMN_SPOTIFY_URI + " = ?", new String[]{spotifyUri});
-        db.close();
     }
 
     public void updateSongIsPlayable(String spotifyUri, boolean isPlayable) {
@@ -797,7 +835,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_IS_PLAYABLE, isPlayable ? 1 : 0);
         values.put(COLUMN_LAST_REFRESHED_AT, utcNow());
         db.update(TABLE_SONGS, values, COLUMN_SPOTIFY_URI + " = ?", new String[]{spotifyUri});
-        db.close();
     }
 
     public void refreshSong(String spotifyUri, int popularity, boolean isPlayable) {
@@ -807,7 +844,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_IS_PLAYABLE, isPlayable ? 1 : 0);
         values.put(COLUMN_LAST_REFRESHED_AT, utcNow());
         db.update(TABLE_SONGS, values, COLUMN_SPOTIFY_URI + " = ?", new String[]{spotifyUri});
-        db.close();
     }
 
     // Returns spotifyUri → spotifyUri for songs not refreshed in the last 7 days
@@ -828,7 +864,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return result;
     }
 
@@ -853,7 +888,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             song = leanSongFromCursor(cursor);
         }
         cursor.close();
-        db.close();
         return song;
     }
 
@@ -892,7 +926,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     popularity, albumId, albumName, albumType, releaseDate, isrc, isPlayable, createdAt);
         }
         cursor.close();
-        db.close();
 
         return song;
     }
@@ -904,7 +937,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new String[]{spotifyUri});
         boolean exists = cursor.moveToFirst();
         cursor.close();
-        db.close();
         return exists;
     }
 
@@ -942,7 +974,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return artists;
     }
 
@@ -964,7 +995,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { uris.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return uris;
     }
 
@@ -980,7 +1010,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         int max = 0;
         if (cursor.moveToFirst()) max = cursor.getInt(0);
         cursor.close();
-        db.close();
         return max;
     }
 
@@ -998,7 +1027,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { timestamps.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return timestamps;
     }
 
@@ -1016,7 +1044,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { notes.add(noteFromCursor(cursor)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return notes;
     }
 
@@ -1034,7 +1061,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { snippets.add(snippetFromCursor(cursor)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return snippets;
     }
 
@@ -1059,7 +1085,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return result;
     }
 
@@ -1098,7 +1123,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             update.put(COLUMN_OWNER, owner);
             db.update(TABLE_PLAYLISTS, update, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
         }
-        db.close();
     }
 
     public void updatePlaylistTrackCount(String playlistId, int trackCount) {
@@ -1116,7 +1140,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         ContentValues values = new ContentValues();
         values.put(COLUMN_TRACK_COUNT, remoteCount);
         db.update(TABLE_PLAYLISTS, values, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
-        db.close();
     }
 
     public void upsertPlaylistStub(String playlistId, boolean isArchived, boolean isFavourite) {
@@ -1136,7 +1159,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 db.update(TABLE_PLAYLISTS, update, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
             }
         }
-        db.close();
     }
 
     public PlaylistModel getPlaylistById(String playlistId) {
@@ -1158,7 +1180,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             result.setFavourite(isFavourite);
         }
         cursor.close();
-        db.close();
         return result;
     }
 
@@ -1183,7 +1204,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         ContentValues values = new ContentValues();
         values.put(column, value);
         db.update(TABLE_PLAYLISTS, values, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
-        db.close();
     }
 
     public boolean isPlaylistFavourited(String playlistId) {
@@ -1202,7 +1222,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new String[]{playlistId});
         boolean flag = cursor.moveToFirst() && cursor.getInt(0) == 1;
         cursor.close();
-        db.close();
         return flag;
     }
 
@@ -1225,7 +1244,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { ids.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return ids;
     }
 
@@ -1233,7 +1251,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         SQLiteDatabase db = this.getWritableDatabase();
         db.delete(TABLE_SONG_PLAYLISTS, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
         db.delete(TABLE_PLAYLISTS, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
-        db.close();
     }
 
     //#endregion
@@ -1248,7 +1265,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { ids.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return ids;
     }
 
@@ -1279,7 +1295,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return result;
     }
 
@@ -1299,7 +1314,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     COLUMN_SPOTIFY_URI + " = ? AND " + COLUMN_PLAYLIST_ID + " = ?",
                     new String[]{spotifyUri, playlistId});
         }
-        db.close();
     }
 
     public Map<String, Date> getAddedAtMapForPlaylist(String playlistId) {
@@ -1326,7 +1340,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return result;
     }
 
@@ -1337,7 +1350,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.update(TABLE_SONG_PLAYLISTS, values,
                 COLUMN_SPOTIFY_URI + " = ? AND " + COLUMN_PLAYLIST_ID + " = ? AND " + COLUMN_REMOVED_AT + " IS NULL",
                 new String[]{spotifyUri, playlistId});
-        db.close();
     }
 
     public List<String> getPlaylistIdsForSong(String spotifyUri) {
@@ -1351,7 +1363,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { ids.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return ids;
     }
 
@@ -1366,7 +1377,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { ids.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return ids;
     }
 
@@ -1381,7 +1391,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { uris.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return uris;
     }
 
@@ -1477,7 +1486,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return result;
     }
 
@@ -1502,7 +1510,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { result.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return result;
     }
 
@@ -1525,7 +1532,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return result;
     }
 
@@ -1541,7 +1547,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { allNotes.add(noteFromCursor(cursor)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return allNotes;
     }
 
@@ -1557,14 +1562,12 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { notes.add(noteFromCursor(cursor)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return notes;
     }
 
     public long addNote(SongNote note) {
         SQLiteDatabase db = this.getWritableDatabase();
         if (note.getUuid() != null && dataExistsByUUID(db, TABLE_SONG_NOTES, note.getUuid())) {
-            db.close();
             return -1;
         }
         ContentValues values = new ContentValues();
@@ -1574,7 +1577,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_CONTENT, note.getContent());
         long id = db.insert(TABLE_SONG_NOTES, null, values);
         note.setId(id);
-        db.close();
         return id;
     }
 
@@ -1587,13 +1589,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_NOTE_TYPE, note.getNoteType());
         values.put(COLUMN_CONTENT, note.getContent());
         db.update(TABLE_SONG_NOTES, values, COLUMN_ID + " = ?", new String[]{String.valueOf(note.getId())});
-        db.close();
     }
 
     public void deleteNote(long noteId) {
         SQLiteDatabase db = this.getWritableDatabase();
         db.delete(TABLE_SONG_NOTES, COLUMN_ID + " = ?", new String[]{String.valueOf(noteId)});
-        db.close();
     }
 
     public boolean hasSongNotes(String spotifyUri) {
@@ -1602,7 +1602,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 COLUMN_SPOTIFY_URI + " = ?", new String[]{spotifyUri}, null, null, null, "1");
         boolean has = cursor.moveToFirst();
         cursor.close();
-        db.close();
         return has;
     }
 
@@ -1616,7 +1615,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { ids.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return ids;
     }
 
@@ -1638,7 +1636,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext() && noteTypes.size() < 5);
         }
         cursor.close();
-        db.close();
         return noteTypes;
     }
 
@@ -1664,7 +1661,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { all.add(snippetFromCursor(cursor)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return all;
     }
 
@@ -1680,14 +1676,12 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { snippets.add(snippetFromCursor(cursor)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return snippets;
     }
 
     public long addSnippet(SongSnippet snippet) {
         SQLiteDatabase db = this.getWritableDatabase();
         if (snippet.getUuid() != null && dataExistsByUUID(db, TABLE_SONG_SNIPPETS, snippet.getUuid())) {
-            db.close();
             return -1;
         }
         ContentValues values = new ContentValues();
@@ -1700,7 +1694,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_INCLUDE_IN_RANKINGS, snippet.getIncludeInRankings() ? 1 : 0);
         long id = db.insert(TABLE_SONG_SNIPPETS, null, values);
         snippet.setId(id);
-        db.close();
         return id;
     }
 
@@ -1713,13 +1706,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_END_TIME, snippet.getEndTime());
         values.put(COLUMN_INCLUDE_IN_RANKINGS, snippet.getIncludeInRankings() ? 1 : 0);
         db.update(TABLE_SONG_SNIPPETS, values, COLUMN_ID + " = ?", new String[]{String.valueOf(snippet.getId())});
-        db.close();
     }
 
     public void deleteSnippet(long snippetId) {
         SQLiteDatabase db = this.getWritableDatabase();
         db.delete(TABLE_SONG_SNIPPETS, COLUMN_ID + " = ?", new String[]{String.valueOf(snippetId)});
-        db.close();
     }
 
     public boolean hasSongSnippets(String spotifyUri) {
@@ -1728,7 +1719,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 COLUMN_SPOTIFY_URI + " = ?", new String[]{spotifyUri}, null, null, null, "1");
         boolean has = cursor.moveToFirst();
         cursor.close();
-        db.close();
         return has;
     }
 
@@ -1742,7 +1732,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { ids.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return ids;
     }
 
@@ -1776,7 +1765,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return all;
     }
 
@@ -1787,7 +1775,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_SPOTIFY_URI, spotifyUri);
         values.put(COLUMN_LISTEN_TIMESTAMP, utcNow());
         db.insert(TABLE_LISTEN_HISTORY, null, values);
-        db.close();
     }
 
     public void addListenRecordWithTimestamp(String spotifyUri, String utcTimestamp) {
@@ -1797,7 +1784,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_SPOTIFY_URI, spotifyUri);
         values.put(COLUMN_LISTEN_TIMESTAMP, utcTimestamp);
         db.insert(TABLE_LISTEN_HISTORY, null, values);
-        db.close();
     }
 
     public List<String> getListenHistory(String spotifyUri) {
@@ -1811,7 +1797,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { timestamps.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return timestamps;
     }
 
@@ -1829,7 +1814,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { uris.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return uris;
     }
 
@@ -1838,7 +1822,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         int deleted = db.delete(TABLE_LISTEN_HISTORY,
                 COLUMN_SPOTIFY_URI + " NOT IN (SELECT " + COLUMN_SPOTIFY_URI + " FROM " + TABLE_SONGS + ")",
                 null);
-        db.close();
         if (deleted > 0) Log.d("DatabaseHelper", "Deleted " + deleted + " unresolvable orphaned listen entries");
     }
 
@@ -1850,7 +1833,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new String[]{spotifyUri});
         String timestamp = cursor.moveToFirst() ? cursor.getString(0) : null;
         cursor.close();
-        db.close();
         return timestamp;
     }
 
@@ -1871,7 +1853,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return results;
     }
 
@@ -1892,7 +1873,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return results;
     }
 
@@ -1954,7 +1934,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             lhCursor.close();
         }
 
-        db.close();
 
         // Step 3: aggregate per requested URI
         for (String uri : spotifyUris) {
@@ -2021,7 +2000,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             lhCursor.close();
         }
 
-        db.close();
 
         for (String uri : spotifyUris) {
             String best = null;
@@ -2088,7 +2066,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             popCursor.close();
         }
 
-        db.close();
 
         for (String uri : spotifyUris) {
             int max = 0;
@@ -2112,7 +2089,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new String[]{spotifyUri, windowStartStr, windowEndStr});
         boolean has = cursor.moveToFirst() && cursor.getInt(0) > 0;
         cursor.close();
-        db.close();
         return has;
     }
 
@@ -2124,7 +2100,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new String[]{spotifyUri, utcTimestamp});
         boolean exists = cursor.moveToFirst() && cursor.getInt(0) > 0;
         cursor.close();
-        db.close();
         return exists;
     }
 
@@ -2210,7 +2185,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     public static String generateExportJson(Context context) {
-        DatabaseHelper dbHelper = new DatabaseHelper(context);
+        DatabaseHelper dbHelper = getInstance(context);
         ExportData exportData = new ExportData();
         exportData.notes = dbHelper.getAllNotes();
         exportData.snippets = dbHelper.getAllSnippets();
@@ -2220,7 +2195,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     public static void writeExportToUri(Context context, Uri uri) throws IOException {
-        DatabaseHelper dbHelper = new DatabaseHelper(context);
+        DatabaseHelper dbHelper = getInstance(context);
         try (OutputStream outputStream = context.getContentResolver().openOutputStream(uri);
              OutputStreamWriter writer = new OutputStreamWriter(Objects.requireNonNull(outputStream))) {
             ExportData exportData = new ExportData();
@@ -2238,7 +2213,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         ExportData importData = gson.fromJson(jsonData, ExportData.class);
         if (importData == null) throw new IllegalArgumentException("Invalid or corrupted backup file");
 
-        DatabaseHelper dbHelper = new DatabaseHelper(context);
+        DatabaseHelper dbHelper = getInstance(context);
         ImportStats stats = new ImportStats();
 
         if (importData.notes != null) {
@@ -2260,18 +2235,14 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
         if (importData.listenHistory != null) {
             SQLiteDatabase db = dbHelper.getWritableDatabase();
-            try {
-                for (ListenHistoryEntry entry : importData.listenHistory) {
-                    if (!dbHelper.dataExistsByUUID(db, TABLE_LISTEN_HISTORY, entry.getUuid())) {
-                        ContentValues values = new ContentValues();
-                        values.put(COLUMN_UUID, entry.getUuid());
-                        values.put(COLUMN_SPOTIFY_URI, entry.getSongId());
-                        values.put(COLUMN_LISTEN_TIMESTAMP, entry.getListenTimestamp());
-                        if (db.insert(TABLE_LISTEN_HISTORY, null, values) != -1) stats.listenHistoryAdded++;
-                    }
+            for (ListenHistoryEntry entry : importData.listenHistory) {
+                if (!dbHelper.dataExistsByUUID(db, TABLE_LISTEN_HISTORY, entry.getUuid())) {
+                    ContentValues values = new ContentValues();
+                    values.put(COLUMN_UUID, entry.getUuid());
+                    values.put(COLUMN_SPOTIFY_URI, entry.getSongId());
+                    values.put(COLUMN_LISTEN_TIMESTAMP, entry.getListenTimestamp());
+                    if (db.insert(TABLE_LISTEN_HISTORY, null, values) != -1) stats.listenHistoryAdded++;
                 }
-            } finally {
-                db.close();
             }
         }
 
@@ -2400,7 +2371,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return playlists;
     }
 
@@ -2429,7 +2399,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();
-            db.close();
         }
     }
 
@@ -2476,7 +2445,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();
-            db.close();
         }
     }
 
@@ -2496,7 +2464,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { result.put(cursor.getString(0), cursor.getDouble(1)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return result;
     }
 
@@ -2521,7 +2488,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { result.put(cursor.getString(0), cursor.getInt(1)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return result;
     }
 
@@ -2540,7 +2506,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();
-            db.close();
         }
     }
 
@@ -2616,7 +2581,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();
-            db.close();
         }
     }
 
@@ -2662,7 +2626,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (isrcCursor.moveToNext());
         }
         isrcCursor.close();
-        db.close();
 
         for (String uri : uris) {
             List<String> siblings = variantMap.getOrDefault(uri, java.util.Collections.singletonList(uri));
@@ -2689,7 +2652,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new String[]{GAME_IN_PROGRESS});
         RankingGame game = cursor.moveToFirst() ? gameFromCursor(cursor) : null;
         cursor.close();
-        db.close();
         return game;
     }
 
@@ -2700,7 +2662,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new String[]{String.valueOf(id)});
         RankingGame game = cursor.moveToFirst() ? gameFromCursor(cursor) : null;
         cursor.close();
-        db.close();
         return game;
     }
 
@@ -2716,7 +2677,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { games.add(gameFromCursor(cursor)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return games;
     }
 
@@ -2736,7 +2696,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_CREATED_AT, nowUtc());
         values.put(COLUMN_UPDATED_AT, nowUtc());
         long id = db.insert(TABLE_RANKING_GAMES, null, values);
-        db.close();
         return id;
     }
 
@@ -2747,7 +2706,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_DECISIONS, joinUris(decisions));
         values.put(COLUMN_UPDATED_AT, nowUtc());
         db.update(TABLE_RANKING_GAMES, values, COLUMN_ID + " = ?", new String[]{String.valueOf(id)});
-        db.close();
     }
 
     /** Mark a game completed and store its final 1..N ranking. */
@@ -2760,13 +2718,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_UPDATED_AT, nowUtc());
         values.put(COLUMN_COMPLETED_AT, nowUtc());
         db.update(TABLE_RANKING_GAMES, values, COLUMN_ID + " = ?", new String[]{String.valueOf(id)});
-        db.close();
     }
 
     public void deleteGame(long id) {
         SQLiteDatabase db = this.getWritableDatabase();
         db.delete(TABLE_RANKING_GAMES, COLUMN_ID + " = ?", new String[]{String.valueOf(id)});
-        db.close();
     }
 
     private RankingGame gameFromCursor(Cursor cursor) {

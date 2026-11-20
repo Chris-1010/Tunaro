@@ -494,7 +494,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         if (allSongs == null || allSongs.isEmpty()) return false;
         List<String> ids = new ArrayList<>();
         for (SongModel song : allSongs) ids.add(song.getId());
-        return !new DatabaseHelper(this).getRankInfoBatch(ids).isEmpty();
+        return !DatabaseHelper.getInstance(this).getRankInfoBatch(ids).isEmpty();
     }
 
     private void updateSortDirectionIcon() {
@@ -518,14 +518,13 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 comparator = Comparator.comparing(SongModel::getDateAddedToPlaylist, Comparator.nullsLast(Comparator.naturalOrder()));
                 break;
             case 1: // Last Listened
-                DatabaseHelper dbHelper = new DatabaseHelper(this);
+                DatabaseHelper dbHelper = DatabaseHelper.getInstance(this);
                 List<String> songIds = new ArrayList<>();
                 for (SongModel song : songs) {
                     songIds.add(song.getId());
                 }
 
                 Map<String, String> timestampMap = dbHelper.getVariantMostRecentListenTimestampsBatch(songIds);
-                dbHelper.close();
 
                 // Support both timestamp formats (milliseconds included for Tunaro records, not for Spotify)
                 java.text.SimpleDateFormat formatWithMillis = new java.text.SimpleDateFormat(
@@ -586,26 +585,24 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 comparator = Comparator.comparing(SongModel::getArtist, String.CASE_INSENSITIVE_ORDER);
                 break;
             case 5: // Popularity (variant-aware: uses max across ISRC siblings)
-                DatabaseHelper popularityDbHelper = new DatabaseHelper(this);
+                DatabaseHelper popularityDbHelper = DatabaseHelper.getInstance(this);
                 List<String> popularitySongIds = new ArrayList<>();
                 for (SongModel song : songs) {
                     popularitySongIds.add(song.getId());
                 }
                 Map<String, Integer> popularityMap = popularityDbHelper.getVariantPopularityBatch(popularitySongIds);
-                popularityDbHelper.close();
                 comparator = (song1, song2) -> Integer.compare(
                         popularityMap.getOrDefault(song1.getId(), song1.getPopularity()),
                         popularityMap.getOrDefault(song2.getId(), song2.getPopularity()));
                 break;
             case 6: // Listen Count (variant-aware: sums across ISRC siblings)
-                DatabaseHelper listenCountDbHelper = new DatabaseHelper(this);
+                DatabaseHelper listenCountDbHelper = DatabaseHelper.getInstance(this);
                 List<String> listenCountSongIds = new ArrayList<>();
                 for (SongModel song : songs) {
                     listenCountSongIds.add(song.getId());
                 }
 
                 Map<String, Integer> listenCountMap = listenCountDbHelper.getVariantListenCountsBatch(listenCountSongIds);
-                listenCountDbHelper.close();
 
                 comparator = (song1, song2) -> {
                     int count1 = listenCountMap.getOrDefault(song1.getId(), 0);
@@ -678,17 +675,14 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         for (SongModel song : songs) ids.add(song.getId());
 
         if (sortOption == 1) {
-            DatabaseHelper db = new DatabaseHelper(this);
+            DatabaseHelper db = DatabaseHelper.getInstance(this);
             adapter.updateLastListenedMap(db.getVariantMostRecentListenTimestampsBatch(ids));
-            db.close();
         } else if (sortOption == 5) {
-            DatabaseHelper db = new DatabaseHelper(this);
+            DatabaseHelper db = DatabaseHelper.getInstance(this);
             adapter.updatePopularityMap(db.getVariantPopularityBatch(ids));
-            db.close();
         } else if (sortOption == 6) {
-            DatabaseHelper db = new DatabaseHelper(this);
+            DatabaseHelper db = DatabaseHelper.getInstance(this);
             adapter.updateListenCounts(db.getVariantListenCountsBatch(ids));
-            db.close();
         } else if (sortOption == SORT_RANK) {
             adapter.updateRankInfoMap(computeLocalRankInfo(ids));
         }
@@ -700,9 +694,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     // so a playlist missing some globally-higher songs still starts at #1. The raw
     // rating is carried through for display. Unrated songs are simply absent.
     private Map<String, com.ca.tunaro.models.SongRankInfo> computeLocalRankInfo(List<String> ids) {
-        DatabaseHelper db = new DatabaseHelper(this);
+        DatabaseHelper db = DatabaseHelper.getInstance(this);
         Map<String, com.ca.tunaro.models.SongRankInfo> global = db.getRankInfoBatch(ids);
-        db.close();
 
         // Distinct ratings, highest first → dense rank number.
         java.util.TreeSet<Long> distinct = new java.util.TreeSet<>(java.util.Collections.reverseOrder());

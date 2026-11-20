@@ -52,7 +52,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         this.context = context;
         this.recyclerViewInterface = recyclerViewInterface;
         this.songModels = songModels;
-        this.dbHelper = new DatabaseHelper(context);
+        this.dbHelper = DatabaseHelper.getInstance(context);
     }
 
     @NonNull

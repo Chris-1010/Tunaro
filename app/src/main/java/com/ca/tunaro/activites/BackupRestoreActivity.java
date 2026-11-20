@@ -71,7 +71,7 @@ public class BackupRestoreActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_backup_restore);
 
-        dbHelper = new DatabaseHelper(this);
+        dbHelper = DatabaseHelper.getInstance(this);
         executor = Executors.newSingleThreadExecutor();
 
         selectFileButton = findViewById(R.id.select_file_button);

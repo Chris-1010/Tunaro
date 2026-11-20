@@ -126,9 +126,8 @@ public class RankingPlaylistSheet extends BottomSheetDialogFragment {
     }
 
     private void loadPlaylists() {
-        DatabaseHelper db = new DatabaseHelper(requireContext());
+        DatabaseHelper db = DatabaseHelper.getInstance(requireContext());
         List<PlaylistModel> playlists = db.getNonArchivedPlaylists();
-        db.close();
 
         // Wrap each playlist as an unselected grid cell (no song context, so
         // containsSong is always false and every pick is an "addition").
@@ -195,12 +194,11 @@ public class RankingPlaylistSheet extends BottomSheetDialogFragment {
         final int token = ++countRequestToken;
         final Context ctx = requireContext().getApplicationContext();
         executor.execute(() -> {
-            DatabaseHelper db = new DatabaseHelper(ctx);
+            DatabaseHelper db = DatabaseHelper.getInstance(ctx);
             Set<String> union = new HashSet<>();
             for (String id : selectedIds) {
                 union.addAll(db.getActiveSongUrisForPlaylist(id));
             }
-            db.close();
             int count = union.size();
             View root = getView();
             if (root == null) return;

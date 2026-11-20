@@ -541,9 +541,8 @@ public class MainActivity extends AppCompatActivity {
         SpotifyApi api = buildFreshSpotifyApi();
         CompletableFuture.runAsync(() -> {
             try {
-                DatabaseHelper db = new DatabaseHelper(getApplicationContext());
+                DatabaseHelper db = DatabaseHelper.getInstance(getApplicationContext());
                 List<String> orphanedUris = db.getOrphanedListenUris();
-                db.close();
 
                 if (orphanedUris.isEmpty()) return;
                 Log.d(TAG, "Found " + orphanedUris.size() + " orphaned listen URIs");
@@ -571,7 +570,7 @@ public class MainActivity extends AppCompatActivity {
                                 api.getSeveralTracks(String.join(",", trackIds))
                                         .build().execute();
 
-                        DatabaseHelper dbWrite = new DatabaseHelper(getApplicationContext());
+                        DatabaseHelper dbWrite = DatabaseHelper.getInstance(getApplicationContext());
                         for (int j = 0; j < tracks.length; j++) {
                             se.michaelthelin.spotify.model_objects.specification.Track track = tracks[j];
                             if (track == null) continue;
@@ -596,14 +595,12 @@ public class MainActivity extends AppCompatActivity {
                                     track.getDurationMs(), track.getUri(), track.getPopularity(),
                                     songAlbum, isrc, null, playable == null || playable));
                         }
-                        dbWrite.close();
                     } catch (Exception e) {
                         Log.w(TAG, "Orphaned listen fetch batch failed at offset " + i, e);
                     }
                 }
-                DatabaseHelper dbCleanup = new DatabaseHelper(getApplicationContext());
+                DatabaseHelper dbCleanup = DatabaseHelper.getInstance(getApplicationContext());
                 dbCleanup.deleteOrphanedListens();
-                dbCleanup.close();
                 Log.d(TAG, "Orphaned listen fetch complete");
             } catch (Exception e) {
                 Log.e(TAG, "Orphaned listen fetch failed", e);

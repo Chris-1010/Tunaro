@@ -325,7 +325,7 @@ public class PlaybackManager {
                 trackChanged = true;
                 checkPlaybackDevice();
                 if (applicationContext != null) {
-                    new DatabaseHelper(applicationContext).upsertSong(currentSong);
+                    DatabaseHelper.getInstance(applicationContext).upsertSong(currentSong);
                 }
             }
 
@@ -775,7 +775,7 @@ public class PlaybackManager {
 
     private void recordListen() {
         if (applicationContext != null && !isDeviceWarningActive) {
-            DatabaseHelper dbHelper = new DatabaseHelper(applicationContext);
+            DatabaseHelper dbHelper = DatabaseHelper.getInstance(applicationContext);
             String songId = currentSong.getId();
 
             if (dbHelper.hasListenWithinDuration(currentSong.getId(), System.currentTimeMillis(), currentSong.getDuration())) {
@@ -823,7 +823,7 @@ public class PlaybackManager {
     }
 
     private void playSongForSnippet(SongSnippet snippet) {
-        DatabaseHelper dbHelper = new DatabaseHelper(applicationContext);
+        DatabaseHelper dbHelper = DatabaseHelper.getInstance(applicationContext);
         SongModel song = dbHelper.getLeanSong(snippet.getSongId());
         String uri = song != null ? song.getUri() : null;
         if (uri == null) {

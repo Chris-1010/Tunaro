@@ -57,7 +57,7 @@ public class SpotifyHistoryImportActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_spotify_history_import);
 
-        databaseHelper = new DatabaseHelper(this);
+        databaseHelper = DatabaseHelper.getInstance(this);
         executorService = Executors.newSingleThreadExecutor();
 
         setupBackButton();
