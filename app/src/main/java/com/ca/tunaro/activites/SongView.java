@@ -603,6 +603,7 @@ public class SongView extends BaseActivity {
         ColorExtractor.extractColors(this, selectedSong.getAlbumCoverUrl(), new ColorExtractor.ColorExtractionCallback() {
             @Override
             public void onColorExtracted(int dominantColor, int vibrantColor) {
+                if (isDestroyed() || isFinishing()) return;
                 styleNewSongPill(vibrantColor, dominantColor);
                 applyGradientBackground(ColorExtractor.pickBackgroundColor(dominantColor, vibrantColor));
                 applyTabTheme(SnippetTheme.from(vibrantColor, dominantColor));
@@ -610,6 +611,7 @@ public class SongView extends BaseActivity {
 
             @Override
             public void onError() {
+                if (isDestroyed() || isFinishing()) return;
                 applyGradientBackground(Color.parseColor("#424242"));
                 applyTabTheme(SnippetTheme.fallback());
             }

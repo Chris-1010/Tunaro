@@ -290,11 +290,13 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         ColorExtractor.extractColors(this, playlistImage, new ColorExtractor.ColorExtractionCallback() {
             @Override
             public void onColorExtracted(int dominantColor, int vibrantColor) {
+                if (isDestroyed() || isFinishing()) return;
                 applyGradientBackground(ColorExtractor.pickBackgroundColor(dominantColor, vibrantColor));
             }
 
             @Override
             public void onError() {
+                if (isDestroyed() || isFinishing()) return;
                 applyGradientBackground(Color.parseColor("#424242"));
             }
         });
@@ -365,7 +367,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         if (query == null || query.isEmpty()) {
             // Re-apply current sort when clearing search
             showNoMatches(false);
-            sortSongs(sortSpinner.getSelectedItemPosition());
+            sortSongs(currentSortOption());
             return;
         }
 
@@ -381,7 +383,17 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         }
 
         // Apply current sort to filtered results
-        displaySorted(filteredList, sortSpinner.getSelectedItemPosition(), true);
+        displaySorted(filteredList, currentSortOption(), true);
+    }
+
+    // The spinner has no adapter until the async rank lookup finishes; fall back to the saved
+    // sort (excluding Rank, which may not be offered) so search works in that window.
+    private int currentSortOption() {
+        if (sortSpinner != null && sortSpinner.getAdapter() != null) {
+            return sortSpinner.getSelectedItemPosition();
+        }
+        int saved = prefs != null ? prefs.getInt(SORT_PREF_KEY, 0) : 0;
+        return saved < 8 ? saved : 0;
     }
 
     private void showNoMatches(boolean show) {
@@ -404,6 +416,14 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     // Whether to offer "Rank" needs a DB lookup, so resolve it off the main
     // thread before building the sort controls.
     private void setupSorting() {
+        // Bind the sort views and saved prefs synchronously: search listeners are already live
+        // and read them before the rank lookup below returns.
+        sortDirectionIcon = findViewById(R.id.sort_direction_icon);
+        sortIcon = findViewById(R.id.sort_icon);
+        sortSpinner = findViewById(R.id.sort_spinner);
+        prefs = getSharedPreferences("PlaylistPrefs", MODE_PRIVATE);
+        isAscending = prefs.getBoolean(SORT_DIRECTION_KEY, false);
+
         final List<String> ids = new ArrayList<>();
         for (SongModel song : allSongs) ids.add(song.getId());
         AppExecutors.io().execute(() -> {
@@ -423,13 +443,6 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     }
 
     private void setupSorting(boolean offerRank) {
-        sortDirectionIcon = findViewById(R.id.sort_direction_icon);
-        sortIcon = findViewById(R.id.sort_icon);
-        sortSpinner = findViewById(R.id.sort_spinner);
-
-        // Initialize SharedPreferences
-        prefs = getSharedPreferences("PlaylistPrefs", MODE_PRIVATE);
-
         // Set up spinner adapter with custom view. "Title" (index 2) is intentionally kept in the
         // array so existing sort/pref indices don't shift, but it is hidden from the dropdown
         // (search covers title lookup); see getDropDownView.

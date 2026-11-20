@@ -870,8 +870,17 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         applyPlaybackBarGradient(song.getAlbumCoverUrl());
     }
 
+    // Cover URL of the most recent gradient request. A cached colour resolves at once while an
+    // earlier uncached one may still be decoding, so callbacks for any other URL are stale.
+    private String pendingGradientUrl;
+
+    private boolean isStaleGradient(String albumCoverUrl) {
+        return isDestroyed() || isFinishing() || !albumCoverUrl.equals(pendingGradientUrl);
+    }
+
     private void applyPlaybackBarGradient(String albumCoverUrl) {
         if (playbackBarBackground == null) return;
+        pendingGradientUrl = albumCoverUrl;
 
         if (albumCoverUrl == null || albumCoverUrl.isEmpty()) {
             setPlaybackBarGradient(getColor(R.color.playback_bar_base));
@@ -881,13 +890,13 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         ColorExtractor.extractColors(this, albumCoverUrl, new ColorExtractor.ColorExtractionCallback() {
             @Override
             public void onColorExtracted(int dominantColor, int vibrantColor) {
-                if (isDestroyed() || isFinishing()) return;
+                if (isStaleGradient(albumCoverUrl)) return;
                 setPlaybackBarGradient(vibrantColor);
             }
 
             @Override
             public void onError() {
-                if (isDestroyed() || isFinishing()) return;
+                if (isStaleGradient(albumCoverUrl)) return;
                 setPlaybackBarGradient(getColor(R.color.playback_bar_base));
             }
         });
@@ -918,6 +927,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     // vibrant colour is ready.
     private void crossFadeGradient(String albumCoverUrl) {
         if (playbackBarBackground == null) return;
+        pendingGradientUrl = albumCoverUrl;
         if (albumCoverUrl == null || albumCoverUrl.isEmpty()) {
             crossFadeGradientToColor(getColor(R.color.playback_bar_base));
             return;
@@ -925,13 +935,13 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         ColorExtractor.extractColors(this, albumCoverUrl, new ColorExtractor.ColorExtractionCallback() {
             @Override
             public void onColorExtracted(int dominantColor, int vibrantColor) {
-                if (isDestroyed() || isFinishing()) return;
+                if (isStaleGradient(albumCoverUrl)) return;
                 crossFadeGradientToColor(vibrantColor);
             }
 
             @Override
             public void onError() {
-                if (isDestroyed() || isFinishing()) return;
+                if (isStaleGradient(albumCoverUrl)) return;
                 crossFadeGradientToColor(getColor(R.color.playback_bar_base));
             }
         });

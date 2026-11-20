@@ -261,12 +261,14 @@ public class ArtistView extends BaseActivity {
         ColorExtractor.extractColors(this, imageUrl, new ColorExtractor.ColorExtractionCallback() {
             @Override
             public void onColorExtracted(int dominantColor, int vibrantColor) {
+                if (isDestroyed() || isFinishing()) return;
                 applyGradientBackground(ColorExtractor.pickBackgroundColor(dominantColor, vibrantColor));
                 applyTabTheme(SnippetTheme.from(vibrantColor, dominantColor));
             }
 
             @Override
             public void onError() {
+                if (isDestroyed() || isFinishing()) return;
                 applyTabTheme(SnippetTheme.fallback());
             }
         });

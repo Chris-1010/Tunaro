@@ -106,6 +106,9 @@ public class PlaybackManager {
     private String lastRecordedUri = null;
     // Guard: only fire an auto-advance once per song-end
     private boolean queueAdvancePending = false;
+    // The delayed end-of-song advance, held so a manual transition or disconnect can drop it
+    // instead of letting it fire a second skip.
+    private final Runnable autoAdvanceRunnable = this::next;
     // Timestamp of last advance — suppress end-of-song check for 3s after an advance
     // to avoid Spotify returning stale position data for the newly-started track.
     private long lastAdvanceTimeMs = 0;
@@ -642,7 +645,7 @@ public class PlaybackManager {
     // auto-advance so the position poller can't double-fire mid-transition.
     private void applyDecision(PlaybackModel.NavDecision<SongModel> decision) {
         lastAdvanceTimeMs = System.currentTimeMillis();
-        queueAdvancePending = false;
+        cancelPendingAdvance();
         switch (decision.action) {
             case PLAY:
                 pendingReason = decision.reason;
@@ -667,6 +670,7 @@ public class PlaybackManager {
     // Play a brand-new selection: tag it FRESH so the centralized recorder
     // appends it at the Live Edge (truncating any forward history).
     private void playFresh(SongModel song) {
+        cancelPendingAdvance();
         pendingReason = PlaybackModel.PlayReason.FRESH;
         playSong(song);
     }
@@ -1133,6 +1137,11 @@ public class PlaybackManager {
         positionHandler.removeCallbacks(endOfSongCheckRunnable);
     }
 
+    private void cancelPendingAdvance() {
+        positionHandler.removeCallbacks(autoAdvanceRunnable);
+        queueAdvancePending = false;
+    }
+
     // End-of-song auto-advance: within END_LEAD_MS of the end, wait briefly so the
     // advance lands close to the real finish without cutting it off. Intercept when
     // there is a real next song, or — in Stop mode — to pause at the boundary
@@ -1154,7 +1163,8 @@ public class PlaybackManager {
                     if (decision == PlaybackClock.END_ADVANCE) {
                         Log.d(TAG, "checkEndOfSong: Caught end of song at " + remaining + "ms remaining. Queueing advance.");
                         queueAdvancePending = true;
-                        positionHandler.postDelayed(PlaybackManager.this::next,
+                        positionHandler.removeCallbacks(autoAdvanceRunnable);
+                        positionHandler.postDelayed(autoAdvanceRunnable,
                                 PlaybackClock.ADVANCE_DELAY_MS);
                     } else if (decision > 0) {
                         positionHandler.postDelayed(endOfSongCheckRunnable, decision);
@@ -1303,6 +1313,7 @@ public class PlaybackManager {
         stopPlaybackSession();
         stopPositionTracking();
         cancelEndOfSongCheck();
+        cancelPendingAdvance();
         stopListenTracking();
         cancelCurrentSnippetTimer();
         cancelConnectTimeout();
