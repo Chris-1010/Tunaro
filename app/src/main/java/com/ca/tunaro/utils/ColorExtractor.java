@@ -108,6 +108,14 @@ public class ColorExtractor {
     }
 
     /**
+     * Whether {@link #extractColors} would answer {@code imageUrl} synchronously from the cache.
+     * Callers use this to apply colours instantly instead of animating them in.
+     */
+    public static boolean isCached(String imageUrl) {
+        return imageUrl != null && !imageUrl.isEmpty() && CACHE.get(imageUrl) != null;
+    }
+
+    /**
      * Check if a color has sufficient contrast against another
      *
      * @param foregroundColor The text/foreground color

@@ -11,7 +11,6 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import androidx.core.graphics.ColorUtils;
 import androidx.fragment.app.Fragment;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -27,6 +26,7 @@ import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.fragments.ArtistSongsFragment;
 import com.ca.tunaro.models.AlbumModel;
 import com.ca.tunaro.utils.ColorExtractor;
+import com.ca.tunaro.utils.GradientBackground;
 import com.ca.tunaro.utils.SnippetTheme;
 import com.google.android.material.tabs.TabLayout;
 
@@ -258,11 +258,12 @@ public class ArtistView extends BaseActivity {
             applyTabTheme(SnippetTheme.fallback());
             return;
         }
+        boolean animate = !ColorExtractor.isCached(imageUrl);
         ColorExtractor.extractColors(this, imageUrl, new ColorExtractor.ColorExtractionCallback() {
             @Override
             public void onColorExtracted(int dominantColor, int vibrantColor) {
                 if (isDestroyed() || isFinishing()) return;
-                applyGradientBackground(ColorExtractor.pickBackgroundColor(dominantColor, vibrantColor));
+                applyGradientBackground(ColorExtractor.pickBackgroundColor(dominantColor, vibrantColor), animate);
                 applyTabTheme(SnippetTheme.from(vibrantColor, dominantColor));
             }
 
@@ -274,32 +275,13 @@ public class ArtistView extends BaseActivity {
         });
     }
 
-    private void applyGradientBackground(int dominantColor) {
-        View mainLayout = findViewById(R.id.main);
-        if (mainLayout != null) {
-            GradientDrawable gradient = new GradientDrawable(
-                    GradientDrawable.Orientation.TR_BL,
-                    new int[]{dominantColor, Color.BLACK});
-            mainLayout.setBackground(gradient);
-        }
-        applyCollapsedScrim(dominantColor);
-    }
-
-    // Collapsed toolbar scrim: black on the left, fading to a tint of the extracted colour on the
-    // right. The tint begins just past the small artist image (~20% from the left) and strengthens
-    // toward the right edge, leaving the back arrow + image on clean black.
-    private void applyCollapsedScrim(int dominantColor) {
+    private void applyGradientBackground(int dominantColor, boolean animate) {
+        GradientBackground.apply(findViewById(R.id.main), dominantColor, animate);
         com.google.android.material.appbar.CollapsingToolbarLayout collapsing =
                 findViewById(R.id.collapsing_toolbar);
-        if (collapsing == null) return;
-        // Blend a third of the way toward black so the tint stays readable but pronounced.
-        int tint = ColorUtils.blendARGB(dominantColor, Color.BLACK, 0.35f);
-        GradientDrawable scrim = new GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{Color.BLACK, Color.BLACK, tint});
-        // Hold black across the first ~20%, then ramp to the tint at the right edge.
-        scrim.setGradientCenter(0.2f, 0.5f);
-        collapsing.setContentScrim(scrim);
+        if (collapsing != null) {
+            collapsing.setContentScrim(GradientBackground.collapsedScrim(dominantColor));
+        }
     }
 
     private void showHeaderShimmer(boolean show) {

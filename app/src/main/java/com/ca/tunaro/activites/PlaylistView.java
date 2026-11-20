@@ -3,7 +3,6 @@ package com.ca.tunaro.activites;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -19,7 +18,6 @@ import android.widget.TextView;
 
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.widget.Toolbar;
-import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -34,6 +32,7 @@ import com.ca.tunaro.models.SongRankInfo;
 import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.models.PlaylistModel;
 import com.ca.tunaro.utils.ColorExtractor;
+import com.ca.tunaro.utils.GradientBackground;
 import com.ca.tunaro.utils.PlaylistSetup;
 import com.ca.tunaro.R;
 import com.ca.tunaro.utils.SelectedPlaylistHolder;
@@ -287,30 +286,24 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         });
 
         // Extract colors from the playlist image and apply dynamic background
+        boolean animate = !ColorExtractor.isCached(playlistImage);
         ColorExtractor.extractColors(this, playlistImage, new ColorExtractor.ColorExtractionCallback() {
             @Override
             public void onColorExtracted(int dominantColor, int vibrantColor) {
                 if (isDestroyed() || isFinishing()) return;
-                applyGradientBackground(ColorExtractor.pickBackgroundColor(dominantColor, vibrantColor));
+                applyGradientBackground(ColorExtractor.pickBackgroundColor(dominantColor, vibrantColor), animate);
             }
 
             @Override
             public void onError() {
                 if (isDestroyed() || isFinishing()) return;
-                applyGradientBackground(Color.parseColor("#424242"));
+                applyGradientBackground(Color.parseColor("#424242"), animate);
             }
         });
     }
 
-    private void applyGradientBackground(int dominantColor) {
-        CoordinatorLayout mainLayout = findViewById(R.id.main);
-
-        if (mainLayout != null) {
-            GradientDrawable gradient = new GradientDrawable(GradientDrawable.Orientation.TR_BL, // Top-right to bottom-left
-                    new int[]{dominantColor, Color.BLACK});
-
-            mainLayout.setBackground(gradient);
-        }
+    private void applyGradientBackground(int dominantColor, boolean animate) {
+        GradientBackground.apply(findViewById(R.id.main), dominantColor, animate);
     }
 
     private void setupSearch() {

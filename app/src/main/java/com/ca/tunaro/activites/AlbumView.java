@@ -1,8 +1,6 @@
 package com.ca.tunaro.activites;
 
 import android.content.Intent;
-import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -17,7 +15,6 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
-import androidx.core.graphics.ColorUtils;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -41,6 +38,7 @@ import com.ca.tunaro.utils.StateMessage;
 import com.ca.tunaro.utils.UiFeedback;
 import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.ColorExtractor;
+import com.ca.tunaro.utils.GradientBackground;
 import com.ca.tunaro.utils.ImageLoads;
 import com.ca.tunaro.utils.SelectedSongHolder;
 import com.facebook.shimmer.ShimmerFrameLayout;
@@ -223,11 +221,12 @@ public class AlbumView extends BaseActivity implements Song_RecyclerViewInterfac
                 .error(R.drawable.song_placeholder)
                 .into((ImageView) findViewById(R.id.collapsed_cover));
 
+        boolean animate = !ColorExtractor.isCached(url);
         ColorExtractor.extractColors(this, url, new ColorExtractor.ColorExtractionCallback() {
             @Override
             public void onColorExtracted(int dominantColor, int vibrantColor) {
                 if (isDestroyed() || !url.equals(coverUrl)) return;
-                applyGradientBackground(ColorExtractor.pickBackgroundColor(dominantColor, vibrantColor));
+                applyGradientBackground(ColorExtractor.pickBackgroundColor(dominantColor, vibrantColor), animate);
             }
 
             @Override
@@ -237,16 +236,10 @@ public class AlbumView extends BaseActivity implements Song_RecyclerViewInterfac
         });
     }
 
-    private void applyGradientBackground(int color) {
-        findViewById(R.id.main).setBackground(new GradientDrawable(
-                GradientDrawable.Orientation.TR_BL, new int[]{color, Color.BLACK}));
-        // Collapsed toolbar: black under the back arrow and cover, ramping to a tint on the right.
+    private void applyGradientBackground(int color, boolean animate) {
+        GradientBackground.apply(findViewById(R.id.main), color, animate);
         CollapsingToolbarLayout collapsing = findViewById(R.id.collapsing_toolbar);
-        int tint = ColorUtils.blendARGB(color, Color.BLACK, 0.35f);
-        GradientDrawable scrim = new GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT, new int[]{Color.BLACK, Color.BLACK, tint});
-        scrim.setGradientCenter(0.2f, 0.5f);
-        collapsing.setContentScrim(scrim);
+        collapsing.setContentScrim(GradientBackground.collapsedScrim(color));
     }
 
     // Artist names as individually tappable spans, each opening that artist's page.
