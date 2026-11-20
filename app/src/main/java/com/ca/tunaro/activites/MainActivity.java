@@ -20,6 +20,7 @@ import com.ca.tunaro.services.SongRefreshService;
 import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.DeviceChecker;
 import com.ca.tunaro.utils.SecurePrefs;
+import com.ca.tunaro.utils.LaunchRouting;
 import com.ca.tunaro.utils.PlaylistSetup;
 import com.ca.tunaro.utils.PoolingSpotifyHttpManager;
 import com.ca.tunaro.R;
@@ -93,6 +94,16 @@ public class MainActivity extends AppCompatActivity {
         // swaps to postSplashScreenTheme (Theme.Tunaro) once the app is ready.
         SplashScreen.installSplashScreen(this);
         super.onCreate(savedInstanceState);
+
+        // Launcher icon or media notification fired on top of a live task: step
+        // aside so the task resumes on the user's screen instead of re-routing (#120).
+        if (shouldResumeInPlace()) {
+            Log.d(TAG, "onCreate: live task found, resuming in place");
+            finish();
+            overridePendingTransition(0, 0);
+            return;
+        }
+
         setContentView(R.layout.activity_main_splash);
         applyRandomSplashGradient();
 
@@ -174,6 +185,20 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
+    private boolean shouldResumeInPlace() {
+        Intent intent = getIntent();
+        if (intent == null) return false;
+        boolean isLauncherIntent = Intent.ACTION_MAIN.equals(intent.getAction())
+                && intent.hasCategory(Intent.CATEGORY_LAUNCHER);
+        boolean fromNotification = intent.getBooleanExtra(LaunchRouting.EXTRA_FROM_NOTIFICATION, false);
+        boolean forceReauth = intent.getBooleanExtra(EXTRA_FORCE_REAUTH, false);
+        MainActivity live = instance;
+        boolean liveSession = live != null && live != this && !live.isFinishing()
+                && live.getSpotifyApi() != null && live.getUserID() != null;
+        return LaunchRouting.shouldResumeInPlace(
+                isTaskRoot(), isLauncherIntent, fromNotification, forceReauth, liveSession);
+    }
+
     // Curated cool-toned gradient pairs (bottom-left -> top-right) that stay
     // harmonious with the blue/green app icon. One is chosen at random per launch.
     private static final int[][] SPLASH_GRADIENTS = {
@@ -219,7 +244,11 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         // Clear singleton reference first
         Log.d(TAG, "MainActivity onDestroy");
-        instance = null;
+        // Only the live router owns the singleton; a resume-in-place instance or a
+        // replaced one must not clear the session held by its successor.
+        if (instance == this) {
+            instance = null;
+        }
 
         // Disconnect Spotify
         if (mSpotifyAppRemote != null) {
