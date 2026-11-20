@@ -8,27 +8,30 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.ca.tunaro.R;
 import com.ca.tunaro.models.SongNote;
+import com.ca.tunaro.utils.NoteEditorInput;
 import com.ca.tunaro.utils.SnippetTheme;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class SongNotesAdapter extends RecyclerView.Adapter<SongNotesAdapter.NoteViewHolder> {
     private final Context context;
-    private List<SongNote> notes;
+    private final List<SongNote> notes = new ArrayList<>();
     private SnippetTheme theme = SnippetTheme.fallback();
 
     public SongNotesAdapter(Context context, List<SongNote> notes) {
         this.context = context;
-        this.notes = notes;
+        this.notes.addAll(notes);
     }
 
     public void setTheme(SnippetTheme theme) {
         this.theme = theme;
-        notifyDataSetChanged();
+        notifyItemRangeChanged(0, notes.size());
     }
 
     @NonNull
@@ -71,9 +74,42 @@ public class SongNotesAdapter extends RecyclerView.Adapter<SongNotesAdapter.Note
         return notes.size();
     }
 
+    /** Replace the list, animating only the rows that were added, removed or edited. */
     public void updateNotes(List<SongNote> newNotes) {
-        this.notes = newNotes;
-        notifyDataSetChanged();
+        final List<SongNote> oldNotes = new ArrayList<>(notes);
+        final List<SongNote> next = new ArrayList<>(newNotes);
+        DiffUtil.DiffResult diff = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+            @Override
+            public int getOldListSize() {
+                return oldNotes.size();
+            }
+
+            @Override
+            public int getNewListSize() {
+                return next.size();
+            }
+
+            @Override
+            public boolean areItemsTheSame(int oldPos, int newPos) {
+                return NoteEditorInput.sameNote(oldNotes.get(oldPos), next.get(newPos));
+            }
+
+            @Override
+            public boolean areContentsTheSame(int oldPos, int newPos) {
+                return NoteEditorInput.sameContents(oldNotes.get(oldPos), next.get(newPos));
+            }
+        });
+        notes.clear();
+        notes.addAll(next);
+        diff.dispatchUpdatesTo(this);
+    }
+
+    /** Adapter position of the note with {@code noteId}, or -1. */
+    public int indexOfNote(long noteId) {
+        for (int i = 0; i < notes.size(); i++) {
+            if (notes.get(i).getId() == noteId) return i;
+        }
+        return -1;
     }
 
     public Context getContext() {

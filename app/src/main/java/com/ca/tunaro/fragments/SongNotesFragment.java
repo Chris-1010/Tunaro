@@ -1,56 +1,67 @@
 package com.ca.tunaro.fragments;
 
-import android.graphics.Color;
+import android.content.Context;
+import android.content.res.ColorStateList;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
+import android.view.WindowManager;
+import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.LinearLayout;
-import android.widget.ListView;
-import android.widget.Spinner;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.ca.tunaro.utils.StateMessage;
 import com.ca.tunaro.R;
-import com.ca.tunaro.utils.UiFeedback;
-import com.ca.tunaro.models.SongModel;
-import com.ca.tunaro.models.SongNote;
 import com.ca.tunaro.adapters.SongNotesAdapter;
 import com.ca.tunaro.callbacks.SwipeToDeleteCallback;
 import com.ca.tunaro.database.DatabaseHelper;
+import com.ca.tunaro.models.SongModel;
+import com.ca.tunaro.models.SongNote;
+import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.ColorExtractor;
+import com.ca.tunaro.utils.NoteEditorInput;
 import com.ca.tunaro.utils.SnippetTheme;
+import com.ca.tunaro.utils.StateMessage;
+import com.ca.tunaro.utils.UiFeedback;
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipGroup;
+import com.google.android.material.textfield.TextInputLayout;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class SongNotesFragment extends Fragment {
-    private static final String TAG = "SongNotesFragment";
+    private static final long RECENT_TYPES_DEBOUNCE_MS = 300;
+
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private SongModel song;
     private DatabaseHelper dbHelper;
-    private Spinner noteTypeSpinner;
-    private EditText noteInput;
+    /** Application context for messages sent from background threads; safe after detach. */
+    private Context appContext;
     private RecyclerView notesRecyclerView;
     private Button addNoteButton;
     private SongNotesAdapter notesAdapter;
-    private List<SongNote> notes = new ArrayList<>();
 
     private List<String> variantUris;
     private SnippetTheme currentTheme;
+    /** Bumped per load so a slow, older read never overwrites a newer one. */
+    private int loadGeneration;
+    private boolean emptyStateBound;
 
     public static SongNotesFragment newInstance(SongModel song, List<String> variantUris) {
         SongNotesFragment fragment = new SongNotesFragment();
@@ -66,21 +77,34 @@ public class SongNotesFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_song_notes, container, false);
 
-        dbHelper = DatabaseHelper.getInstance(requireContext());
+        appContext = requireContext().getApplicationContext();
+        dbHelper = DatabaseHelper.getInstance(appContext);
         if (getArguments() != null) {
             variantUris = getArguments().getStringArrayList("variantUris");
         }
 
-        // Initialize the add note button
         addNoteButton = view.findViewById(R.id.addNoteButton);
         notesRecyclerView = view.findViewById(R.id.notesRecyclerView);
 
-        addNoteButton.setOnClickListener(v -> showAddNoteDialog());
+        addNoteButton.setOnClickListener(v -> showNoteEditor(null));
         setupNotesList();
         loadNotes();
         applyNoteTheme();
 
         return view;
+    }
+
+    @Override
+    public void onDestroyView() {
+        mainHandler.removeCallbacksAndMessages(null);
+        super.onDestroyView();
+    }
+
+    /** Post {@code task} to the main thread, dropping it if the view has gone. */
+    private void postToUi(Runnable task) {
+        mainHandler.post(() -> {
+            if (isAdded() && getView() != null) task.run();
+        });
     }
 
     /**
@@ -89,10 +113,19 @@ public class SongNotesFragment extends Fragment {
      */
     private void applyNoteTheme() {
         String coverUrl = song != null ? song.getAlbumCoverUrl() : null;
-        if (coverUrl == null && song != null) {
-            SongModel lean = dbHelper.getLeanSong(song.getId());
-            if (lean != null) coverUrl = lean.getAlbumCoverUrl();
+        if (coverUrl != null || song == null) {
+            themeFromCover(coverUrl);
+            return;
         }
+        final String songId = song.getId();
+        AppExecutors.io().execute(() -> {
+            SongModel lean = dbHelper.getLeanSong(songId);
+            String leanCover = lean != null ? lean.getAlbumCoverUrl() : null;
+            postToUi(() -> themeFromCover(leanCover));
+        });
+    }
+
+    private void themeFromCover(@Nullable String coverUrl) {
         if (coverUrl == null) {
             applyTheme(SnippetTheme.fallback());
             return;
@@ -100,13 +133,13 @@ public class SongNotesFragment extends Fragment {
         ColorExtractor.extractColors(requireContext(), coverUrl, new ColorExtractor.ColorExtractionCallback() {
             @Override
             public void onColorExtracted(int dominantColor, int vibrantColor) {
-                if (!isAdded()) return;
+                if (!isAdded() || getView() == null) return;
                 applyTheme(SnippetTheme.from(vibrantColor, dominantColor));
             }
 
             @Override
             public void onError() {
-                if (!isAdded()) return;
+                if (!isAdded() || getView() == null) return;
                 applyTheme(SnippetTheme.fallback());
             }
         });
@@ -118,7 +151,7 @@ public class SongNotesFragment extends Fragment {
 
         if (addNoteButton != null) {
             addNoteButton.setBackgroundTintList(
-                    android.content.res.ColorStateList.valueOf(theme.playButton));
+                    ColorStateList.valueOf(theme.playButton));
             addNoteButton.setTextColor(SnippetTheme.contrastColor(theme.playButton));
         }
     }
@@ -127,395 +160,265 @@ public class SongNotesFragment extends Fragment {
         notesAdapter = new SongNotesAdapter(requireContext(), new ArrayList<>());
         notesRecyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
         notesRecyclerView.setAdapter(notesAdapter);
-        StateMessage.bindEmptyState(notesAdapter,
-                ((View) notesRecyclerView.getParent()).findViewById(R.id.notes_empty),
-                R.drawable.ic_state_note, R.string.notes_empty, R.string.notes_empty_hint);
+        emptyStateBound = false;
 
-        // Setup swipe functionality
         SwipeToDeleteCallback swipeHandler = new SwipeToDeleteCallback(notesAdapter,
                 new SwipeToDeleteCallback.OnSwipeListener() {
                     @Override
                     public void onDelete(int position) {
                         SongNote noteToDelete = notesAdapter.getNote(position);
-                        dbHelper.deleteNote(noteToDelete.getId());
                         notesAdapter.removeNote(position);
-                        updateNotesBadge();
-                        showMessage("Note deleted");
+                        updateNotesBadge(notesAdapter.getItemCount());
+                        final long noteId = noteToDelete.getId();
+                        AppExecutors.io().execute(() -> {
+                            dbHelper.deleteNote(noteId);
+                            UiFeedback.show(appContext, "Note deleted");
+                        });
                     }
 
                     @Override
                     public void onEdit(int position) {
-                        showEditDialog(notesAdapter.getNote(position));
+                        showNoteEditor(notesAdapter.getNote(position));
                     }
                 });
         new ItemTouchHelper(swipeHandler).attachToRecyclerView(notesRecyclerView);
     }
 
-    private void saveNote() {
-        String content = noteInput.getText().toString().trim();
-        if (content.isEmpty()) {
-            showMessage("Please enter a note");
-            return;
-        }
-
-        String noteType = noteTypeSpinner.getSelectedItem().toString();
-        SongNote note = new SongNote(null, song.getId(), noteType, content);
-
-        long id = dbHelper.addNote(note);
-        if (id != -1) {
-            noteInput.setText("");
-            loadNotes(); // Refresh the notes list
-            updateNotesBadge();
-        } else {
-            showMessage("Couldn't save the note");
-        }
-    }
-
+    /** Read the notes off the main thread, then refresh the list and the tab badge. */
     private void loadNotes() {
-        notes = variantUris != null && variantUris.size() > 1
-                ? dbHelper.getSongNotesForUris(variantUris)
-                : dbHelper.getSongNotes(song.getId());
-        notesAdapter.updateNotes(notes);
+        if (song == null) return;
+        final int generation = ++loadGeneration;
+        final List<String> uris = variantUris != null ? new ArrayList<>(variantUris) : null;
+        final String songId = song.getId();
+        AppExecutors.io().execute(() -> {
+            List<SongNote> loaded = uris != null && uris.size() > 1
+                    ? dbHelper.getSongNotesForUris(uris)
+                    : dbHelper.getSongNotes(songId);
+            postToUi(() -> {
+                if (generation != loadGeneration) return;
+                notesAdapter.updateNotes(loaded);
+                if (!emptyStateBound) {
+                    // Bound after the first read so "No notes yet" never flashes while loading.
+                    emptyStateBound = true;
+                    StateMessage.bindEmptyState(notesAdapter,
+                            ((View) notesRecyclerView.getParent()).findViewById(R.id.notes_empty),
+                            R.drawable.ic_state_note, R.string.notes_empty, R.string.notes_empty_hint);
+                }
+                updateNotesBadge(loaded.size());
+            });
+        });
     }
 
-    private void showAddNoteDialog() {
-        // Create dialog layout
-        LinearLayout layout = new LinearLayout(requireContext());
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(50, 30, 50, 30);
+    /**
+     * Show the shared add/edit dialog. {@code existing} null means add. Save validates in place
+     * and keeps the dialog (and the typed text) open until both fields are filled.
+     */
+    private void showNoteEditor(@Nullable final SongNote existing) {
+        View content = LayoutInflater.from(requireContext())
+                .inflate(R.layout.dialog_note_editor, null, false);
+        final TextInputLayout typeLayout = content.findViewById(R.id.noteTypeLayout);
+        final TextInputLayout contentLayout = content.findViewById(R.id.noteContentLayout);
+        final EditText typeInput = content.findViewById(R.id.noteTypeInput);
+        final EditText contentInput = content.findViewById(R.id.noteContentInput);
+        final TextView recentLabel = content.findViewById(R.id.recentTypesLabel);
+        final ChipGroup recentGroup = content.findViewById(R.id.recentTypesGroup);
 
-        // Create edit text for note type
-        final EditText typeInput = new EditText(requireContext());
-        typeInput.setHint("Enter note type...");
+        if (existing != null) {
+            typeInput.setText(existing.getNoteType());
+            contentInput.setText(existing.getContent());
+        }
+        if (currentTheme != null) {
+            ColorStateList accent = ColorStateList.valueOf(currentTheme.seekbarProgress);
+            typeLayout.setBoxStrokeColorStateList(accent);
+            contentLayout.setBoxStrokeColorStateList(accent);
+            typeLayout.setHintTextColor(accent);
+            contentLayout.setHintTextColor(accent);
+        }
 
-        // Create RecyclerView for recent note types
-        final RecyclerView recentTypesRecycler = new RecyclerView(requireContext());
-        recentTypesRecycler.setLayoutManager(new LinearLayoutManager(requireContext()));
+        final Handler searchHandler = new Handler(Looper.getMainLooper());
+        final int[] searchGeneration = {0};
+        final Runnable[] pendingSearch = new Runnable[1];
 
-        // Create adapter for recent types
-        final List<String> recentTypes = new ArrayList<>();
-        final ArrayAdapter<String> recentTypesAdapter = new ArrayAdapter<String>(requireContext(),
-                android.R.layout.simple_list_item_1, recentTypes) {
-            @Override
-            public View getView(int position, View convertView, ViewGroup parent) {
-                View view = super.getView(position, convertView, parent);
-                TextView textView = view.findViewById(android.R.id.text1);
-                textView.setTextSize(14f);
-                textView.setPadding(20, 15, 20, 15);
-                textView.setTextColor(Color.WHITE);
-                textView.setBackgroundResource(android.R.drawable.list_selector_background);
-                return view;
-            }
+        final Runnable runSearch = () -> {
+            final int generation = ++searchGeneration[0];
+            final String term = NoteEditorInput.trimmed(typeInput.getText());
+            AppExecutors.io().execute(() -> {
+                List<String> types = dbHelper.getRecentNoteTypes(term);
+                searchHandler.post(() -> {
+                    if (generation != searchGeneration[0] || !isAdded()) return;
+                    bindRecentTypes(types, recentGroup, recentLabel, typeInput, contentInput);
+                });
+            });
         };
+        pendingSearch[0] = runSearch;
+        runSearch.run();
 
-        ListView recentTypesList = new ListView(requireContext());
-        recentTypesList.setAdapter(recentTypesAdapter);
-        recentTypesList.setLayoutParams(new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 200));
-
-        // Set up click listener for recent types
-        recentTypesList.setOnItemClickListener((parent, view, position, id) -> {
-            String selectedType = recentTypes.get(position);
-            typeInput.setText(selectedType);
-            typeInput.setSelection(selectedType.length()); // Move cursor to end
-        });
-
-        // Create edit text for content
-        final EditText contentInput = new EditText(requireContext());
-        contentInput.setHint("Enter your note...");
-
-        // Add labels and views
-        TextView typeLabel = new TextView(requireContext());
-        typeLabel.setText("Note Type:");
-        typeLabel.setPadding(0, 0, 0, 8);
-
-        TextView recentLabel = new TextView(requireContext());
-        recentLabel.setText("Recent Types:");
-        recentLabel.setPadding(0, 16, 0, 8);
-        recentLabel.setTextSize(12f);
-        recentLabel.setTextColor(getResources().getColor(android.R.color.darker_gray));
-
-        TextView contentLabel = new TextView(requireContext());
-        contentLabel.setText("Content:");
-        contentLabel.setPadding(0, 16, 0, 8);
-
-        layout.addView(typeLabel);
-        layout.addView(typeInput);
-        layout.addView(recentLabel);
-        layout.addView(recentTypesList);
-        layout.addView(contentLabel);
-        layout.addView(contentInput);
-
-        // Handler for debounced search
-        final Handler searchHandler = new Handler();
-        final Runnable[] searchRunnable = new Runnable[1];
-
-        // Initial load of recent types
-        updateRecentTypes("", recentTypes, recentTypesAdapter);
-
-        // Set up text watcher for debounced search
         typeInput.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
 
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
-                // Cancel previous search
-                if (searchRunnable[0] != null) {
-                    searchHandler.removeCallbacks(searchRunnable[0]);
-                }
-
-                // Create new search runnable
-                searchRunnable[0] = () -> updateRecentTypes(s.toString(), recentTypes, recentTypesAdapter);
-
-                // Post delayed search (300ms debounce)
-                searchHandler.postDelayed(searchRunnable[0], 300);
+                typeLayout.setError(null);
+                searchHandler.removeCallbacks(pendingSearch[0]);
+                searchHandler.postDelayed(pendingSearch[0], RECENT_TYPES_DEBOUNCE_MS);
             }
 
             @Override
             public void afterTextChanged(Editable s) {}
         });
-
-        // Show dialog
-        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                .setTitle("Add Note")
-                .setView(layout)
-                .setPositiveButton("Save", (d, which) -> {
-                    String noteType = typeInput.getText().toString().trim();
-                    String content = contentInput.getText().toString().trim();
-
-                    if (noteType.isEmpty()) {
-                        showMessage("Please enter a note type");
-                        return;
-                    }
-
-                    if (content.isEmpty()) {
-                        showMessage("Please enter a note");
-                        return;
-                    }
-
-                    SongNote note = new SongNote(null, song.getId(), noteType, content);
-
-                    long id = dbHelper.addNote(note);
-                    if (id != -1) {
-                        loadNotes(); // Refresh the notes list
-                        updateNotesBadge();
-                    } else {
-                        showMessage("Couldn't save the note");
-                    }
-                })
-                .setNegativeButton("Cancel", null)
-                .create();
-        whitenDialogText(layout);
-        themeDialog(dialog);
-        dialog.show();
-    }
-
-    /**
-     * Recursively set text/hint colours to white-ish on the dialog content so
-     * labels and inputs read against the dark themed background.
-     */
-    private void whitenDialogText(View view) {
-        if (view instanceof EditText) {
-            EditText et = (EditText) view;
-            et.setTextColor(Color.WHITE);
-            et.setHintTextColor(Color.parseColor("#B3FFFFFF"));
-        } else if (view instanceof TextView) {
-            ((TextView) view).setTextColor(Color.WHITE);
-        }
-        if (view instanceof ViewGroup) {
-            ViewGroup vg = (ViewGroup) view;
-            for (int i = 0; i < vg.getChildCount(); i++) {
-                whitenDialogText(vg.getChildAt(i));
-            }
-        }
-    }
-
-    /**
-     * Tint an AlertDialog's window background and buttons to the album theme.
-     */
-    private void themeDialog(androidx.appcompat.app.AlertDialog dialog) {
-        if (currentTheme == null) return;
-        int cardColor = androidx.core.graphics.ColorUtils.compositeColors(
-                currentTheme.rowBackground, Color.parseColor("#1A1A1A"));
-        dialog.setOnShowListener(d -> {
-            if (dialog.getWindow() != null) {
-                GradientDrawable bg = new GradientDrawable();
-                bg.setColor(cardColor);
-                bg.setCornerRadius(dpToPx(12));
-                dialog.getWindow().setBackgroundDrawable(bg);
-            }
-            android.widget.Button pos = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE);
-            android.widget.Button neg = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEGATIVE);
-            if (pos != null) pos.setTextColor(currentTheme.seekbarProgress);
-            if (neg != null) neg.setTextColor(currentTheme.primaryText);
-
-            // Whiten the dialog title. AppCompat dialogs use the support
-            // "alertTitle" id, not the framework one.
-            View title = dialog.findViewById(androidx.appcompat.R.id.alertTitle);
-            if (title == null) {
-                int frameworkId = requireContext().getResources()
-                        .getIdentifier("alertTitle", "id", "android");
-                if (frameworkId != 0) title = dialog.findViewById(frameworkId);
-            }
-            if (title instanceof TextView) ((TextView) title).setTextColor(Color.WHITE);
-        });
-    }
-
-    private int dpToPx(int dp) {
-        return Math.round(dp * getResources().getDisplayMetrics().density);
-    }
-
-    private void updateRecentTypes(String searchTerm, List<String> recentTypes, ArrayAdapter<String> adapter) {
-        List<String> newTypes = dbHelper.getRecentNoteTypes(searchTerm);
-        recentTypes.clear();
-        recentTypes.addAll(newTypes);
-        adapter.notifyDataSetChanged();
-    }
-
-    private void showEditDialog(final SongNote note) {
-        // Create dialog layout
-        LinearLayout layout = new LinearLayout(requireContext());
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(50, 30, 50, 30);
-
-        // Create edit text for note type
-        final EditText typeInput = new EditText(requireContext());
-        typeInput.setText(note.getNoteType());
-        typeInput.setHint("Enter note type...");
-
-        // Create RecyclerView for recent note types
-        final List<String> recentTypes = new ArrayList<>();
-        final ArrayAdapter<String> recentTypesAdapter = new ArrayAdapter<String>(requireContext(),
-                android.R.layout.simple_list_item_1, recentTypes) {
-            @Override
-            public View getView(int position, View convertView, ViewGroup parent) {
-                View view = super.getView(position, convertView, parent);
-                TextView textView = view.findViewById(android.R.id.text1);
-                textView.setTextSize(14f);
-                textView.setPadding(20, 15, 20, 15);
-                textView.setTextColor(Color.WHITE);
-                textView.setBackgroundResource(android.R.drawable.list_selector_background);
-                return view;
-            }
-        };
-
-        ListView recentTypesList = new ListView(requireContext());
-        recentTypesList.setAdapter(recentTypesAdapter);
-        recentTypesList.setLayoutParams(new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 200));
-
-        // Set up click listener for recent types
-        recentTypesList.setOnItemClickListener((parent, view, position, id) -> {
-            String selectedType = recentTypes.get(position);
-            typeInput.setText(selectedType);
-            typeInput.setSelection(selectedType.length()); // Move cursor to end
-        });
-
-        // Create edit text for content
-        final EditText contentInput = new EditText(requireContext());
-        contentInput.setText(note.getContent());
-
-        // Add labels and views
-        TextView typeLabel = new TextView(requireContext());
-        typeLabel.setText("Note Type:");
-        typeLabel.setPadding(0, 0, 0, 8);
-
-        TextView recentLabel = new TextView(requireContext());
-        recentLabel.setText("Recent Types:");
-        recentLabel.setPadding(0, 16, 0, 8);
-        recentLabel.setTextSize(12f);
-        recentLabel.setTextColor(getResources().getColor(android.R.color.darker_gray));
-
-        TextView contentLabel = new TextView(requireContext());
-        contentLabel.setText("Content:");
-        contentLabel.setPadding(0, 16, 0, 8);
-
-        layout.addView(typeLabel);
-        layout.addView(typeInput);
-        layout.addView(recentLabel);
-        layout.addView(recentTypesList);
-        layout.addView(contentLabel);
-        layout.addView(contentInput);
-
-        // Handler for debounced search
-        final Handler searchHandler = new Handler();
-        final Runnable[] searchRunnable = new Runnable[1];
-
-        // Initial load of recent types
-        updateRecentTypes("", recentTypes, recentTypesAdapter);
-
-        // Set up text watcher for debounced search
-        typeInput.addTextChangedListener(new TextWatcher() {
+        contentInput.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
 
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
-                // Cancel previous search
-                if (searchRunnable[0] != null) {
-                    searchHandler.removeCallbacks(searchRunnable[0]);
-                }
-
-                // Create new search runnable
-                searchRunnable[0] = () -> updateRecentTypes(s.toString(), recentTypes, recentTypesAdapter);
-
-                // Post delayed search (300ms debounce)
-                searchHandler.postDelayed(searchRunnable[0], 300);
+                contentLayout.setError(null);
             }
 
             @Override
             public void afterTextChanged(Editable s) {}
         });
 
-        // Show dialog
-        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                .setTitle("Edit Note")
-                .setView(layout)
-                .setPositiveButton("Save", (d, which) -> {
-                    String noteType = typeInput.getText().toString().trim();
-                    String content = contentInput.getText().toString().trim();
-
-                    if (noteType.isEmpty()) {
-                        showMessage("Please enter a note type");
-                        return;
-                    }
-
-                    if (content.isEmpty()) {
-                        showMessage("Please enter a note");
-                        return;
-                    }
-
-                    note.setNoteType(noteType);
-                    note.setContent(content);
-                    dbHelper.editNote(note);
-                    loadNotes();
-                    showMessage("Note updated");
-                })
-                .setNegativeButton("Cancel", (d, which) -> {
-                    // Reset the view state by notifying adapter of change
-                    int position = notes.indexOf(note);
-                    if (position != -1) {
-                        notesAdapter.notifyItemChanged(position);
-                    }
-                })
+        final AlertDialog dialog = new AlertDialog.Builder(requireContext())
+                .setTitle(existing == null ? R.string.note_add_title : R.string.note_edit_title)
+                .setView(content)
+                // Listener is replaced after show() so a failed validation keeps the dialog open.
+                .setPositiveButton(R.string.note_save, null)
+                .setNegativeButton(R.string.note_cancel, null)
                 .create();
-        whitenDialogText(layout);
-        themeDialog(dialog);
+
+        dialog.setOnDismissListener(d -> {
+            // Stop pending lookups and drop late results for this dialog.
+            searchHandler.removeCallbacksAndMessages(null);
+            searchGeneration[0]++;
+            // Return a swiped-to-edit row to rest.
+            if (existing != null && notesAdapter != null) {
+                int position = notesAdapter.indexOfNote(existing.getId());
+                if (position != -1) notesAdapter.notifyItemChanged(position);
+            }
+        });
+        dialog.setOnShowListener(d -> themeDialog(dialog));
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
+                    | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        }
         dialog.show();
+
+        // Focus the first field that still needs input.
+        EditText focusTarget = existing == null ? typeInput : contentInput;
+        focusTarget.requestFocus();
+        focusTarget.setSelection(focusTarget.length());
+
+        contentInput.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick();
+                return true;
+            }
+            return false;
+        });
+
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            int result = NoteEditorInput.validate(typeInput.getText(), contentInput.getText());
+            if ((result & NoteEditorInput.MISSING_TYPE) != 0) {
+                typeLayout.setError(getString(R.string.note_type_required));
+            }
+            if ((result & NoteEditorInput.MISSING_CONTENT) != 0) {
+                contentLayout.setError(getString(R.string.note_content_required));
+            }
+            if (result != NoteEditorInput.VALID) {
+                ((result & NoteEditorInput.MISSING_TYPE) != 0 ? typeInput : contentInput).requestFocus();
+                return;
+            }
+            String noteType = NoteEditorInput.trimmed(typeInput.getText());
+            String noteContent = NoteEditorInput.trimmed(contentInput.getText());
+            dialog.dismiss();
+            if (existing == null) {
+                addNote(noteType, noteContent);
+            } else {
+                editNote(existing, noteType, noteContent);
+            }
+        });
     }
 
-    private void updateNotesBadge() {
+    private void bindRecentTypes(List<String> types, ChipGroup group, TextView label,
+                                 EditText typeInput, EditText contentInput) {
+        group.removeAllViews();
+        int visibility = types.isEmpty() ? View.GONE : View.VISIBLE;
+        group.setVisibility(visibility);
+        label.setVisibility(visibility);
+        ColorStateList chipBg = ColorStateList.valueOf(
+                ContextCompat.getColor(requireContext(), R.color.surface));
+        ColorStateList chipStroke = ColorStateList.valueOf(
+                ContextCompat.getColor(requireContext(), R.color.divider));
+        for (String type : types) {
+            Chip chip = new Chip(requireContext());
+            chip.setText(type);
+            chip.setTextAppearance(R.style.TextAppearance_Tunaro_BodySmall);
+            chip.setChipBackgroundColor(chipBg);
+            chip.setChipStrokeColor(chipStroke);
+            chip.setChipStrokeWidth(getResources().getDisplayMetrics().density);
+            chip.setEnsureMinTouchTargetSize(true);
+            chip.setOnClickListener(v -> {
+                typeInput.setText(type);
+                typeInput.setSelection(type.length());
+                contentInput.requestFocus();
+            });
+            group.addView(chip);
+        }
+    }
+
+    private void addNote(String noteType, String noteContent) {
+        final SongNote note = new SongNote(null, song.getId(), noteType, noteContent);
+        AppExecutors.io().execute(() -> {
+            long id = dbHelper.addNote(note);
+            if (id == -1) {
+                UiFeedback.show(appContext, "Couldn't save the note");
+                return;
+            }
+            postToUi(this::loadNotes);
+        });
+    }
+
+    private void editNote(SongNote existing, String noteType, String noteContent) {
+        // Edit a copy so the row bound in the adapter stays a faithful snapshot for diffing.
+        final SongNote updated = new SongNote(existing.getUuid(), existing.getId(), existing.getSongId(),
+                noteType, noteContent, existing.getTimestamp());
+        AppExecutors.io().execute(() -> {
+            dbHelper.editNote(updated);
+            UiFeedback.show(appContext, "Note updated");
+            postToUi(this::loadNotes);
+        });
+    }
+
+    /**
+     * Tint an AlertDialog's window background and buttons to the album theme. Call once shown.
+     */
+    private void themeDialog(AlertDialog dialog) {
+        int base = ContextCompat.getColor(requireContext(), R.color.surface_raised);
+        int cardColor = currentTheme == null ? base
+                : androidx.core.graphics.ColorUtils.compositeColors(currentTheme.rowBackground, base);
+        if (dialog.getWindow() != null) {
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(cardColor);
+            bg.setCornerRadius(getResources().getDimension(R.dimen.radius_card));
+            dialog.getWindow().setBackgroundDrawable(bg);
+        }
+        int textPrimary = ContextCompat.getColor(requireContext(), R.color.text_primary);
+        Button pos = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        Button neg = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+        if (pos != null) pos.setTextColor(currentTheme != null ? currentTheme.seekbarProgress
+                : ContextCompat.getColor(requireContext(), R.color.accent));
+        if (neg != null) neg.setTextColor(currentTheme != null ? currentTheme.primaryText : textPrimary);
+
+        // AppCompat dialogs use the support "alertTitle" id, not the framework one.
+        View title = dialog.findViewById(androidx.appcompat.R.id.alertTitle);
+        if (title instanceof TextView) ((TextView) title).setTextColor(textPrimary);
+    }
+
+    private void updateNotesBadge(int count) {
         if (getActivity() instanceof com.ca.tunaro.activites.SongView) {
-            int count = (variantUris != null && variantUris.size() > 1
-                    ? dbHelper.getSongNotesForUris(variantUris)
-                    : dbHelper.getSongNotes(song.getId())).size();
             ((com.ca.tunaro.activites.SongView) getActivity()).updateTabBadge(1, count);
         }
-    }
-
-    private void showMessage(String message) {
-        if (!isAdded()) return;
-        UiFeedback.show(requireActivity(), message);
     }
 }

@@ -74,6 +74,15 @@
     <string name="artist_albums_error">Couldn\'t load releases</string>
     <string name="connection_error_hint">Check your connection and try again.</string>
     <string name="notes_empty">No notes yet</string>
+    <string name="note_add_title">Add Note</string>
+    <string name="note_edit_title">Edit Note</string>
+    <string name="note_type_hint">Note type</string>
+    <string name="note_content_hint">Note</string>
+    <string name="note_recent_types">Recent types</string>
+    <string name="note_type_required">Enter a note type</string>
+    <string name="note_content_required">Write something for this note</string>
+    <string name="note_save">Save</string>
+    <string name="note_cancel">Cancel</string>
     <string name="notes_empty_hint">Tap Add Note to jot down what you hear in this song.</string>
     <string name="snippets_empty">No snippets yet</string>
     <string name="snippets_empty_hint">Save a favourite part of this song to replay it any time.</string>
