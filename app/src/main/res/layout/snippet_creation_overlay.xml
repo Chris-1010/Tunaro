@@ -4,7 +4,9 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#80000000"
+    android:background="@color/transparent_black"
+    android:clickable="true"
+    android:focusable="true"
     android:visibility="gone"
     tools:visibility="visible">
 
@@ -132,16 +134,30 @@
                         android:textColor="@color/text_primary"
                         android:textSize="@dimen/text_caption" />
 
-                    <EditText
-                        android:id="@+id/start_time_input"
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/start_time_layout"
+                        style="@style/Widget.Tunaro.NoteInputLayout"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        style="@style/Widget.Tunaro.Input"
-                        android:gravity="center"
-                        android:hint="0:00.000"
-                        android:inputType="text"
-                        android:maxLines="1"
-                        android:textSize="@dimen/text_body_small" />
+                        android:layout_marginTop="@dimen/space_xs"
+                        app:errorEnabled="true"
+                        app:hintEnabled="false">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/start_time_input"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:digits="0123456789:."
+                            android:gravity="center"
+                            android:hint="0:00.000"
+                            android:imeOptions="actionNext"
+                            android:importantForAutofill="no"
+                            android:inputType="time"
+                            android:maxLines="1"
+                            android:textColor="@color/text_primary"
+                            android:textColorHint="@color/text_tertiary"
+                            android:textSize="@dimen/text_body_small" />
+                    </com.google.android.material.textfield.TextInputLayout>
                 </LinearLayout>
 
                 <!-- End Time Editor -->
@@ -160,16 +176,30 @@
                         android:textColor="@color/text_primary"
                         android:textSize="@dimen/text_caption" />
 
-                    <EditText
-                        android:id="@+id/end_time_input"
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/end_time_layout"
+                        style="@style/Widget.Tunaro.NoteInputLayout"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        style="@style/Widget.Tunaro.Input"
-                        android:gravity="center"
-                        android:hint="0:00.000"
-                        android:inputType="text"
-                        android:maxLines="1"
-                        android:textSize="@dimen/text_body_small" />
+                        android:layout_marginTop="@dimen/space_xs"
+                        app:errorEnabled="true"
+                        app:hintEnabled="false">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/end_time_input"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:digits="0123456789:."
+                            android:gravity="center"
+                            android:hint="0:00.000"
+                            android:imeOptions="actionDone"
+                            android:importantForAutofill="no"
+                            android:inputType="time"
+                            android:maxLines="1"
+                            android:textColor="@color/text_primary"
+                            android:textColorHint="@color/text_tertiary"
+                            android:textSize="@dimen/text_body_small" />
+                    </com.google.android.material.textfield.TextInputLayout>
                 </LinearLayout>
             </LinearLayout>
 
@@ -268,7 +298,7 @@
             android:scaleType="fitCenter"
             android:src="@drawable/play_circle_outline"
             android:visibility="gone"
-            app:tint="#40FF00"
+            app:tint="@color/active"
             tools:visibility="visible" />
 
     </LinearLayout>
