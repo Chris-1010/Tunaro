@@ -1327,6 +1327,28 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return snippets;
     }
 
+    /** Number of notes across all {@code uris}, without loading the rows. */
+    public int countNotesForUris(List<String> uris) {
+        return countRowsForUris(TABLE_SONG_NOTES, uris);
+    }
+
+    /** Number of snippets across all {@code uris}, without loading the rows. */
+    public int countSnippetsForUris(List<String> uris) {
+        return countRowsForUris(TABLE_SONG_SNIPPETS, uris);
+    }
+
+    private int countRowsForUris(String table, List<String> uris) {
+        if (uris == null || uris.isEmpty()) return 0;
+        String placeholders = SqlUtils.placeholders(uris.size());
+        SQLiteDatabase db = this.getReadableDatabase();
+        try (Cursor cursor = db.rawQuery(
+                "SELECT COUNT(*) FROM " + table +
+                        " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + placeholders + ")",
+                uris.toArray(new String[0]))) {
+            return cursor.moveToFirst() ? cursor.getInt(0) : 0;
+        }
+    }
+
     public List<PlaylistLink> getPlaylistsForUris(List<String> uris) {
         List<PlaylistLink> result = new ArrayList<>();
         if (uris == null || uris.isEmpty()) return result;

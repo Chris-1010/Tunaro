@@ -35,6 +35,10 @@
     <color name="white">#FFFFFFFF</color>
     <color name="darker_grey">#202020</color>
     <color name="transparent_black">#80000000</color>
+    <!-- Dark scrim behind floating panels over album art. -->
+    <color name="panel_scrim">#CC000000</color>
+    <!-- Faint white fill for icon buttons on dark panels. -->
+    <color name="control_overlay">#33FFFFFF</color>
     <color name="shimmer_placeholder">#6F6F6F</color>
 
     <!-- Splash gradient: dark blue (bottom-left) -> lighter blue/green (top-right) -->

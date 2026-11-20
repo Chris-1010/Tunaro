@@ -30,8 +30,8 @@
     <!-- Small badge circle next to text -->
     <TextView
         android:id="@+id/tab_badge"
-        android:layout_width="16dp"
-        android:layout_height="16dp"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
         android:layout_marginStart="6dp"
         android:background="@drawable/circle_background"
         android:backgroundTint="#FF2A2A"
@@ -40,8 +40,8 @@
         android:lineSpacingExtra="0dp"
         android:padding="0dp"
         android:textAlignment="center"
+        android:textAppearance="@style/TextAppearance.Tunaro.Caption"
         android:textColor="@color/text_primary"
-        android:textSize="10sp"
         android:textStyle="bold"
         android:visibility="gone"
         tools:text="5"

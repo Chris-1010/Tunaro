@@ -75,7 +75,7 @@
                         android:layout_height="280dp"
                         android:layout_gravity="start|top"
                         android:background="@drawable/rounded_md"
-                        android:backgroundTint="#CC000000"
+                        android:backgroundTint="@color/panel_scrim"
                         android:clipToPadding="false"
                         android:gravity="center|left"
                         android:orientation="vertical"
@@ -96,8 +96,8 @@
                             android:gravity="center"
                             android:padding="@dimen/space_sm"
                             android:text="Not in any playlists"
+                            android:textAppearance="@style/TextAppearance.Tunaro.Caption"
                             android:textColor="@color/text_secondary"
-                            android:textSize="10sp"
                             android:visibility="gone" />
 
                         <androidx.core.widget.NestedScrollView
@@ -128,7 +128,7 @@
                             android:layout_gravity="center_horizontal"
                             android:layout_marginTop="@dimen/space_xs"
                             android:background="@drawable/ripple_rounded_background"
-                            android:backgroundTint="#33FFFFFF"
+                            android:backgroundTint="@color/control_overlay"
                             android:clickable="true"
                             android:contentDescription="@string/add_to_playlist_title"
                             android:focusable="true"
