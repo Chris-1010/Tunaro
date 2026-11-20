@@ -99,17 +99,10 @@ public class SongDetailsFragment extends Fragment {
         String albumType = song.getAlbumType();
         if (albumType != null) {
             albumTypeView.setText(capitalise(albumType));
-            // Color based on album type
-            switch (albumType.toLowerCase()) {
-                case "single":
-                    albumTypeView.setTextColor(0xFF4CAF50); // Green
-                    break;
-                case "album":
-                    albumTypeView.setTextColor(0xFF2196F3); // Blue
-                    break;
-                case "compilation":
-                    albumTypeView.setTextColor(0xFFFF9800); // Orange
-                    break;
+            // Colour by album type (shared with the album page's type chip).
+            int typeColor = com.ca.tunaro.utils.AlbumFormat.typeColor(albumType);
+            if (typeColor != com.ca.tunaro.utils.AlbumFormat.COLOR_UNKNOWN) {
+                albumTypeView.setTextColor(typeColor);
             }
         }
 

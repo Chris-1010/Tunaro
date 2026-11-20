@@ -47,4 +47,11 @@
 
     <string name="library_empty">No annotated songs yet — add a note from any song</string>
     <string name="library_no_matches">No songs match your search</string>
+    <string name="album_cover">Album cover</string>
+    <string name="album_play">Play</string>
+    <string name="album_error_title">Couldn\'t load this album</string>
+    <string name="album_error_hint">Check your connection and try again.</string>
+    <string name="album_refresh_failed">Couldn\'t refresh album</string>
+    <string name="retry">Retry</string>
+    <string name="back">Back</string>
 </resources>

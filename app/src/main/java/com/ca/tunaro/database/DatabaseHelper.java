@@ -9,6 +9,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 import android.net.Uri;
 import android.util.Log;
 
+import com.ca.tunaro.models.AlbumModel;
 import com.ca.tunaro.models.Artist;
 import com.ca.tunaro.models.ListenHistoryEntry;
 import com.ca.tunaro.models.PlaylistModel;
@@ -803,6 +804,92 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_RELEASE_DATE, releaseDate);
         values.put(COLUMN_COVER_IMAGE_URL, coverImageUrl);
         db.insertWithOnConflict(TABLE_ALBUMS, null, values, SQLiteDatabase.CONFLICT_REPLACE);
+    }
+
+    /** The cached album row, or null when the album has never been recorded locally. */
+    public AlbumModel getAlbum(String albumId) {
+        if (albumId == null) return null;
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT " + COLUMN_ALBUM_ID + ", " + COLUMN_ALBUM_NAME + ", " + COLUMN_ALBUM_TYPE +
+                        ", " + COLUMN_RELEASE_DATE + ", " + COLUMN_COVER_IMAGE_URL +
+                        " FROM " + TABLE_ALBUMS + " WHERE " + COLUMN_ALBUM_ID + " = ?",
+                new String[]{albumId});
+        AlbumModel album = null;
+        if (cursor.moveToFirst()) {
+            album = new AlbumModel(cursor.getString(0), cursor.getString(1), cursor.getString(2),
+                    cursor.getString(3), cursor.getString(4));
+        }
+        cursor.close();
+        return album;
+    }
+
+    /** Lean rows for every locally-known song on the album, ordered by name (the local DB has no
+     *  track numbers). Backs the AlbumView first paint before the Spotify track list arrives. */
+    public List<SongModel> getAlbumLocalSongs(String albumId) {
+        List<SongModel> songs = new ArrayList<>();
+        if (albumId == null) return songs;
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT s." + COLUMN_SPOTIFY_URI + ", s." + COLUMN_SONG_NAME +
+                        ", s." + COLUMN_DURATION_MS + ", s." + COLUMN_SPOTIFY_URI +
+                        ", s." + COLUMN_POPULARITY + ", a." + COLUMN_COVER_IMAGE_URL +
+                        ", a." + COLUMN_ALBUM_NAME + ", a." + COLUMN_RELEASE_DATE +
+                        ", ar." + COLUMN_ARTIST_NAME +
+                        " FROM " + TABLE_SONGS + " s" +
+                        " LEFT JOIN " + TABLE_ALBUMS + " a ON s." + COLUMN_ALBUM_ID + " = a." + COLUMN_ALBUM_ID +
+                        " LEFT JOIN " + TABLE_SONG_ARTISTS + " sa ON s." + COLUMN_SPOTIFY_URI + " = sa." + COLUMN_SPOTIFY_URI + " AND sa." + COLUMN_POSITION + " = 0" +
+                        " LEFT JOIN " + TABLE_ARTISTS + " ar ON sa." + COLUMN_ARTIST_ID + " = ar." + COLUMN_ARTIST_ID +
+                        " WHERE s." + COLUMN_ALBUM_ID + " = ?" +
+                        " ORDER BY s." + COLUMN_SONG_NAME + " COLLATE NOCASE ASC",
+                new String[]{albumId});
+        if (cursor.moveToFirst()) {
+            do { songs.add(leanSongFromCursor(cursor)); } while (cursor.moveToNext());
+        }
+        cursor.close();
+        return songs;
+    }
+
+    /** Primary artists of the album's locally-known songs, most frequent first. Lets the album
+     *  header show tappable artist names before the Spotify album arrives. */
+    public List<Artist> getAlbumLocalArtists(String albumId) {
+        List<Artist> artists = new ArrayList<>();
+        if (albumId == null) return artists;
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT ar." + COLUMN_ARTIST_ID + ", ar." + COLUMN_ARTIST_NAME + ", COUNT(*) AS n" +
+                        " FROM " + TABLE_SONGS + " s" +
+                        " JOIN " + TABLE_SONG_ARTISTS + " sa ON s." + COLUMN_SPOTIFY_URI + " = sa." + COLUMN_SPOTIFY_URI + " AND sa." + COLUMN_POSITION + " = 0" +
+                        " JOIN " + TABLE_ARTISTS + " ar ON sa." + COLUMN_ARTIST_ID + " = ar." + COLUMN_ARTIST_ID +
+                        " WHERE s." + COLUMN_ALBUM_ID + " = ?" +
+                        " GROUP BY ar." + COLUMN_ARTIST_ID +
+                        " ORDER BY n DESC, ar." + COLUMN_ARTIST_NAME + " ASC",
+                new String[]{albumId});
+        if (cursor.moveToFirst()) {
+            do { artists.add(new Artist(cursor.getString(0), cursor.getString(1))); } while (cursor.moveToNext());
+        }
+        cursor.close();
+        return artists;
+    }
+
+    /** URIs of the album's songs that are actively in at least one of the user's playlists, so the
+     *  album track list can mark them with the "added" tick (as the ArtistView Songs tab does). */
+    public java.util.Set<String> getAlbumAddedSongUris(String albumId) {
+        java.util.Set<String> uris = new java.util.HashSet<>();
+        if (albumId == null) return uris;
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT DISTINCT s." + COLUMN_SPOTIFY_URI +
+                        " FROM " + TABLE_SONGS + " s" +
+                        " JOIN " + TABLE_SONG_PLAYLISTS + " sp ON sp." + COLUMN_SPOTIFY_URI + " = s." + COLUMN_SPOTIFY_URI +
+                        " AND sp." + COLUMN_REMOVED_AT + " IS NULL" +
+                        " WHERE s." + COLUMN_ALBUM_ID + " = ?",
+                new String[]{albumId});
+        if (cursor.moveToFirst()) {
+            do { uris.add(cursor.getString(0)); } while (cursor.moveToNext());
+        }
+        cursor.close();
+        return uris;
     }
 
     //#endregion

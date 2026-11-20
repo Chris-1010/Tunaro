@@ -66,6 +66,11 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
     private Map<String, Integer> popularityMap = null;
     private Map<String, String> lastListenedMap = null;
     private Map<String, SongRankInfo> rankInfoMap = null;
+    // Album page only: track number per song URI, shown by CONTEXT_ALBUM_TRACK.
+    private Map<String, Integer> trackNumberMap = null;
+
+    /** Contextual-line mode for the album page: "track · duration · listens". */
+    public static final int CONTEXT_ALBUM_TRACK = 9;
     // Song IDs that have notes / snippets, preloaded off the main thread so
     // binding a row never queries the database.
     private Set<String> noteIds = Collections.emptySet();
@@ -250,6 +255,15 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
                     String formattedReleaseDate = formatReleaseDateForDisplay(releaseDate);
                     holder.contextualInfoView.setText("Released: " + formattedReleaseDate);
                     break;
+
+                case CONTEXT_ALBUM_TRACK: {
+                    Integer trackNumber = trackNumberMap != null ? trackNumberMap.get(model.getId()) : null;
+                    int listens = listenCountMap != null ? listenCountMap.getOrDefault(model.getId(), 0) : 0;
+                    holder.contextualInfoView.setText(com.ca.tunaro.utils.AlbumFormat.trackLine(
+                            trackNumber != null ? trackNumber : 0,
+                            com.ca.tunaro.utils.AlbumFormat.clockDuration(model.getDuration()), listens));
+                    break;
+                }
 
                 case 8: // Rank (Elo)
                     SongRankInfo rankInfo = rankInfoMap != null ? rankInfoMap.get(model.getId()) : null;
@@ -588,7 +602,8 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
     public void updateSortContext(int sortOption) {
         this.currentSortOption = sortOption;
         // Show contextual info for Date Added (0), Last Listened (1), Length (3), Popularity (5), Listen Count (6), Release Date (7), and Rank (8)
-        this.shouldShowContextualInfo = (sortOption == 0 || sortOption == 1 || sortOption == 3 || sortOption == 5 || sortOption == 6 || sortOption == 7 || sortOption == 8);
+        this.shouldShowContextualInfo = (sortOption == 0 || sortOption == 1 || sortOption == 3 || sortOption == 5 || sortOption == 6 || sortOption == 7 || sortOption == 8
+                || sortOption == CONTEXT_ALBUM_TRACK);
         notifyAllRows(PAYLOAD_CONTEXT);
     }
 
@@ -617,6 +632,11 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
 
     public void updateLastListenedMap(Map<String, String> lastListenedMap) {
         this.lastListenedMap = lastListenedMap;
+        notifyAllRows(PAYLOAD_CONTEXT);
+    }
+
+    public void updateTrackNumbers(Map<String, Integer> trackNumberMap) {
+        this.trackNumberMap = trackNumberMap;
         notifyAllRows(PAYLOAD_CONTEXT);
     }
 
