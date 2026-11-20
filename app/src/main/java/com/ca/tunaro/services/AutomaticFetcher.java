@@ -9,16 +9,14 @@ import android.widget.Toast;
 
 import com.ca.tunaro.activites.MainActivity;
 import com.ca.tunaro.database.DatabaseHelper;
+import com.ca.tunaro.database.SqlUtils;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.utils.SecurePrefs;
 
 import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-import java.util.Locale;
-import java.util.TimeZone;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -524,12 +522,7 @@ public class AutomaticFetcher {
     }
 
     private long parseTimestampToMillis(String utcTimestamp) throws ParseException {
-        SimpleDateFormat dateFormat = new SimpleDateFormat(
-                "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
-                Locale.getDefault()
-        );
-        dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-        Date date = dateFormat.parse(utcTimestamp);
+        Date date = SqlUtils.utcDateFormat().parse(utcTimestamp);
         return date.getTime();
     }
 

@@ -244,29 +244,30 @@ public class BackupRestoreActivity extends AppCompatActivity {
             int listensAdded = 0;
             int rowCount = 0;
 
-            DatabaseHelper.ListenImportBatch listenBatch = dbHelper.beginListenImportBatch();
-            for (JsonElement e : listenArray) {
-                JsonObject entry = e.getAsJsonObject();
-                String songId = resolveSongId(entry.get("songId").getAsString(), compositeToTrackId);
-                if (songId == null) continue; // unresolvable composite key — skip
-                String timestamp = entry.get("listenTimestamp").getAsString();
-                String uuid = entry.has("uuid") ? entry.get("uuid").getAsString() : null;
+            // close() flushes the final partial batch, even if the loop exits early.
+            try (DatabaseHelper.ListenImportBatch listenBatch = dbHelper.beginListenImportBatch()) {
+                for (JsonElement e : listenArray) {
+                    JsonObject entry = e.getAsJsonObject();
+                    String songId = resolveSongId(entry.get("songId").getAsString(), compositeToTrackId);
+                    if (songId == null) continue; // unresolvable composite key — skip
+                    String timestamp = entry.get("listenTimestamp").getAsString();
+                    String uuid = entry.has("uuid") ? entry.get("uuid").getAsString() : null;
 
-                dbHelper.addListenToBatch(listenBatch, uuid, songId, timestamp);
-                listensAdded++;
+                    dbHelper.addListenToBatch(listenBatch, uuid, songId, timestamp);
+                    listensAdded++;
 
-                rowCount++;
-                if (rowCount % 5000 == 0) {
-                    dbHelper.flushListenBatch(listenBatch);
-                    final int addedSnap = listensAdded;
-                    final int rowSnap = rowCount;
-                    runOnUiThread(() -> {
-                        progressBar.setProgress(rowSnap);
-                        details("Listens imported: " + addedSnap);
-                    });
+                    rowCount++;
+                    if (rowCount % 5000 == 0) {
+                        dbHelper.flushListenBatch(listenBatch);
+                        final int addedSnap = listensAdded;
+                        final int rowSnap = rowCount;
+                        runOnUiThread(() -> {
+                            progressBar.setProgress(rowSnap);
+                            details("Listens imported: " + addedSnap);
+                        });
+                    }
                 }
             }
-            dbHelper.flushListenBatch(listenBatch);
 
             // Import notes
             status("Importing notes (" + notesArray.size() + " entries)...");
