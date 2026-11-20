@@ -6,6 +6,8 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
 import android.view.View;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -20,6 +22,7 @@ import com.ca.tunaro.utils.StateMessage;
 import com.ca.tunaro.utils.SelectedSongHolder;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.utils.AppExecutors;
+import com.ca.tunaro.utils.LibrarySearch;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,6 +34,8 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
     private DatabaseHelper dbHelper;
     private final List<SongModel> allSongs = new ArrayList<>();
     private EditText searchBar;
+    // onCreate already loads once; onResume reloads only on later returns (e.g. back from SongView).
+    private boolean skipNextResumeReload = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,11 +58,29 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
         adapter = new LibrarySongAdapter(this, this);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         recyclerView.setAdapter(adapter);
+        recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(RecyclerView rv, int newState) {
+                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) hideKeyboard();
+            }
+        });
 
         searchBar = findViewById(R.id.search_bar);
         setupSearchBar();
 
-        loadSongsWithNotes();
+        loadSongsWithNotes(true);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (adapter == null) return; // onCreate bailed out early.
+        if (skipNextResumeReload) {
+            skipNextResumeReload = false;
+            return;
+        }
+        // Notes may have been added or removed elsewhere; DiffUtil keeps the scroll position.
+        loadSongsWithNotes(false);
     }
 
     private void setupSearchBar() {
@@ -68,11 +91,27 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
             }
             @Override public void afterTextChanged(Editable s) {}
         });
+        searchBar.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                hideKeyboard();
+                return true;
+            }
+            return false;
+        });
     }
 
-    private void loadSongsWithNotes() {
-        setLoadingState(true);
-        setEmptyState(false);
+    private void hideKeyboard() {
+        InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (imm != null) imm.hideSoftInputFromWindow(searchBar.getWindowToken(), 0);
+        searchBar.clearFocus();
+    }
+
+    // showSpinner is false for silent refreshes so the current list stays on screen.
+    private void loadSongsWithNotes(boolean showSpinner) {
+        if (showSpinner) {
+            setLoadingState(true);
+            setEmptyState(false);
+        }
         AppExecutors.io().execute(() -> {
             List<String> songIds = dbHelper.getSongIdsWithNotes();
             List<SongModel> songs = dbHelper.getLeanSongs(songIds);
@@ -91,30 +130,9 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
     }
 
     private void filterSongs(String query) {
-        if (query == null || query.isEmpty()) {
-            adapter.updateSongs(allSongs);
-            setEmptyState(allSongs.isEmpty());
-            return;
-        }
-
-        List<SongModel> filteredList = new ArrayList<>();
-        String lowercaseQuery = query.toLowerCase().trim();
-
-        for (SongModel song : allSongs) {
-            if (matches(song.getName(), lowercaseQuery) ||
-                    matches(song.getArtist(), lowercaseQuery) ||
-                    matches(song.getAlbumName(), lowercaseQuery)) {
-                filteredList.add(song);
-            }
-        }
-
-        adapter.updateSongs(filteredList);
-        setEmptyState(filteredList.isEmpty());
-    }
-
-    // Lean rows come from LEFT JOINs, so artist/album can be null.
-    private static boolean matches(String field, String lowercaseQuery) {
-        return field != null && field.toLowerCase().contains(lowercaseQuery);
+        List<SongModel> filtered = LibrarySearch.filter(allSongs, query);
+        adapter.updateSongs(filtered);
+        setEmptyState(filtered.isEmpty());
     }
 
     @Override
