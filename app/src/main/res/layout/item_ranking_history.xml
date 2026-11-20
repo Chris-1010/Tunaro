@@ -3,10 +3,10 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginTop="8dp"
+    android:layout_marginTop="@dimen/space_sm"
     android:clickable="true"
     android:focusable="true"
-    app:cardBackgroundColor="#1AFFFFFF"
+    app:cardBackgroundColor="@color/divider"
     app:cardCornerRadius="12dp"
     app:cardElevation="0dp">
 
@@ -37,7 +37,7 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:text="Champion"
-                android:textColor="@color/white"
+                android:textColor="@color/text_primary"
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
@@ -55,16 +55,16 @@
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
                     android:maxLines="1"
-                    android:textColor="@color/faintTanAccent"
-                    android:textSize="12sp" />
+                    android:textColor="@color/accent_muted"
+                    android:textSize="@dimen/text_caption" />
 
                 <TextView
                     android:id="@+id/history_dot"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text=" · "
-                    android:textColor="@color/faintTanAccent"
-                    android:textSize="12sp"
+                    android:textColor="@color/accent_muted"
+                    android:textSize="@dimen/text_caption"
                     android:visibility="gone" />
 
                 <LinearLayout
@@ -80,8 +80,8 @@
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
                     android:maxLines="1"
-                    android:textColor="@color/faintTanAccent"
-                    android:textSize="12sp" />
+                    android:textColor="@color/accent_muted"
+                    android:textSize="@dimen/text_caption" />
 
             </LinearLayout>
 
@@ -93,8 +93,8 @@
             android:layout_height="wrap_content"
             android:alpha="0.6"
             android:text="View"
-            android:textColor="@color/tanAccent"
-            android:textSize="12sp" />
+            android:textColor="@color/accent"
+            android:textSize="@dimen/text_caption" />
 
     </LinearLayout>
 

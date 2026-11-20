@@ -99,7 +99,7 @@ public class RankingsSnippetAdapter extends RecyclerView.Adapter<RankingsSnippet
         GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(context.getResources().getDisplayMetrics().density * 10);
         bg.setColor(active
-                ? ContextCompat.getColor(context, R.color.tanAccent)
+                ? ContextCompat.getColor(context, R.color.accent)
                 : 0x22FFFFFF);
         return bg;
     }

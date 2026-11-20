@@ -50,6 +50,9 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
     private static final Object PAYLOAD_PLAYBACK = new Object();
 
     private final Context context;
+    // Row fills: the now-playing row gets the active surface, others the standard surface.
+    private final int rowColor;
+    private final int activeRowColor;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Song_RecyclerViewInterface recyclerViewInterface;
     private ArrayList<SongModel> songModels;
@@ -79,6 +82,8 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
 
     public Song_RecyclerViewAdapter(Context context, Song_RecyclerViewInterface recyclerViewInterface, ArrayList<SongModel> songModels) {
         this.context = context;
+        this.rowColor = ContextCompat.getColor(context, R.color.surface);
+        this.activeRowColor = ContextCompat.getColor(context, R.color.active_surface);
         this.recyclerViewInterface = recyclerViewInterface;
         // Own a copy: callers mutate and re-submit their list, which would
         // otherwise leave nothing for updateSongs to diff against.
@@ -186,9 +191,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         holder.cardView.setForeground(isPlaying
                 ? context.getDrawable(R.drawable.song_active_border)
                 : null);
-        holder.cardView.setCardBackgroundColor(isPlaying
-                ? 0xFF162B1E  // dark green tint over blueBlack
-                : 0xFF111f28);
+        holder.cardView.setCardBackgroundColor(isPlaying ? activeRowColor : rowColor);
         holder.showQueuedEdge(pm.isInQueue(model));
     }
 
@@ -377,8 +380,8 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         // commits once the swipe passes a threshold, then the overlay eases out.
         private void attachQueueSwipe() {
             final int touchSlop = ViewConfiguration.get(itemView.getContext()).getScaledTouchSlop();
-            final int addColor = ContextCompat.getColor(itemView.getContext(), R.color.queueAddGreen);
-            final int removeColor = ContextCompat.getColor(itemView.getContext(), R.color.queueRemoveRed);
+            final int addColor = ContextCompat.getColor(itemView.getContext(), R.color.success);
+            final int removeColor = ContextCompat.getColor(itemView.getContext(), R.color.danger);
 
             View.OnTouchListener swipeListener = new View.OnTouchListener() {
                 float downX, downY;

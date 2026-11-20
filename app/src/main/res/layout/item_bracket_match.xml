@@ -40,7 +40,7 @@
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textColor="#F2FFFFFF"
+                android:textColor="@color/text_primary"
                 android:textSize="11sp" />
 
         </LinearLayout>
@@ -75,7 +75,7 @@
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textColor="#F2FFFFFF"
+                android:textColor="@color/text_primary"
                 android:textSize="11sp" />
 
         </LinearLayout>

@@ -31,7 +31,7 @@
                 android:layout_height="wrap_content"
                 android:gravity="center"
                 android:orientation="vertical"
-                android:padding="24dp"
+                android:padding="@dimen/space_lg"
                 app:layout_collapseMode="parallax">
 
                 <androidx.cardview.widget.CardView
@@ -64,7 +64,7 @@
                     android:scrollHorizontally="true"
                     android:singleLine="true"
                     android:textAlignment="center"
-                    android:textColor="@android:color/white"
+                    android:textColor="@color/text_primary"
                     android:textSize="40sp"
                     android:textStyle="bold"
                     tools:text="Playlist Name" />
@@ -73,9 +73,9 @@
                     android:id="@+id/detailed_songCount"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:textColor="@android:color/white"
-                    android:textSize="20sp"
+                    android:layout_marginTop="@dimen/space_sm"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_title"
                     tools:text="470 Tracks" />
             </LinearLayout>
 
@@ -92,7 +92,7 @@
                     android:id="@+id/collapsed_playlist_image_card"
                     android:layout_width="45dp"
                     android:layout_height="45dp"
-                    android:layout_marginEnd="8dp"
+                    android:layout_marginEnd="@dimen/space_sm"
                     android:alpha="0"
                     android:foreground="@drawable/image_border_small"
                     app:cardCornerRadius="8dp"
@@ -120,7 +120,7 @@
         android:background="@color/black"
         android:elevation="8dp"
         android:orientation="vertical"
-        android:padding="8dp"
+        android:padding="@dimen/space_sm"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
         <!-- Sort row: sort widgets on the left, a search toggle on the right. Tapping the search
@@ -144,10 +144,10 @@
                 android:id="@+id/sort_spinner"
                 android:layout_width="0dp"
                 android:layout_height="48dp"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="@dimen/space_sm"
                 android:layout_weight="1"
-                android:paddingHorizontal="4dp"
-                android:paddingVertical="8dp"
+                android:paddingHorizontal="@dimen/space_xs"
+                android:paddingVertical="@dimen/space_sm"
                 android:theme="@style/WhiteSpinnerTheme"
                 android:visibility="visible" />
 
@@ -156,7 +156,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="50dp"
                 android:contentDescription="Sort Direction"
-                android:padding="8dp"
+                android:padding="@dimen/space_sm"
                 android:src="@drawable/ic_arrow_downward"
                 android:visibility="visible" />
 
@@ -165,15 +165,13 @@
                 android:id="@+id/search_bar"
                 android:layout_width="0dp"
                 android:layout_height="48dp"
-                android:layout_marginEnd="8dp"
+                android:layout_marginEnd="@dimen/space_sm"
                 android:layout_weight="1"
-                android:background="@android:drawable/editbox_background"
+                style="@style/Widget.Tunaro.Input"
                 android:hint="Search songs..."
                 android:imeOptions="actionSearch"
                 android:inputType="text"
-                android:padding="8dp"
-                android:textColor="@android:color/black"
-                android:textColorHint="@android:color/darker_gray"
+                android:padding="@dimen/space_sm"
                 android:visibility="gone" />
 
             <ImageView
@@ -181,7 +179,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="50dp"
                 android:contentDescription="Search Icon"
-                android:padding="8dp"
+                android:padding="@dimen/space_sm"
                 android:src="@drawable/ic_search"
                 android:visibility="visible" />
         </LinearLayout>

@@ -25,15 +25,15 @@
             android:layout_width="26dp"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:textColor="@color/tanAccent"
-            android:textSize="14sp"
+            android:textColor="@color/accent"
+            android:textSize="@dimen/text_body_small"
             android:textStyle="bold" />
 
         <ImageView
             android:id="@+id/cover"
             android:layout_width="30dp"
             android:layout_height="30dp"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="@dimen/space_sm"
             android:scaleType="centerCrop" />
 
         <TextView
@@ -44,17 +44,17 @@
             android:layout_weight="1"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="#F2FFFFFF"
+            android:textColor="@color/text_primary"
             android:textSize="13sp" />
 
         <TextView
             android:id="@+id/score"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="@dimen/space_sm"
             android:gravity="center"
             android:minWidth="26dp"
-            android:textColor="#F2FFFFFF"
+            android:textColor="@color/text_primary"
             android:textSize="13sp"
             android:textStyle="bold" />
 

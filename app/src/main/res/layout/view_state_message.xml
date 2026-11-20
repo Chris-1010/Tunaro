@@ -30,7 +30,7 @@
         android:layout_marginTop="@dimen/space_md"
         android:gravity="center"
         android:textColor="@color/text_primary"
-        android:textSize="20sp"
+        android:textSize="@dimen/text_title"
         tools:text="Nothing here yet" />
 
     <TextView
@@ -40,7 +40,7 @@
         android:layout_marginTop="@dimen/space_sm"
         android:gravity="center"
         android:textColor="@color/text_secondary"
-        android:textSize="14sp"
+        android:textSize="@dimen/text_body_small"
         tools:text="A one-line hint about what to do next." />
 
     <com.google.android.material.button.MaterialButton
@@ -51,7 +51,7 @@
         android:layout_marginTop="@dimen/space_sm"
         android:textAllCaps="false"
         android:textColor="@color/accent"
-        android:textSize="16sp"
+        android:textSize="@dimen/text_body"
         android:visibility="gone"
         app:rippleColor="@color/accent_muted"
         tools:text="Retry"

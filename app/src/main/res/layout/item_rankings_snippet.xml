@@ -4,16 +4,16 @@
     android:id="@+id/snippet_row"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginTop="4dp"
+    android:layout_marginTop="@dimen/space_xs"
     android:background="@drawable/rankings_snippet_row_bg"
     android:clickable="true"
     android:focusable="true"
     android:gravity="center_vertical"
     android:orientation="horizontal"
     android:paddingStart="6dp"
-    android:paddingTop="4dp"
+    android:paddingTop="@dimen/space_xs"
     android:paddingEnd="10dp"
-    android:paddingBottom="4dp">
+    android:paddingBottom="@dimen/space_xs">
 
     <ImageButton
         android:id="@+id/snippet_play_button"
@@ -36,7 +36,7 @@
         android:ellipsize="end"
         android:maxLines="1"
         android:text="Snippet"
-        android:textColor="@color/white"
+        android:textColor="@color/text_primary"
         android:textSize="13sp" />
 
 </LinearLayout>

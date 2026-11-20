@@ -13,7 +13,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="40dp"
         android:text="Restore Backup"
-        android:textColor="@color/white"
+        android:textColor="@color/text_primary"
         android:textSize="30sp"
         android:textStyle="bold"
         app:layout_constraintEnd_toEndOf="parent"
@@ -23,7 +23,7 @@
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="24dp"
+        android:layout_marginTop="@dimen/space_lg"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/title">
 
@@ -31,68 +31,68 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:padding="@dimen/space_md">
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="@dimen/space_md"
                 android:text="Select your tunaro_backup_*.json file. Track metadata will be fetched from the Spotify API before import. This may take several minutes."
-                android:textColor="@color/white"
-                android:textSize="14sp" />
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body_small" />
 
             <Button
                 android:id="@+id/select_file_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="@dimen/space_md"
                 android:text="Select Backup File"
-                android:textSize="16sp" />
+                android:textSize="@dimen/text_body" />
 
             <TextView
                 android:id="@+id/selected_file_text"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp"
+                android:layout_marginBottom="@dimen/space_lg"
                 android:fontFamily="monospace"
-                android:textColor="@color/white"
-                android:textSize="14sp"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body_small"
                 android:visibility="gone" />
 
             <Button
                 android:id="@+id/start_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="@dimen/space_md"
                 android:enabled="false"
                 android:text="Start Restore"
-                android:textSize="16sp" />
+                android:textSize="@dimen/text_body" />
 
             <LinearLayout
                 android:id="@+id/warning_container"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="@dimen/space_md"
                 android:background="#33FFFFFF"
                 android:orientation="vertical"
-                android:padding="16dp"
+                android:padding="@dimen/space_md"
                 android:visibility="gone">
 
                 <ProgressBar
                     android:layout_width="48dp"
                     android:layout_height="48dp"
                     android:layout_gravity="center_horizontal"
-                    android:layout_marginBottom="16dp"
+                    android:layout_marginBottom="@dimen/space_md"
                     android:indeterminate="true" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="8dp"
+                    android:layout_marginBottom="@dimen/space_sm"
                     android:text="Please stay on this screen until processing completes"
                     android:textAlignment="center"
-                    android:textColor="@color/white"
-                    android:textSize="14sp"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body_small"
                     android:textStyle="bold" />
 
             </LinearLayout>
@@ -102,25 +102,25 @@
                 style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
+                android:layout_marginBottom="@dimen/space_sm"
                 android:visibility="gone" />
 
             <TextView
                 android:id="@+id/status_text"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="@dimen/space_md"
                 android:textAlignment="center"
-                android:textColor="@color/white"
-                android:textSize="14sp" />
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body_small" />
 
             <TextView
                 android:id="@+id/details_text"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:fontFamily="monospace"
-                android:textColor="@color/white"
-                android:textSize="12sp"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_caption"
                 android:visibility="gone" />
 
         </LinearLayout>

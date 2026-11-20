@@ -256,7 +256,7 @@ public class AlbumView extends BaseActivity implements Song_RecyclerViewInterfac
             view.setVisibility(View.GONE);
             return;
         }
-        final int linkColor = ContextCompat.getColor(this, R.color.tanAccent);
+        final int linkColor = ContextCompat.getColor(this, R.color.accent);
         SpannableStringBuilder text = new SpannableStringBuilder();
         for (int i = 0; i < artists.size(); i++) {
             Artist artist = artists.get(i);
@@ -280,7 +280,7 @@ public class AlbumView extends BaseActivity implements Song_RecyclerViewInterfac
         }
         view.setText(text);
         view.setMovementMethod(LinkMovementMethod.getInstance());
-        view.setHighlightColor(ContextCompat.getColor(this, R.color.faintTanAccent));
+        view.setHighlightColor(ContextCompat.getColor(this, R.color.accent_muted));
         view.setVisibility(text.length() > 0 ? View.VISIBLE : View.GONE);
     }
 
@@ -593,7 +593,7 @@ public class AlbumView extends BaseActivity implements Song_RecyclerViewInterfac
                 Snackbar.make(findViewById(R.id.main), R.string.album_refresh_failed, Snackbar.LENGTH_LONG)
                         .setAnchorView(R.id.playback_bar)
                         .setAction(R.string.retry, v -> retry())
-                        .setActionTextColor(ContextCompat.getColor(this, R.color.tanAccent))
+                        .setActionTextColor(ContextCompat.getColor(this, R.color.accent))
                         .show();
             } else {
                 StateMessage.showError(findViewById(R.id.tracks_error),

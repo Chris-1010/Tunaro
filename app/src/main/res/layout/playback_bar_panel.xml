@@ -16,14 +16,14 @@
         android:id="@+id/panel_album_cover"
         android:layout_width="60dp"
         android:layout_height="60dp"
-        android:layout_marginStart="8dp"
+        android:layout_marginStart="@dimen/space_sm"
         android:contentDescription="Album Cover" />
 
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="12dp"
-        android:layout_marginEnd="8dp"
+        android:layout_marginEnd="@dimen/space_sm"
         android:layout_weight="1"
         android:orientation="vertical">
 
@@ -33,7 +33,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="@android:color/white"
+            android:textColor="@color/text_primary"
             android:textSize="18sp"
             android:textStyle="bold" />
 
@@ -43,7 +43,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="#CCCCCC"
-            android:textSize="14sp" />
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_body_small" />
     </LinearLayout>
 </LinearLayout>

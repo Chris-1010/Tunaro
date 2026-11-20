@@ -5,10 +5,10 @@
     android:id="@+id/albumCardView"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginStart="8dp"
+    android:layout_marginStart="@dimen/space_sm"
     android:layout_marginTop="12dp"
-    android:layout_marginEnd="8dp"
-    app:cardBackgroundColor="@color/blueBlack"
+    android:layout_marginEnd="@dimen/space_sm"
+    app:cardBackgroundColor="@color/surface"
     app:cardCornerRadius="16dp"
     app:cardElevation="6dp">
 
@@ -47,7 +47,7 @@
                 android:marqueeRepeatLimit="marquee_forever"
                 android:scrollHorizontally="true"
                 android:singleLine="true"
-                android:textColor="@android:color/white"
+                android:textColor="@color/text_primary"
                 android:textSize="15sp"
                 android:textStyle="bold"
                 tools:text="Album Name" />
@@ -64,12 +64,12 @@
                     android:id="@+id/albumTypeBadge"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="8dp"
+                    android:layout_marginEnd="@dimen/space_sm"
                     android:background="@drawable/rounded_md"
-                    android:backgroundTint="@color/dark_blue"
+                    android:backgroundTint="@color/brand_blue"
                     android:paddingHorizontal="10dp"
-                    android:paddingVertical="4dp"
-                    android:textColor="@android:color/white"
+                    android:paddingVertical="@dimen/space_xs"
+                    android:textColor="@color/text_primary"
                     android:textSize="11sp"
                     android:textStyle="bold"
                     tools:text="Single" />
@@ -81,8 +81,8 @@
                     android:layout_weight="1"
                     android:ellipsize="end"
                     android:maxLines="1"
-                    android:textColor="#B3FFFFFF"
-                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="@dimen/text_caption"
                     tools:text="2024 · 12 tracks" />
             </LinearLayout>
 
@@ -91,7 +91,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
-                android:textColor="#80FFFFFF"
+                android:textColor="@color/text_tertiary"
                 android:textSize="11sp"
                 android:visibility="gone"
                 tools:text="Popularity: 72/100"

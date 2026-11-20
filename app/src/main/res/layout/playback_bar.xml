@@ -10,7 +10,7 @@
     android:paddingTop="5dp"
     android:layout_marginStart="6dp"
     android:layout_marginEnd="6dp"
-    android:layout_marginBottom="16dp"
+    android:layout_marginBottom="@dimen/space_md"
     android:visibility="gone"
     tools:visibility="visible">
 
@@ -45,7 +45,7 @@
         android:id="@+id/playback_album_cover"
         android:layout_width="60dp"
         android:layout_height="60dp"
-        android:layout_marginStart="8dp"
+        android:layout_marginStart="@dimen/space_sm"
         android:contentDescription="Album Cover"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -57,7 +57,7 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="12dp"
-        android:layout_marginEnd="8dp"
+        android:layout_marginEnd="@dimen/space_sm"
         android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toStartOf="@+id/playback_play_pause"
@@ -70,7 +70,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="@android:color/white"
+            android:textColor="@color/text_primary"
             android:textSize="18sp"
             android:textStyle="bold"
             tools:text="Song Name" />
@@ -81,8 +81,8 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="#CCCCCC"
-            android:textSize="14sp"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_body_small"
             tools:text="Artist Name" />
     </LinearLayout>
 
@@ -90,7 +90,7 @@
         android:id="@+id/playback_play_pause"
         android:layout_width="48dp"
         android:layout_height="48dp"
-        android:layout_marginEnd="8dp"
+        android:layout_marginEnd="@dimen/space_sm"
         android:background="?attr/selectableItemBackgroundBorderless"
         android:contentDescription="Play/Pause"
         android:src="@drawable/play_circle_filled"
@@ -110,7 +110,7 @@
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="@+id/playback_play_pause"
         app:layout_constraintEnd_toEndOf="@+id/playback_play_pause"
-        app:tint="#FFA500"
+        app:tint="@color/warning"
         tools:visibility="visible" />
 
     <SeekBar
@@ -122,9 +122,9 @@
         android:layout_marginEnd="-16dp"
         android:maxHeight="2dp"
         android:minHeight="2dp"
-        android:paddingStart="16dp"
+        android:paddingStart="@dimen/space_md"
         android:paddingTop="7dp"
-        android:paddingEnd="16dp"
+        android:paddingEnd="@dimen/space_md"
         android:paddingBottom="7dp"
         android:progressDrawable="@drawable/thin_seekbar_progress"
         android:splitTrack="false"

@@ -32,15 +32,15 @@
                 android:layout_height="wrap_content"
                 android:gravity="center_horizontal"
                 android:orientation="vertical"
-                android:paddingHorizontal="16dp"
+                android:paddingHorizontal="@dimen/space_md"
                 android:paddingTop="?attr/actionBarSize"
-                android:paddingBottom="16dp"
+                android:paddingBottom="@dimen/space_md"
                 app:layout_collapseMode="parallax">
 
                 <androidx.cardview.widget.CardView
                     android:layout_width="220dp"
                     android:layout_height="220dp"
-                    app:cardBackgroundColor="@color/blueBlack"
+                    app:cardBackgroundColor="@color/surface"
                     app:cardCornerRadius="8dp"
                     app:cardElevation="8dp">
 
@@ -58,12 +58,12 @@
                     android:id="@+id/album_name"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
+                    android:layout_marginTop="@dimen/space_md"
                     android:ellipsize="end"
                     android:gravity="center"
                     android:maxLines="2"
-                    android:textColor="@android:color/white"
-                    android:textSize="28sp"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_display"
                     android:textStyle="bold"
                     tools:text="Album Name" />
 
@@ -96,7 +96,7 @@
                         <View
                             android:layout_width="120dp"
                             android:layout_height="48dp"
-                            android:layout_marginTop="16dp"
+                            android:layout_marginTop="@dimen/space_md"
                             android:background="@color/shimmer_placeholder" />
                     </LinearLayout>
                 </com.facebook.shimmer.ShimmerFrameLayout>
@@ -113,14 +113,14 @@
                         android:id="@+id/album_artists"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
+                        android:layout_marginTop="@dimen/space_xs"
                         android:gravity="center"
                         android:minHeight="32dp"
-                        android:paddingHorizontal="8dp"
-                        android:paddingVertical="4dp"
-                        android:textColor="@color/tanAccent"
-                        android:textColorLink="@color/tanAccent"
-                        android:textSize="16sp"
+                        android:paddingHorizontal="@dimen/space_sm"
+                        android:paddingVertical="@dimen/space_xs"
+                        android:textColor="@color/accent"
+                        android:textColorLink="@color/accent"
+                        android:textSize="@dimen/text_body"
                         android:textStyle="bold"
                         android:visibility="gone"
                         tools:text="Artist One, Artist Two"
@@ -129,7 +129,7 @@
                     <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
+                        android:layout_marginTop="@dimen/space_xs"
                         android:gravity="center_vertical"
                         android:orientation="horizontal">
 
@@ -137,11 +137,11 @@
                             android:id="@+id/album_type_chip"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginEnd="8dp"
+                            android:layout_marginEnd="@dimen/space_sm"
                             android:background="@drawable/album_type_chip"
                             android:paddingHorizontal="10dp"
                             android:paddingVertical="2dp"
-                            android:textSize="12sp"
+                            android:textSize="@dimen/text_caption"
                             android:textStyle="bold"
                             android:visibility="gone"
                             tools:text="Album"
@@ -152,8 +152,8 @@
                             android:id="@+id/album_meta"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:textColor="#B3FFFFFF"
-                            android:textSize="14sp"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="@dimen/text_body_small"
                             tools:text="2019 · 12 songs · 43 min" />
                     </LinearLayout>
 
@@ -162,12 +162,12 @@
                         android:id="@+id/album_label"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
+                        android:layout_marginTop="@dimen/space_xs"
                         android:ellipsize="end"
                         android:gravity="center"
                         android:maxLines="1"
-                        android:textColor="#80FFFFFF"
-                        android:textSize="12sp"
+                        android:textColor="@color/text_tertiary"
+                        android:textSize="@dimen/text_caption"
                         android:visibility="gone"
                         tools:text="Some Label Records"
                         tools:visibility="visible" />
@@ -176,22 +176,22 @@
                         android:id="@+id/album_play_button"
                         android:layout_width="wrap_content"
                         android:layout_height="48dp"
-                        android:layout_marginTop="16dp"
+                        android:layout_marginTop="@dimen/space_md"
                         android:enabled="false"
                         android:insetTop="0dp"
                         android:insetBottom="0dp"
                         android:minWidth="128dp"
                         android:text="@string/album_play"
                         android:textAllCaps="false"
-                        android:textColor="@color/blueBlack"
-                        android:textSize="16sp"
+                        android:textColor="@color/on_accent"
+                        android:textSize="@dimen/text_body"
                         android:textStyle="bold"
-                        app:backgroundTint="@color/tanAccent"
+                        app:backgroundTint="@color/accent"
                         app:cornerRadius="24dp"
                         app:icon="@drawable/ic_notif_play"
                         app:iconGravity="textStart"
                         app:iconPadding="8dp"
-                        app:iconTint="@color/blueBlack" />
+                        app:iconTint="@color/on_accent" />
                 </LinearLayout>
             </LinearLayout>
 
@@ -230,12 +230,12 @@
                     android:id="@+id/collapsed_album_name"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
+                    android:layout_marginEnd="@dimen/space_md"
                     android:alpha="0"
                     android:ellipsize="end"
                     android:singleLine="true"
-                    android:textColor="@android:color/white"
-                    android:textSize="20sp"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_title"
                     android:textStyle="bold"
                     tools:alpha="1"
                     tools:text="Album Name" />

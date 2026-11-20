@@ -103,7 +103,7 @@ public final class UiFeedback {
 
         if (hasAction) {
             snackbar.setAction(actionLabel, v -> action.run());
-            snackbar.setActionTextColor(ContextCompat.getColor(activity, R.color.tanAccent));
+            snackbar.setActionTextColor(ContextCompat.getColor(activity, R.color.accent));
         }
         snackbar.show();
     }

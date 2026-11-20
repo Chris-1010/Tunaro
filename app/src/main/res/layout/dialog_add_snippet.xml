@@ -10,13 +10,13 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="@dimen/space_md">
 
         <!-- Preview Section -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
+            android:layout_marginBottom="@dimen/space_md"
             app:cardCornerRadius="8dp"
             app:cardElevation="4dp">
 
@@ -24,7 +24,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:padding="8dp">
+                android:padding="@dimen/space_sm">
 
                 <ImageView
                     android:id="@+id/preview_album_cover"
@@ -36,7 +36,7 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:layout_marginStart="16dp"
+                    android:layout_marginStart="@dimen/space_md"
                     android:gravity="center_vertical"
                     android:orientation="vertical">
 
@@ -56,7 +56,7 @@
                         android:layout_height="wrap_content"
                         android:ellipsize="end"
                         android:maxLines="1"
-                        android:textSize="14sp"
+                        android:textSize="@dimen/text_body_small"
                         tools:text="Artist Name" />
                 </LinearLayout>
             </LinearLayout>
@@ -66,7 +66,7 @@
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
+            android:layout_marginBottom="@dimen/space_md"
             android:hint="Snippet Title"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
@@ -83,22 +83,22 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Select Time Range"
-            android:textSize="16sp"
+            android:textSize="@dimen/text_body"
             android:textStyle="bold"
-            android:layout_marginBottom="8dp" />
+            android:layout_marginBottom="@dimen/space_sm" />
 
         <!-- Start Time Section -->
         <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp">
+            android:layout_marginTop="@dimen/space_sm">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
                 android:layout_centerHorizontal="true"
                 android:text="Start Time"
-                android:textSize="20sp"
+                android:textSize="@dimen/text_title"
                 android:textStyle="bold" />
 
             <CheckBox
@@ -125,7 +125,7 @@
                 android:layout_height="wrap_content"
                 android:text="m"
                 android:textSize="18sp"
-                android:layout_marginEnd="8dp" />
+                android:layout_marginEnd="@dimen/space_sm" />
 
             <NumberPicker
                 android:id="@+id/start_seconds_picker"
@@ -137,7 +137,7 @@
                 android:layout_height="wrap_content"
                 android:text="s"
                 android:textSize="18sp"
-                android:layout_marginEnd="8dp" />
+                android:layout_marginEnd="@dimen/space_sm" />
 
             <NumberPicker
                 android:id="@+id/start_milliseconds_picker"
@@ -155,14 +155,14 @@
         <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp">
+            android:layout_marginTop="@dimen/space_md">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_centerHorizontal="true"
                 android:text="End Time"
-                android:textSize="20sp"
+                android:textSize="@dimen/text_title"
                 android:textStyle="bold" />
 
             <CheckBox
@@ -178,7 +178,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center"
-            android:layout_marginBottom="16dp">
+            android:layout_marginBottom="@dimen/space_md">
 
             <NumberPicker
                 android:id="@+id/end_minutes_picker"
@@ -190,7 +190,7 @@
                 android:layout_height="wrap_content"
                 android:text="m"
                 android:textSize="18sp"
-                android:layout_marginEnd="8dp" />
+                android:layout_marginEnd="@dimen/space_sm" />
 
             <NumberPicker
                 android:id="@+id/end_seconds_picker"
@@ -202,7 +202,7 @@
                 android:layout_height="wrap_content"
                 android:text="s"
                 android:textSize="18sp"
-                android:layout_marginEnd="8dp" />
+                android:layout_marginEnd="@dimen/space_sm" />
 
             <NumberPicker
                 android:id="@+id/end_milliseconds_picker"
@@ -222,7 +222,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Test Playback"
-            android:layout_marginBottom="16dp"
+            android:layout_marginBottom="@dimen/space_md"
             app:icon="@android:drawable/ic_media_play"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
 
