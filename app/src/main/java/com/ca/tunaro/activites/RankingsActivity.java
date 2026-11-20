@@ -2,6 +2,7 @@ package com.ca.tunaro.activites;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
@@ -73,10 +74,25 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Random random = new Random();
 
-    // Lazily-filled playlist_id → cover url cache. Entering the activity no longer
-    // preloads the whole library; entrant songs are read only when a game starts,
-    // for the chosen playlists alone.
-    private final Map<String, String> playlistCoverById = new HashMap<>();
+    // playlist_id → playlist row, filled off the main thread whenever a game or a
+    // history entry is loaded, and read on the main thread for covers and names.
+    // Main thread only: background loads hand their rows over via runOnUiThread.
+    private final Map<String, PlaylistModel> playlistById = new HashMap<>();
+
+    // Per-entrant data for the live game, prefetched off the main thread when the
+    // game starts or resumes so binding each match is pure memory.
+    private Map<String, List<String>> playlistsBySong = new HashMap<>();
+    private Map<String, List<SongSnippet>> snippetsBySong = new HashMap<>();
+    // Prefetched entrant data for the restored resumable game.
+    private GameData resumeData;
+
+    // True while a completed game is being written; blocks match input meanwhile.
+    private boolean finalising = false;
+    // Swallows a second tap on a pick/undo button landing right after the first.
+    private static final long PICK_DEBOUNCE_MS = 350;
+    private long lastPickAtMs = 0;
+    // Set when a contender's detail screen opens, so its snippets are re-read on return.
+    private boolean refreshEntrantDataOnResume = false;
 
     // The live game, its persisted row id, the entrant songs (kept so an undo can
     // rebuild the bracket by replay), and the playlists it was built from (for the
@@ -159,11 +175,7 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
 
         // Building the pool and restoring any saved game issue several DB reads,
         // so load off the main thread and show a loading state meanwhile.
-        showLoadingPhase();
-        executor.execute(() -> {
-            loadData(bgDbHelper);
-            runOnUiThread(this::showSetupPhase);
-        });
+        reloadAndShowSetup();
     }
 
     private void bindViews() {
@@ -275,9 +287,64 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
         completedGames = db.getCompletedGames();
     }
 
+    // Reload the saved state off the main thread, then show the setup screen.
+    private void reloadAndShowSetup() {
+        showLoadingPhase();
+        executor.execute(() -> {
+            loadData(bgDbHelper);
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (resumeData != null) playlistById.putAll(resumeData.playlists);
+                showSetupPhase();
+            });
+        });
+    }
+
+    // Entrant data a game needs while its matches are on screen.
+    private static final class GameData {
+        final Map<String, List<String>> playlistsBySong;
+        final Map<String, List<SongSnippet>> snippetsBySong = new HashMap<>();
+        final Map<String, PlaylistModel> playlists = new HashMap<>();
+
+        GameData(Map<String, List<String>> playlistsBySong) {
+            this.playlistsBySong = playlistsBySong;
+        }
+    }
+
+    // Runs off the main thread: badge memberships, snippets and playlist rows for
+    // every entrant in a handful of queries.
+    private static GameData loadGameData(DatabaseHelper db, List<SongModel> entrants,
+                                         List<String> playlistIds) {
+        List<String> ids = new ArrayList<>();
+        for (SongModel song : entrants) ids.add(song.getId());
+        GameData data = new GameData(db.getActivePlaylistIdsForSongs(ids));
+        for (SongSnippet snippet : db.getSongSnippetsForUris(ids)) {
+            List<SongSnippet> list = data.snippetsBySong.get(snippet.getSongId());
+            if (list == null) {
+                list = new ArrayList<>();
+                data.snippetsBySong.put(snippet.getSongId(), list);
+            }
+            list.add(snippet);
+        }
+        if (playlistIds != null) {
+            for (String id : playlistIds) {
+                PlaylistModel playlist = db.getPlaylistById(id);
+                if (playlist != null) data.playlists.put(id, playlist);
+            }
+        }
+        return data;
+    }
+
+    private void applyGameData(GameData data) {
+        playlistsBySong = data != null ? data.playlistsBySong : new HashMap<>();
+        snippetsBySong = data != null ? data.snippetsBySong : new HashMap<>();
+        if (data != null) playlistById.putAll(data.playlists);
+    }
+
     private void restoreInProgressGame(DatabaseHelper db) {
         resumeTournament = null;
         resumeGame = null;
+        resumeData = null;
 
         RankingGame game = db.getInProgressGame();
         if (game == null) return;
@@ -301,21 +368,34 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
         if (resumeTournament.isFinished()) {
             // Already complete but never finalised (e.g. killed mid-finish): wrap it
             // up now rather than offering an already-decided game to resume.
-            finaliseCompletedGame(db, game.id, resumeTournament, game.entrantIds);
-            resumeTournament = null;
-            resumeGame = null;
+            SwissTournament finished = resumeTournament;
+            try {
+                db.runInTransaction(() ->
+                        finaliseCompletedGame(db, game.id, finished, game.entrantIds));
+                resumeTournament = null;
+                resumeGame = null;
+                return;
+            } catch (RuntimeException e) {
+                // Rolled back: keep it resumable, since resuming retries the save.
+                Log.e(TAG, "Failed to finalise restored game " + game.id, e);
+            }
         }
+        resumeData = loadGameData(db, entrants, game.playlistIds);
     }
 
     // ---- Phases ----
 
     private void showLoadingPhase() {
+        showLoadingPhase("Loading…");
+    }
+
+    private void showLoadingPhase(String message) {
         setupPhase.setVisibility(View.VISIBLE);
         matchPhase.setVisibility(View.GONE);
         resultsPhase.setVisibility(View.GONE);
 
         resumeCard.setVisibility(View.GONE);
-        poolSummary.setText("Loading…");
+        poolSummary.setText(message);
         startButton.setVisibility(View.GONE);
         pastResultsLabel.setVisibility(View.GONE);
     }
@@ -406,16 +486,20 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
             // Insert here so the id is known before the first choice persists.
             long gameId = bgDbHelper.startInProgressGame(
                     entrants.size(), newTournament.getEntrantIds(), selectedIds);
+            GameData data = loadGameData(bgDbHelper, entrants, selectedIds);
 
             runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
                 tournament = newTournament;
                 currentEntrants = entrants;
                 currentGameId = gameId;
+                applyGameData(data);
                 setActiveGame(selectedIds);
 
                 // Starting a new game supersedes any resumable one.
                 resumeTournament = null;
                 resumeGame = null;
+                resumeData = null;
 
                 showMatchPhase();
             });
@@ -464,9 +548,11 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
         tournament = resumeTournament;
         currentEntrants = resumeEntrants;
         currentGameId = resumeGame.id;
+        applyGameData(resumeData);
         setActiveGame(resumeGame.playlistIds);
         resumeTournament = null;
         resumeGame = null;
+        resumeData = null;
         showMatchPhase();
     }
 
@@ -479,13 +565,10 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
         }
     }
 
-    // Playlist cover url, cached across calls (badges + resume strip reuse it).
+    // Playlist cover url from the prefetched rows (null falls back to the placeholder).
     private String coverForPlaylist(String id) {
-        if (playlistCoverById.containsKey(id)) return playlistCoverById.get(id);
-        PlaylistModel playlist = dbHelper.getPlaylistById(id);
-        String cover = playlist != null ? playlist.getImage() : null;
-        playlistCoverById.put(id, cover);
-        return cover;
+        PlaylistModel playlist = playlistById.get(id);
+        return playlist != null ? playlist.getImage() : null;
     }
 
     private void showMatchPhase() {
@@ -594,7 +677,8 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
             return;
         }
 
-        Set<String> songPlaylists = new LinkedHashSet<>(dbHelper.getActivePlaylistIdsForSong(song.getId()));
+        List<String> memberOf = playlistsBySong.get(song.getId());
+        Set<String> songPlaylists = memberOf != null ? new LinkedHashSet<>(memberOf) : Collections.emptySet();
         int size = dpToPx(20);
         int gap = dpToPx(3);
         int added = 0;
@@ -617,13 +701,30 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
         container.setVisibility(added > 0 ? View.VISIBLE : View.GONE);
     }
 
+    private List<SongSnippet> snippetsFor(SongModel song) {
+        List<SongSnippet> snippets = snippetsBySong.get(song.getId());
+        return snippets != null ? new ArrayList<>(snippets) : new ArrayList<>();
+    }
+
     private void bindSnippets(SongModel song, RankingsSnippetAdapter adapter, MaxHeightRecyclerView list) {
-        List<SongSnippet> snippets = dbHelper.getSongSnippets(song.getId());
+        List<SongSnippet> snippets = snippetsFor(song);
         adapter.updateSnippets(snippets);
         list.setVisibility(snippets.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
+    // Match input is accepted only while a live match is on screen, nothing is being
+    // saved, and the previous pick/undo was not a split second ago.
+    private boolean acceptMatchInput() {
+        if (finalising || tournament == null || tournament.isFinished()) return false;
+        if (matchPhase.getVisibility() != View.VISIBLE) return false;
+        long now = SystemClock.uptimeMillis();
+        if (now - lastPickAtMs < PICK_DEBOUNCE_MS) return false;
+        lastPickAtMs = now;
+        return true;
+    }
+
     private void chooseWinner(SongModel winner) {
+        if (winner == null || !acceptMatchInput()) return;
         tournament.reportWinner(winner);
 
         // Elo is only committed when the game completes, so a wrong pick can be
@@ -640,7 +741,8 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
     // the bracket by replaying the rest. Because ratings aren't applied until the
     // game finishes, there is nothing else to revert.
     private void undoLastMatch() {
-        if (tournament.getUserMatchesPlayed() == 0) return;
+        if (tournament == null || tournament.getUserMatchesPlayed() == 0) return;
+        if (!acceptMatchInput()) return;
 
         List<String> decisions = tournament.getDecisionWinnerIds();
         decisions.remove(decisions.size() - 1);
@@ -662,13 +764,14 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
     private static final long MIN_RESEEK_DELTA_MS = 5_000;
 
     private void previewContender(SongModel song) {
+        if (song == null || finalising) return;
         // Re-tapping the card while this same song is already previewing jumps to a
         // fresh random spot, so a second listen samples a different part.
         if (song.getId().equals(currentPlayingSongId) && currentlyPlaying) {
             playSnippetPreview(randomSeekSnippet(song, playbackManager.getCurrentPositionMs()));
             return;
         }
-        List<SongSnippet> snippets = dbHelper.getSongSnippets(song.getId());
+        List<SongSnippet> snippets = snippetsFor(song);
         SongSnippet chosen = pickPreviewSnippet(song, snippets);
         playSnippetPreview(chosen);
     }
@@ -723,15 +826,48 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
 
     // ---- Finishing / results ----
 
+    // Write the finished game and its Elo off the main thread in one transaction, so
+    // a crash mid-way can never leave ratings half-applied, then show the standings.
+    // Match input stays blocked until the write lands.
     private void finishCurrentGame() {
-        Map<String, int[]> eloChanges =
-                finaliseCompletedGame(dbHelper, currentGameId, tournament, tournament.getEntrantIds());
-        completedGames = dbHelper.getCompletedGames();
+        if (finalising) return;
+        finalising = true;
+        showLoadingPhase("Saving results…");
 
-        viewingHistory = false;
-        leaderboardAdapter.setEloChanges(eloChanges);
-        resultsPlaylistIds = new ArrayList<>(activeGamePlaylistIds);
-        showResults(tournament.getFinalRanking(), "Final standings", "Play Again");
+        final SwissTournament finished = tournament;
+        final long gameId = currentGameId;
+        final List<String> entrantIds = finished.getEntrantIds();
+        executor.execute(() -> {
+            Map<String, int[]> eloChanges;
+            List<RankingGame> completed;
+            try {
+                final List<Map<String, int[]>> holder = new ArrayList<>(1);
+                bgDbHelper.runInTransaction(() ->
+                        holder.add(finaliseCompletedGame(bgDbHelper, gameId, finished, entrantIds)));
+                eloChanges = holder.get(0);
+                completed = bgDbHelper.getCompletedGames();
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Failed to finalise game " + gameId, e);
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    finalising = false;
+                    showMessage("Couldn't save the results. Resume the game to try again.");
+                    // The transaction rolled back, so the game is still saved in
+                    // progress; reload so it is offered for resume.
+                    reloadAndShowSetup();
+                });
+                return;
+            }
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                finalising = false;
+                completedGames = completed;
+                viewingHistory = false;
+                leaderboardAdapter.setEloChanges(eloChanges);
+                resultsPlaylistIds = new ArrayList<>(activeGamePlaylistIds);
+                showResults(finished.getFinalRanking(), "Final standings", "Play Again");
+            });
+        });
     }
 
     // Persist a completed game and roll its results into the Elo ratings. Safe to
@@ -774,7 +910,16 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
                 SongModel song = bgDbHelper.getLeanSong(id);
                 if (song != null) ranking.add(new RankedSong(rank++, song));
             }
+            Map<String, PlaylistModel> playlists = new HashMap<>();
+            if (game.playlistIds != null) {
+                for (String id : game.playlistIds) {
+                    PlaylistModel playlist = bgDbHelper.getPlaylistById(id);
+                    if (playlist != null) playlists.put(id, playlist);
+                }
+            }
             runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                playlistById.putAll(playlists);
                 viewingHistory = true;
                 leaderboardAdapter.setEloChanges(null);
                 resultsPlaylistIds = game.playlistIds != null
@@ -809,7 +954,7 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
         int shown = 0;
         for (String id : ids) {
             if (shown >= MAX_RESULTS_ICONS) break;
-            PlaylistModel playlist = dbHelper.getPlaylistById(id);
+            PlaylistModel playlist = playlistById.get(id);
             String name = playlist != null ? playlist.getPlaylistName() : "Playlist";
 
             ImageView icon = new ImageView(this);
@@ -904,10 +1049,34 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
     // a contender card, or tapping a song in the standings ladder or a round's box.
     private void openSongView(SongModel song) {
         if (song == null) return;
+        // Snippets or playlist membership may be edited there; re-read on return.
+        if (tournament != null && !tournament.isFinished()) refreshEntrantDataOnResume = true;
         SelectedSongHolder.getInstance().setSelectedSong(song);
         Intent intent = new Intent(this, SongView.class);
         intent.putExtra("source", "rankings");
         startActivity(intent);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (!refreshEntrantDataOnResume || tournament == null || finalising) return;
+        refreshEntrantDataOnResume = false;
+        final long gameId = currentGameId;
+        final List<SongModel> entrants = new ArrayList<>(currentEntrants);
+        executor.execute(() -> {
+            GameData data = loadGameData(bgDbHelper, entrants, null);
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed() || gameId != currentGameId) return;
+                applyGameData(data);
+                if (matchPhase.getVisibility() == View.VISIBLE && !tournament.isFinished()) {
+                    bindBadges(tournament.getContenderA(), badgesA);
+                    bindBadges(tournament.getContenderB(), badgesB);
+                    bindSnippets(tournament.getContenderA(), snippetAdapterA, snippetsA);
+                    bindSnippets(tournament.getContenderB(), snippetAdapterB, snippetsB);
+                }
+            });
+        });
     }
 
     @Override

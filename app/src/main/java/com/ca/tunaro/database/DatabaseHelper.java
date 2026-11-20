@@ -1686,6 +1686,33 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return ids;
     }
 
+    /**
+     * Active playlist ids for each of {@code spotifyUris} in one query, keyed by uri.
+     * Songs in no active playlist are absent from the map.
+     */
+    public Map<String, List<String>> getActivePlaylistIdsForSongs(List<String> spotifyUris) {
+        Map<String, List<String>> byUri = new HashMap<>();
+        if (spotifyUris == null || spotifyUris.isEmpty()) return byUri;
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT " + COLUMN_SPOTIFY_URI + ", " + COLUMN_PLAYLIST_ID + " FROM " + TABLE_SONG_PLAYLISTS +
+                        " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + SqlUtils.placeholders(spotifyUris.size()) + ")" +
+                        " AND " + COLUMN_REMOVED_AT + " IS NULL",
+                spotifyUris.toArray(new String[0]));
+        if (cursor.moveToFirst()) {
+            do {
+                List<String> ids = byUri.get(cursor.getString(0));
+                if (ids == null) {
+                    ids = new ArrayList<>();
+                    byUri.put(cursor.getString(0), ids);
+                }
+                ids.add(cursor.getString(1));
+            } while (cursor.moveToNext());
+        }
+        cursor.close();
+        return byUri;
+    }
+
     public List<String> getActiveSongUrisForPlaylist(String playlistId) {
         List<String> uris = new ArrayList<>();
         SQLiteDatabase db = this.getReadableDatabase();

@@ -126,10 +126,25 @@ public class RankingPlaylistSheet extends BottomSheetDialogFragment {
         super.onDestroyView();
     }
 
+    // Read the playlists off the main thread; the grid and empty label stay hidden
+    // until the result lands.
     private void loadPlaylists() {
-        DatabaseHelper db = DatabaseHelper.getInstance(requireContext());
-        List<PlaylistModel> playlists = db.getNonArchivedPlaylists();
+        recycler.setVisibility(View.GONE);
+        emptyLabel.setVisibility(View.GONE);
+        updateSelectionUi();
+        final Context ctx = requireContext().getApplicationContext();
+        executor.execute(() -> {
+            List<PlaylistModel> playlists = DatabaseHelper.getInstance(ctx).getNonArchivedPlaylists();
+            View root = getView();
+            if (root == null) return;
+            root.post(() -> {
+                if (getView() == null || getContext() == null) return;
+                bindPlaylists(playlists);
+            });
+        });
+    }
 
+    private void bindPlaylists(List<PlaylistModel> playlists) {
         // Wrap each playlist as an unselected grid cell (no song context, so
         // containsSong is always false and every pick is an "addition").
         List<DatabaseHelper.ManagablePlaylist> cells = new ArrayList<>();
