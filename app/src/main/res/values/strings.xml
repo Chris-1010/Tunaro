@@ -12,33 +12,18 @@
     <string name="notif_pause">Pause</string>
     <string name="notif_next">Next</string>
     <string name="title_home">Home</string>
-    <string name="title_dashboard">Dashboard</string>
-    <string name="title_notifications">Notifications</string>
-    <string name="spotifyButton">Get Display Name</string>
-    <string name="authSwitch">Authenticated</string>
-    <string name="controlSwitch">Spotify App Remote Control</string>
 
     <string name="play">Play</string>
-    <string name="pause">Pause</string>
     <string name="library">Library</string>
     <string name="rankings">Rankings</string>
 
     <string name="playlistCoverImage">Playlist Cover Image</string>
     <string name="songAlbumCoverImage">Song Album Cover Image</string>
-    <string name="albumLabel">Album</string>
-    <string name="songDuration">Duration</string>
     <string name="songViewTabsDesc">Notes / Snippets Tabs</string>
 
-    <string name="logged_in_as">Logged in as %s</string>
-    <string name="playlist_count">%d Playlists</string>
     <string name="song_count">%d Tracks</string>
 
-    <string name="songViewDescription">Add notes/details to this song</string>
-
     <string name="add_snippet">Add Snippet</string>
-    <string name="notes_tab">Notes</string>
-    <string name="snippets_tab">Snippets</string>
-    <string name="notes">Notes</string>
     <string name="toggle_snippet_playback">Toggle Snippet Playback</string>
     <string name="cycle_snippet_end_mode">Cycle snippet end behaviour: stop, loop, continue</string>
 
