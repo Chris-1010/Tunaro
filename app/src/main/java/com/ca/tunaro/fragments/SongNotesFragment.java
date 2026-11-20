@@ -23,6 +23,7 @@ import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.ca.tunaro.utils.StateMessage;
 import com.ca.tunaro.R;
 import com.ca.tunaro.utils.UiFeedback;
 import com.ca.tunaro.models.SongModel;
@@ -126,6 +127,9 @@ public class SongNotesFragment extends Fragment {
         notesAdapter = new SongNotesAdapter(requireContext(), new ArrayList<>());
         notesRecyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
         notesRecyclerView.setAdapter(notesAdapter);
+        StateMessage.bindEmptyState(notesAdapter,
+                ((View) notesRecyclerView.getParent()).findViewById(R.id.notes_empty),
+                R.drawable.ic_state_note, R.string.notes_empty, R.string.notes_empty_hint);
 
         // Setup swipe functionality
         SwipeToDeleteCallback swipeHandler = new SwipeToDeleteCallback(notesAdapter,

@@ -38,6 +38,7 @@ import com.ca.tunaro.utils.PlaylistSetup;
 import com.ca.tunaro.R;
 import com.ca.tunaro.utils.SelectedPlaylistHolder;
 import com.ca.tunaro.utils.SelectedSongHolder;
+import com.ca.tunaro.utils.StateMessage;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.adapters.QueueLineDecoration;
 import com.ca.tunaro.adapters.Song_RecyclerViewAdapter;
@@ -134,16 +135,20 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             recyclerView.invalidateItemDecorations();
         });
 
+        loadSongs();
+    }
+
+    /** Load the playlist's songs (cache first, then Spotify), streaming rows in as they arrive. */
+    private void loadSongs() {
+        StateMessage.hide(findViewById(R.id.empty_label));
         // Show loading state while fetching songs
         showShimmerLoading(true);
 
         // Get SpotifyApi instance from MainActivity
-        SpotifyApi spotifyApi;
-        try {
-            spotifyApi = MainActivity.getInstance().getSpotifyApi();
-            if (spotifyApi == null) throw new Exception("SpotifyApi not available");
-        } catch (Exception e) {
-            finish();
+        MainActivity main = MainActivity.getInstance();
+        SpotifyApi spotifyApi = main != null ? main.getSpotifyApi() : null;
+        if (spotifyApi == null) {
+            showLoadError();
             return;
         }
 
@@ -189,8 +194,15 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 .exceptionally(throwable -> {
                     runOnUiThread(() -> {
                         Log.e(TAG, "Failed to load playlist songs", throwable);
-                        showShimmerLoading(false);
-                        showMessage("Couldn't load songs. Check your connection and try again.");
+                        if (isDestroyed()) return;
+                        if (allSongs == null || allSongs.isEmpty()) {
+                            showLoadError();
+                        } else {
+                            // Some rows streamed in: keep them and offer a quiet retry.
+                            showShimmerLoading(false);
+                            showMessage("Couldn't load every song", R.string.retry,
+                                    this::loadSongs);
+                        }
                     });
                     return null;
                 });
@@ -374,7 +386,19 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
     private void showNoMatches(boolean show) {
         View emptyLabel = findViewById(R.id.empty_label);
-        if (emptyLabel != null) emptyLabel.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (show) {
+            StateMessage.showEmpty(emptyLabel, R.drawable.ic_search,
+                    R.string.library_no_matches, R.string.library_no_matches_hint);
+        } else {
+            StateMessage.hide(emptyLabel);
+        }
+    }
+
+    // Full-screen error in place of the list when nothing could be loaded.
+    private void showLoadError() {
+        showShimmerLoading(false);
+        StateMessage.showError(findViewById(R.id.empty_label),
+                R.string.playlist_error_title, R.string.connection_error_hint, this::loadSongs);
     }
 
     // Whether to offer "Rank" needs a DB lookup, so resolve it off the main
@@ -765,18 +789,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     }
 
     private void showShimmerLoading(boolean isLoading) {
-        View shimmerView = findViewById(R.id.shimmer_view_container);
+        StateMessage.setShimmer(findViewById(R.id.shimmer_view_container), isLoading);
         RecyclerView recyclerView = findViewById(R.id.song_recycler_view);
-
-        if (shimmerView != null) {
-            shimmerView.setVisibility(isLoading ? View.VISIBLE : View.GONE);
-            if (isLoading) {
-                ((com.facebook.shimmer.ShimmerFrameLayout) shimmerView).startShimmer();
-            } else {
-                ((com.facebook.shimmer.ShimmerFrameLayout) shimmerView).stopShimmer();
-            }
-        }
-
         recyclerView.setVisibility(isLoading ? View.GONE : View.VISIBLE);
     }
 

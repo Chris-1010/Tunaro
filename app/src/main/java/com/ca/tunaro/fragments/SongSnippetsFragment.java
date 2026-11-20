@@ -20,6 +20,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.ca.tunaro.utils.StateMessage;
 import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.R;
 import com.ca.tunaro.utils.UiFeedback;
@@ -273,6 +274,9 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
         // Setup recycler view
         snippetsRecyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
         snippetsRecyclerView.setAdapter(snippetAdapter);
+        StateMessage.bindEmptyState(snippetAdapter,
+                ((View) snippetsRecyclerView.getParent()).findViewById(R.id.snippets_empty),
+                R.drawable.ic_state_snippet, R.string.snippets_empty, R.string.snippets_empty_hint);
     }
 
     private void playSnippet(SongSnippet snippet) {

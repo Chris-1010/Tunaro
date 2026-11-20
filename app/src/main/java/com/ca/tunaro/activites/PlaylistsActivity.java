@@ -16,6 +16,8 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.ca.tunaro.BaseActivity;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.models.PlaylistModel;
+import com.ca.tunaro.utils.PlaylistsEmptyState;
+import com.ca.tunaro.utils.StateMessage;
 import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.PlaylistSetup;
 import com.ca.tunaro.adapters.Playlist_RecyclerViewAdapter;
@@ -82,7 +84,9 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
     /** Show cached playlists immediately, then revalidate against Spotify and diff in changes. */
     private void loadPlaylists() {
         if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
-            showMessage("Not connected to Spotify yet");
+            StateMessage.showError(findViewById(R.id.playlists_state),
+                    R.string.playlists_error_title, R.string.connection_error_hint,
+                    this::retryFirstLoad);
             return;
         }
 
@@ -90,9 +94,9 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
             if (isDestroyed()) return;
             if (cached != null && !cached.isEmpty()) {
                 if (allPlaylists == null) showPlaylists(cached);
-            } else if (fetchInFlight) {
-                // Nothing cached: show progress until the network answers.
-                swipeRefreshLayout.setRefreshing(true);
+            } else if (fetchInFlight && allPlaylists == null) {
+                // Nothing cached: show placeholder rows until the network answers.
+                StateMessage.setShimmer(findViewById(R.id.playlists_shimmer), true);
             }
         }));
         fetchPlaylists(false);
@@ -121,9 +125,15 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
                         fetchInFlight = false;
                         if (isDestroyed()) return;
                         swipeRefreshLayout.setRefreshing(false);
-                        // A background revalidation that fails quietly keeps the cached list.
-                        if (userInitiated || allPlaylists == null) {
-                            showMessage("Couldn't refresh playlists",
+                        StateMessage.setShimmer(findViewById(R.id.playlists_shimmer), false);
+                        if (allPlaylists == null) {
+                            // Nothing to show at all: full error state in place of the list.
+                            StateMessage.showError(findViewById(R.id.playlists_state),
+                                    R.string.playlists_error_title, R.string.connection_error_hint,
+                                    this::retryFirstLoad);
+                        } else if (userInitiated) {
+                            // A background revalidation that fails quietly keeps the cached list.
+                            showMessage(getString(R.string.playlists_refresh_failed),
                                     R.string.retry, () -> {
                                         if (!fetchInFlight) {
                                             swipeRefreshLayout.setRefreshing(true);
@@ -134,6 +144,17 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
                     });
                     return null;
                 });
+    }
+
+    private void retryFirstLoad() {
+        if (fetchInFlight) return;
+        if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
+            showMessage("Not connected to Spotify yet");
+            return;
+        }
+        StateMessage.hide(findViewById(R.id.playlists_state));
+        StateMessage.setShimmer(findViewById(R.id.playlists_shimmer), true);
+        fetchPlaylists(false);
     }
 
     private void showPlaylists(ArrayList<PlaylistModel> playlists) {
@@ -255,6 +276,30 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
 
         adapter.submitPlaylists(filtered);
         if (!fetchInFlight) swipeRefreshLayout.setRefreshing(false);
+        StateMessage.setShimmer(findViewById(R.id.playlists_shimmer), false);
+        renderEmptyState(filtered.size());
+    }
+
+    private void renderEmptyState(int visibleCount) {
+        int total = allPlaylists != null ? allPlaylists.size() : 0;
+        View state = findViewById(R.id.playlists_state);
+        switch (PlaylistsEmptyState.resolve(showingArchived, total, visibleCount)) {
+            case NO_PLAYLISTS:
+                StateMessage.showEmpty(state, R.drawable.ic_state_playlist,
+                        R.string.playlists_empty, R.string.playlists_empty_hint);
+                break;
+            case ALL_ARCHIVED:
+                StateMessage.showEmpty(state, R.drawable.ic_state_playlist,
+                        R.string.playlists_all_archived, R.string.playlists_all_archived_hint);
+                break;
+            case NO_ARCHIVED:
+                StateMessage.showEmpty(state, R.drawable.ic_state_playlist,
+                        R.string.playlists_archived_empty, R.string.playlists_archived_empty_hint);
+                break;
+            default:
+                StateMessage.hide(state);
+                break;
+        }
     }
 
 

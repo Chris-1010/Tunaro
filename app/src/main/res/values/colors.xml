@@ -23,4 +23,10 @@
     <color name="splash_gradient_start">#00116A</color>
     <color name="splash_gradient_center">#0B3C7A</color>
     <color name="splash_gradient_end">#1FB5A0</color>
+    <!-- Design tokens (see design direction): text on dark surfaces and the primary accent. -->
+    <color name="accent">#E3CDB3</color>
+    <color name="accent_muted">#80E3CDB3</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#B3FFFFFF</color>
+    <color name="text_tertiary">#80FFFFFF</color>
 </resources>

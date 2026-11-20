@@ -17,6 +17,10 @@
             android:text="Add Note"
             android:layout_marginBottom="16dp" />
 
+        <include
+            android:id="@+id/notes_empty"
+            layout="@layout/view_state_message" />
+
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/notesRecyclerView"
             android:layout_width="match_parent"

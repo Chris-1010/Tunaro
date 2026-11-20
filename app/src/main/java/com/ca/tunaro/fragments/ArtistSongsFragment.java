@@ -19,6 +19,7 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.ca.tunaro.utils.StateMessage;
 import com.ca.tunaro.R;
 import com.ca.tunaro.activites.ArtistView;
 import com.ca.tunaro.activites.MainActivity;
@@ -562,11 +563,20 @@ public class ArtistSongsFragment extends Fragment
     }
 
     private void showEmpty(boolean show) {
-        TextView label = rootView.findViewById(R.id.empty_label);
+        View label = rootView.findViewById(R.id.empty_label);
+        if (!show) {
+            StateMessage.hide(label);
+            return;
+        }
         // Distinguish "nothing loaded" from "search matched nothing".
         boolean searching = searchQuery != null && !searchQuery.trim().isEmpty();
-        label.setText(searching ? "No matches" : "No songs found");
-        label.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (searching) {
+            StateMessage.showEmpty(label, R.drawable.ic_search,
+                    R.string.library_no_matches, R.string.library_no_matches_hint);
+        } else {
+            StateMessage.showEmpty(label, R.drawable.ic_state_library,
+                    R.string.artist_songs_empty, 0);
+        }
     }
 
     private ArtistView host() {

@@ -45,8 +45,10 @@
     <string name="popularity_value">%d%%</string>
     <string name="more_details_url">https://songstats.com/</string>
 
-    <string name="library_empty">No annotated songs yet — add a note from any song</string>
+    <string name="library_empty">No annotated songs yet</string>
+    <string name="library_empty_hint">Add a note or snippet to any song and it shows up here.</string>
     <string name="library_no_matches">No songs match your search</string>
+    <string name="library_no_matches_hint">Try a different song, artist or album name.</string>
     <string name="album_cover">Album cover</string>
     <string name="album_play">Play</string>
     <string name="album_error_title">Couldn\'t load this album</string>
@@ -54,4 +56,27 @@
     <string name="album_refresh_failed">Couldn\'t refresh album</string>
     <string name="retry">Retry</string>
     <string name="back">Back</string>
+
+    <!-- Empty / error states (view_state_message) -->
+    <string name="playlists_empty">No playlists yet</string>
+    <string name="playlists_empty_hint">Playlists you make or follow on Spotify show up here.</string>
+    <string name="playlists_all_archived">Every playlist is archived</string>
+    <string name="playlists_all_archived_hint">Tap the archive icon above to see them.</string>
+    <string name="playlists_archived_empty">No archived playlists</string>
+    <string name="playlists_archived_empty_hint">Archive a playlist from its menu to tuck it away here.</string>
+    <string name="playlists_error_title">Couldn\'t load your playlists</string>
+    <string name="playlists_refresh_failed">Couldn\'t refresh playlists</string>
+    <string name="playlist_error_title">Couldn\'t load this playlist</string>
+    <string name="artist_refresh_failed">Couldn\'t load artist details</string>
+    <string name="artist_songs_empty">No songs found</string>
+    <string name="artist_albums_empty">No releases found</string>
+    <string name="artist_albums_no_matches">No releases match your search</string>
+    <string name="artist_albums_error">Couldn\'t load releases</string>
+    <string name="connection_error_hint">Check your connection and try again.</string>
+    <string name="notes_empty">No notes yet</string>
+    <string name="notes_empty_hint">Tap Add Note to jot down what you hear in this song.</string>
+    <string name="snippets_empty">No snippets yet</string>
+    <string name="snippets_empty_hint">Save a favourite part of this song to replay it any time.</string>
+    <string name="rankings_empty">No standings to show</string>
+    <string name="rankings_empty_hint">The songs from this game are no longer in your library.</string>
 </resources>

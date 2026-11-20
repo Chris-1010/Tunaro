@@ -102,16 +102,9 @@
         </LinearLayout>
     </com.facebook.shimmer.ShimmerFrameLayout>
 
-    <TextView
+    <include
         android:id="@+id/empty_label"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="48dp"
-        android:gravity="center"
-        android:text="No releases found"
-        android:textColor="#99FFFFFF"
-        android:textSize="14sp"
-        android:visibility="gone" />
+        layout="@layout/view_state_message" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/albums_recycler_view"

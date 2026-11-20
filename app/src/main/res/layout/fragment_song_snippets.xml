@@ -20,6 +20,10 @@
 
         <!-- Snippets section -->
 
+        <include
+            android:id="@+id/snippets_empty"
+            layout="@layout/view_state_message" />
+
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/snippetsRecyclerView"
             android:layout_width="match_parent"

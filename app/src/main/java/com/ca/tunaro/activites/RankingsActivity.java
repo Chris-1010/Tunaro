@@ -18,6 +18,7 @@ import com.ca.tunaro.BaseActivity;
 import com.ca.tunaro.R;
 import com.ca.tunaro.adapters.RankingsHistoryAdapter;
 import com.ca.tunaro.adapters.RankingsLeaderboardAdapter;
+import com.ca.tunaro.utils.StateMessage;
 import com.ca.tunaro.adapters.RankingsSnippetAdapter;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.fragments.RankingPlaylistSheet;
@@ -213,6 +214,8 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
         leaderboardAdapter = new RankingsLeaderboardAdapter(this, this);
         leaderboardRecyclerView.setLayoutManager(new LinearLayoutManager(this));
         leaderboardRecyclerView.setAdapter(leaderboardAdapter);
+        StateMessage.bindEmptyState(leaderboardAdapter, findViewById(R.id.leaderboard_empty),
+                R.drawable.ic_state_leaderboard, R.string.rankings_empty, R.string.rankings_empty_hint);
 
         historyAdapter = new RankingsHistoryAdapter(this, dbHelper, this::openHistoryDetail);
         historyRecyclerView.setLayoutManager(new LinearLayoutManager(this));

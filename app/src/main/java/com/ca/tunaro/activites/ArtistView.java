@@ -68,6 +68,8 @@ public class ArtistView extends BaseActivity {
     private List<AlbumModel> discography = new ArrayList<>();
     private boolean discographyLoaded = false;
     private boolean discographyLoading = false;
+    // Set when the first discography page could not be fetched; the Albums tab offers a retry.
+    private volatile boolean discographyFailed = false;
     private final List<DiscographyListener> discographyListeners = new ArrayList<>();
 
     public interface DiscographyListener {
@@ -192,7 +194,18 @@ public class ArtistView extends BaseActivity {
                 })
                 .exceptionally(throwable -> {
                     Log.e(TAG, "Failed to fetch artist", throwable);
-                    if (firstEverVisit) runOnUiThread(() -> showHeaderShimmer(false));
+                    if (firstEverVisit) {
+                        // No cached stats to fall back on: say so and offer a retry.
+                        runOnUiThread(() -> {
+                            if (isDestroyed()) return;
+                            showHeaderShimmer(false);
+                            showMessage(getString(R.string.artist_refresh_failed), R.string.retry,
+                                    () -> {
+                                        showHeaderShimmer(true);
+                                        fetchArtistFromApi(true);
+                                    });
+                        });
+                    }
                     return null;
                 });
     }
@@ -459,10 +472,21 @@ public class ArtistView extends BaseActivity {
 
         MainActivity mainActivity = MainActivity.getInstance();
         if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
+            discographyFailed = true;
             publishDiscography(new ArrayList<>());
             return;
         }
         fetchAlbumPage(mainActivity, 0, new java.util.LinkedHashMap<>());
+    }
+
+    public boolean isDiscographyFailed() { return discographyFailed; }
+
+    /** Re-run a discography fetch that failed outright; registered listeners get the result. */
+    public void retryDiscography() {
+        if (!discographyFailed || discographyLoading) return;
+        discographyFailed = false;
+        discographyLoaded = false;
+        ensureDiscographyLoading();
     }
 
     // Pages getArtistsAlbums (album,single), dedup'd by normalized name keeping the earliest release.
@@ -499,6 +523,7 @@ public class ArtistView extends BaseActivity {
                 })
                 .exceptionally(throwable -> {
                     Log.e(TAG, "Failed to fetch artist albums", throwable);
+                    if (offset == 0 && byName.isEmpty()) discographyFailed = true;
                     enrichAlbums(mainActivity, new ArrayList<>(byName.values()), 0);
                     return null;
                 });

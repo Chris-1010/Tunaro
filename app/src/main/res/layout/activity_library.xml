@@ -43,18 +43,11 @@
         app:layout_constraintTop_toBottomOf="@+id/search_bar"
         tools:listitem="@layout/library_song_item" />
 
-    <TextView
+    <include
         android:id="@+id/empty_view"
+        layout="@layout/view_state_message"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="32dp"
-        android:layout_marginTop="48dp"
-        android:layout_marginEnd="32dp"
-        android:gravity="center"
-        android:text="@string/library_empty"
-        android:textColor="#99FFFFFF"
-        android:textSize="14sp"
-        android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/search_bar" />

@@ -7,7 +7,6 @@ import android.text.TextWatcher;
 import android.util.Log;
 import android.view.View;
 import android.widget.EditText;
-import android.widget.TextView;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -17,6 +16,7 @@ import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.adapters.LibrarySongAdapter;
 import com.ca.tunaro.interfaces.Library_RecyclerViewInterface;
 import com.ca.tunaro.R;
+import com.ca.tunaro.utils.StateMessage;
 import com.ca.tunaro.utils.SelectedSongHolder;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.utils.AppExecutors;
@@ -143,12 +143,16 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
     // Shows the empty message: "no annotated songs" when the library is empty, "no matches" when
     // only the current search filters everything out.
     private void setEmptyState(boolean isEmpty) {
-        TextView emptyView = findViewById(R.id.empty_view);
-        if (emptyView == null) return;
-        if (isEmpty) {
-            emptyView.setText(allSongs.isEmpty() ? R.string.library_empty : R.string.library_no_matches);
+        View emptyView = findViewById(R.id.empty_view);
+        if (!isEmpty) {
+            StateMessage.hide(emptyView);
+        } else if (allSongs.isEmpty()) {
+            StateMessage.showEmpty(emptyView, R.drawable.ic_state_library,
+                    R.string.library_empty, R.string.library_empty_hint);
+        } else {
+            StateMessage.showEmpty(emptyView, R.drawable.ic_search,
+                    R.string.library_no_matches, R.string.library_no_matches_hint);
         }
-        emptyView.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
     }
 
 }

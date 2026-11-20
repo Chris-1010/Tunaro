@@ -37,6 +37,7 @@ import com.ca.tunaro.models.AlbumModel;
 import com.ca.tunaro.models.Artist;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.utils.AlbumFormat;
+import com.ca.tunaro.utils.StateMessage;
 import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.ColorExtractor;
 import com.ca.tunaro.utils.ImageLoads;
@@ -118,7 +119,6 @@ public class AlbumView extends BaseActivity implements Song_RecyclerViewInterfac
         MaterialButton playButton = findViewById(R.id.album_play_button);
         playButton.setOnClickListener(v -> playFrom(0));
         setPlayEnabled(false);
-        findViewById(R.id.tracks_retry).setOnClickListener(v -> retry());
 
         loadLocal();
         fetchAlbum();
@@ -596,7 +596,8 @@ public class AlbumView extends BaseActivity implements Song_RecyclerViewInterfac
                         .setActionTextColor(ContextCompat.getColor(this, R.color.tanAccent))
                         .show();
             } else {
-                findViewById(R.id.tracks_error).setVisibility(View.VISIBLE);
+                StateMessage.showError(findViewById(R.id.tracks_error),
+                        R.string.album_error_title, R.string.album_error_hint, this::retry);
             }
         });
     }
@@ -652,14 +653,7 @@ public class AlbumView extends BaseActivity implements Song_RecyclerViewInterfac
     }
 
     private void showTracksShimmer(boolean show) {
-        ShimmerFrameLayout shimmer = findViewById(R.id.tracks_shimmer);
-        if (show) {
-            shimmer.setVisibility(View.VISIBLE);
-            shimmer.startShimmer();
-        } else {
-            shimmer.stopShimmer();
-            shimmer.setVisibility(View.GONE);
-        }
+        StateMessage.setShimmer(findViewById(R.id.tracks_shimmer), show);
     }
 
     private static List<String> uris(List<SongModel> songs) {

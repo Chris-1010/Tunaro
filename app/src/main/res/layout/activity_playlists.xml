@@ -51,6 +51,27 @@
             tools:listitem="@layout/playlist_recycler_view_row" />
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
+    <!-- First-load placeholder and empty / error state share the list area. -->
+    <include
+        android:id="@+id/playlists_shimmer"
+        layout="@layout/view_list_shimmer"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/playlists_title" />
+
+    <include
+        android:id="@+id/playlists_state"
+        layout="@layout/view_state_message"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="48dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/playlists_title" />
+
     <ProgressBar
         android:id="@+id/loading_view"
         android:layout_width="wrap_content"

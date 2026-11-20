@@ -261,66 +261,14 @@
             android:paddingBottom="96dp"
             tools:listitem="@layout/song_recycler_view_row" />
 
-        <com.facebook.shimmer.ShimmerFrameLayout
+        <include
             android:id="@+id/tracks_shimmer"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:visibility="gone">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
-
-                <include layout="@layout/shimmer_song_item" />
-                <include layout="@layout/shimmer_song_item" />
-                <include layout="@layout/shimmer_song_item" />
-                <include layout="@layout/shimmer_song_item" />
-                <include layout="@layout/shimmer_song_item" />
-            </LinearLayout>
-        </com.facebook.shimmer.ShimmerFrameLayout>
+            layout="@layout/view_list_shimmer" />
 
         <!-- Error state: shown only when nothing could be loaded (no local data, request failed). -->
-        <LinearLayout
+        <include
             android:id="@+id/tracks_error"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_horizontal"
-            android:orientation="vertical"
-            android:paddingHorizontal="32dp"
-            android:paddingTop="32dp"
-            android:visibility="gone"
-            tools:visibility="visible">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:text="@string/album_error_title"
-                android:textColor="@android:color/white"
-                android:textSize="20sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="center"
-                android:text="@string/album_error_hint"
-                android:textColor="#B3FFFFFF"
-                android:textSize="14sp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/tracks_retry"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="48dp"
-                android:layout_marginTop="8dp"
-                android:text="@string/retry"
-                android:textAllCaps="false"
-                android:textColor="@color/tanAccent"
-                android:textSize="16sp"
-                app:rippleColor="@color/faintTanAccent" />
-        </LinearLayout>
+            layout="@layout/view_state_message" />
     </FrameLayout>
 
     <include
