@@ -6,6 +6,8 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -21,6 +23,7 @@ import androidx.fragment.app.Fragment;
 
 import com.ca.tunaro.R;
 import com.ca.tunaro.database.DatabaseHelper;
+import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.DeveloperHistory;
 import com.ca.tunaro.utils.DarkListDialog;
 
@@ -79,6 +82,8 @@ public class SqlQueryFragment extends Fragment {
         });
     }
 
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+
     private void runQuery() {
         String sql = queryInput.getText().toString().trim();
         if (sql.isEmpty()) return;
@@ -90,7 +95,7 @@ public class SqlQueryFragment extends Fragment {
         resultsText.setText("");
 
         Context appContext = requireContext().getApplicationContext();
-        android.os.AsyncTask.THREAD_POOL_EXECUTOR.execute(() -> {
+        AppExecutors.io().execute(() -> {
             String resultText;
             String countText;
             DatabaseHelper dbHelper = DatabaseHelper.getInstance(appContext);
@@ -98,10 +103,10 @@ public class SqlQueryFragment extends Fragment {
             try {
                 String upper = sql.toUpperCase();
                 if (upper.startsWith("SELECT") || upper.startsWith("PRAGMA") || upper.startsWith("EXPLAIN")) {
-                    Cursor cursor = db.rawQuery(sql, null);
-                    resultText = formatCursor(cursor);
-                    countText = cursor.getCount() + " rows";
-                    cursor.close();
+                    try (Cursor cursor = db.rawQuery(sql, null)) {
+                        resultText = formatCursor(cursor);
+                        countText = cursor.getCount() + " rows";
+                    }
                 } else {
                     db.execSQL(sql);
                     resultText = "OK";
@@ -113,9 +118,8 @@ public class SqlQueryFragment extends Fragment {
             }
             String finalResult = resultText;
             String finalCount = countText;
-            if (getActivity() == null) return;
-            getActivity().runOnUiThread(() -> {
-                if (!isAdded()) return;
+            MAIN.post(() -> {
+                if (!isAdded() || getView() == null) return;
                 resultsText.setText(finalResult);
                 rowCount.setText(finalCount);
                 runButton.setEnabled(true);
