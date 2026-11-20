@@ -377,6 +377,21 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         for (String sql : CREATE_INDEXES) db.execSQL(sql);
     }
 
+    /**
+     * Add a column only when the table lacks it. Upgrade steps re-create tables from the
+     * current CREATE statements, so a later "ADD COLUMN" step can meet a column that
+     * already exists; adding it twice would abort the whole upgrade.
+     */
+    private static void addColumnIfMissing(SQLiteDatabase db, String table, String column, String type) {
+        try (Cursor c = db.rawQuery("PRAGMA table_info(" + table + ")", null)) {
+            int nameIdx = c.getColumnIndexOrThrow("name");
+            while (c.moveToNext()) {
+                if (column.equalsIgnoreCase(c.getString(nameIdx))) return;
+            }
+        }
+        db.execSQL("ALTER TABLE " + table + " ADD COLUMN " + column + " " + type);
+    }
+
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         if (oldVersion == 11) {
@@ -523,7 +538,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         }
 
         if (oldVersion == 12) {
-            db.execSQL("ALTER TABLE " + TABLE_PLAYLISTS + " ADD COLUMN " + COLUMN_REMOTE_TRACK_COUNT + " INTEGER DEFAULT 0");
+            addColumnIfMissing(db, TABLE_PLAYLISTS, COLUMN_REMOTE_TRACK_COUNT, "INTEGER DEFAULT 0");
             Log.i(TAG, "DB v13 migration complete");
             oldVersion = 13;
         }
@@ -532,11 +547,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             // v13→v14: cache ArtistView header stats on the artists table so a revisit can render
             // instantly while a fresh getArtist call refreshes in the background. fetched_at marks
             // when the stats were last written so first-ever visits can be told apart (NULL) and shimmer.
-            db.execSQL("ALTER TABLE " + TABLE_ARTISTS + " ADD COLUMN " + COLUMN_ARTIST_IMAGE_URL + " TEXT");
-            db.execSQL("ALTER TABLE " + TABLE_ARTISTS + " ADD COLUMN " + COLUMN_ARTIST_FOLLOWERS + " INTEGER");
-            db.execSQL("ALTER TABLE " + TABLE_ARTISTS + " ADD COLUMN " + COLUMN_ARTIST_POPULARITY + " INTEGER");
-            db.execSQL("ALTER TABLE " + TABLE_ARTISTS + " ADD COLUMN " + COLUMN_ARTIST_GENRES + " TEXT");
-            db.execSQL("ALTER TABLE " + TABLE_ARTISTS + " ADD COLUMN " + COLUMN_ARTIST_FETCHED_AT + " TEXT");
+            addColumnIfMissing(db, TABLE_ARTISTS, COLUMN_ARTIST_IMAGE_URL, "TEXT");
+            addColumnIfMissing(db, TABLE_ARTISTS, COLUMN_ARTIST_FOLLOWERS, "INTEGER");
+            addColumnIfMissing(db, TABLE_ARTISTS, COLUMN_ARTIST_POPULARITY, "INTEGER");
+            addColumnIfMissing(db, TABLE_ARTISTS, COLUMN_ARTIST_GENRES, "TEXT");
+            addColumnIfMissing(db, TABLE_ARTISTS, COLUMN_ARTIST_FETCHED_AT, "TEXT");
             Log.i(TAG, "DB v14 migration complete");
             oldVersion = 14;
         }
@@ -555,7 +570,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             // v15→v16: remember which playlists a ranking game drew its entrants
             // from. Additive, so existing saved games keep their data (playlist_ids
             // simply stays null for them).
-            db.execSQL("ALTER TABLE " + TABLE_RANKING_GAMES + " ADD COLUMN " + COLUMN_PLAYLIST_IDS + " TEXT");
+            addColumnIfMissing(db, TABLE_RANKING_GAMES, COLUMN_PLAYLIST_IDS, "TEXT");
             Log.i(TAG, "DB v16 migration complete");
             oldVersion = 16;
         }
@@ -570,8 +585,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         if (oldVersion == 17) {
             // v17→v18: playlist snapshot ids, so content changes with an unchanged track
             // count still trigger a rescan. Additive only.
-            db.execSQL("ALTER TABLE " + TABLE_PLAYLISTS + " ADD COLUMN " + COLUMN_SNAPSHOT_ID + " TEXT");
-            db.execSQL("ALTER TABLE " + TABLE_PLAYLISTS + " ADD COLUMN " + COLUMN_SCANNED_SNAPSHOT_ID + " TEXT");
+            addColumnIfMissing(db, TABLE_PLAYLISTS, COLUMN_SNAPSHOT_ID, "TEXT");
+            addColumnIfMissing(db, TABLE_PLAYLISTS, COLUMN_SCANNED_SNAPSHOT_ID, "TEXT");
             Log.i(TAG, "DB v18 migration complete");
             oldVersion = 18;
         }
