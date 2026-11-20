@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -55,13 +56,29 @@ public class PlaybackManager {
     private long currentPositionMs = 0;
     private long durationMs = 0;
     private final Handler positionHandler = new Handler(Looper.getMainLooper());
+    // Spotify is asked for the real position at SYNC_INTERVAL_MS; between syncs the
+    // position is interpolated locally so the seekbar still moves every UI_TICK_MS.
+    // Ticks only run while a Tunaro screen is visible (visibleUiCount > 0).
+    private static final long UI_TICK_MS = 250;
+    private static final long SYNC_INTERVAL_MS = 1000;
+    private final PlaybackClock clock = new PlaybackClock();
+    private long lastSyncRequestMs = 0;
+    private int visibleUiCount = 0;
     private final Runnable positionUpdateRunnable = new Runnable() {
         @Override
         public void run() {
-            updatePlaybackPosition();
-            positionHandler.postDelayed(this, 100);
+            long now = SystemClock.elapsedRealtime();
+            if (now - lastSyncRequestMs >= SYNC_INTERVAL_MS) {
+                lastSyncRequestMs = now;
+                syncPlaybackPosition();
+            }
+            notifyPlaybackPositionChanged();
+            positionHandler.postDelayed(this, UI_TICK_MS);
         }
     };
+    // One-shot timer that takes a fresh position reading shortly before the end
+    // of the song to drive auto-advance. Runs whether or not the UI is visible.
+    private final Runnable endOfSongCheckRunnable = this::checkEndOfSong;
     private boolean isTrackingPosition = false;
 
     // Track Listening
@@ -346,6 +363,9 @@ public class PlaybackManager {
             // is a third of the track duration, so it must reflect the new track.
             currentPositionMs = playerState.playbackPosition;
             durationMs = remoteTrack.duration;
+            clock.sync(currentPositionMs, durationMs, !playerState.isPaused,
+                    SystemClock.elapsedRealtime());
+            scheduleEndOfSongCheck();
 
             handleListenTracking(currentSong.getId(), !playerState.isPaused);
 
@@ -382,6 +402,9 @@ public class PlaybackManager {
             //
             // Tracking, however, should stop — there is no live track to poll.
             stopListenTracking();
+            cancelEndOfSongCheck();
+            clock.sync(clock.positionAt(SystemClock.elapsedRealtime()), durationMs, false,
+                    SystemClock.elapsedRealtime());
 
             if (isPlaying) {
                 isPlaying = false;
@@ -691,7 +714,7 @@ public class PlaybackManager {
                 listener.onPlaybackStateChanged(isPlaying, currentSong);
 
                 if (currentSong != null && durationMs > 0) {
-                    listener.onPlaybackPositionChanged(currentPositionMs, durationMs);
+                    listener.onPlaybackPositionChanged(getCurrentPositionMs(), durationMs);
                 }
 
                 // Sync device warning state for new activities
@@ -1023,8 +1046,9 @@ public class PlaybackManager {
     }
 
     private void notifyPlaybackPositionChanged() {
+        long position = getCurrentPositionMs();
         for (PlaybackListener listener : listeners) {
-            listener.onPlaybackPositionChanged(currentPositionMs, durationMs);
+            listener.onPlaybackPositionChanged(position, durationMs);
         }
     }
 
@@ -1041,8 +1065,10 @@ public class PlaybackManager {
     }
 
     public void startPositionTracking() {
-        if (!isTrackingPosition && isConnected && isPlaying) {
+        if (!isTrackingPosition && isConnected && isPlaying && visibleUiCount > 0) {
             isTrackingPosition = true;
+            // Force a fresh sync on the first tick.
+            lastSyncRequestMs = 0;
             positionHandler.post(positionUpdateRunnable);
         }
     }
@@ -1052,42 +1078,97 @@ public class PlaybackManager {
         positionHandler.removeCallbacks(positionUpdateRunnable);
     }
 
-    private void updatePlaybackPosition() {
+    // Called from BaseActivity.onStart/onStop so UI position ticks only run while
+    // a Tunaro screen is on screen. Background playback keeps listen tracking,
+    // snippet timers and the end-of-song timer, none of which depend on ticks.
+    public void onUiVisible() {
+        visibleUiCount++;
+        if (isPlaying && !isTrackingPosition) {
+            startPositionTracking();
+        }
+    }
+
+    public void onUiHidden() {
+        visibleUiCount = Math.max(0, visibleUiCount - 1);
+        if (visibleUiCount == 0) {
+            stopPositionTracking();
+        }
+    }
+
+    // Periodic drift correction while the UI is visible.
+    private void syncPlaybackPosition() {
         if (spotifyAppRemote != null && isConnected) {
             spotifyAppRemote.getPlayerApi().getPlayerState()
                     .setResultCallback(playerState -> {
-                        if (playerState.track != null) {
-                            currentPositionMs = playerState.playbackPosition;
-                            durationMs = playerState.track.duration;
-
-                            // Notify listeners with updated position
-                            notifyPlaybackPositionChanged();
-
-                            // End-of-song auto-advance: within 1500ms of the end,
-                            // wait briefly so the advance lands close to the real
-                            // finish without cutting it off. Intercept when there
-                            // is a real next song, or — in Stop mode — to pause at
-                            // the boundary before Spotify autoplay bleeds in. In
-                            // Recommendations mode the boundary is left to Spotify
-                            // autoplay (ADR-0002), so no interception is needed.
-                            boolean inGracePeriod = (System.currentTimeMillis() - lastAdvanceTimeMs) < 3000;
-                            boolean shouldIntercept = model.hasNextSong()
-                                    || currentBoundaryMode() == PlaybackModel.BoundaryMode.STOP;
-                            if (shouldIntercept && !isSnippetMode && !playerState.isPaused
-                                    && durationMs > 0 && !queueAdvancePending && !inGracePeriod
-                                    && (durationMs - currentPositionMs) <= 1500) {
-                                Log.d(TAG, "updatePlaybackPosition: Caught end of song at " + (durationMs - currentPositionMs) + "ms remaining. Queueing advance.");
-                                queueAdvancePending = true;
-                                positionHandler.postDelayed(PlaybackManager.this::next, 300);
-                            }
+                        if (applyPositionReading(playerState)) {
+                            scheduleEndOfSongCheck();
                         }
                     });
         }
     }
 
+    // Re-anchor the local clock from a fresh player state. Returns false when no
+    // track is reported (transition or stop), leaving the clock untouched.
+    private boolean applyPositionReading(PlayerState playerState) {
+        if (playerState == null || playerState.track == null) return false;
+        currentPositionMs = playerState.playbackPosition;
+        durationMs = playerState.track.duration;
+        clock.sync(currentPositionMs, durationMs, !playerState.isPaused,
+                SystemClock.elapsedRealtime());
+        return true;
+    }
+
+    // Arm the one-shot end-of-song check from the interpolated clock.
+    private void scheduleEndOfSongCheck() {
+        positionHandler.removeCallbacks(endOfSongCheckRunnable);
+        long delay = PlaybackClock.endCheckDelay(
+                clock.remainingAt(SystemClock.elapsedRealtime()), clock.isPlaying(), durationMs);
+        if (delay >= 0) {
+            positionHandler.postDelayed(endOfSongCheckRunnable, delay);
+        }
+    }
+
+    private void cancelEndOfSongCheck() {
+        positionHandler.removeCallbacks(endOfSongCheckRunnable);
+    }
+
+    // End-of-song auto-advance: within END_LEAD_MS of the end, wait briefly so the
+    // advance lands close to the real finish without cutting it off. Intercept when
+    // there is a real next song, or — in Stop mode — to pause at the boundary
+    // before Spotify autoplay bleeds in. In Recommendations mode the boundary is
+    // left to Spotify autoplay (ADR-0002), so no interception is needed.
+    private void checkEndOfSong() {
+        if (spotifyAppRemote == null || !isConnected) return;
+        spotifyAppRemote.getPlayerApi().getPlayerState()
+                .setResultCallback(playerState -> {
+                    if (!applyPositionReading(playerState)) return;
+                    boolean shouldIntercept = model.hasNextSong()
+                            || currentBoundaryMode() == PlaybackModel.BoundaryMode.STOP;
+                    boolean eligible = shouldIntercept && !isSnippetMode && !queueAdvancePending;
+                    long sinceAdvance = System.currentTimeMillis() - lastAdvanceTimeMs;
+                    long remaining = durationMs - currentPositionMs;
+                    long decision = PlaybackClock.decideEndOfSong(remaining,
+                            !playerState.isPaused, durationMs, eligible, sinceAdvance);
+                    positionHandler.removeCallbacks(endOfSongCheckRunnable);
+                    if (decision == PlaybackClock.END_ADVANCE) {
+                        Log.d(TAG, "checkEndOfSong: Caught end of song at " + remaining + "ms remaining. Queueing advance.");
+                        queueAdvancePending = true;
+                        positionHandler.postDelayed(PlaybackManager.this::next,
+                                PlaybackClock.ADVANCE_DELAY_MS);
+                    } else if (decision > 0) {
+                        positionHandler.postDelayed(endOfSongCheckRunnable, decision);
+                    }
+                });
+    }
+
     public void seekTo(long positionMs) {
         if (spotifyAppRemote != null && isConnected) {
             spotifyAppRemote.getPlayerApi().seekTo(positionMs);
+            // Re-anchor optimistically so interpolation doesn't snap back to the
+            // pre-seek position before Spotify reports the new one.
+            currentPositionMs = positionMs;
+            clock.sync(positionMs, durationMs, isPlaying, SystemClock.elapsedRealtime());
+            scheduleEndOfSongCheck();
         }
     }
 
@@ -1170,8 +1251,9 @@ public class PlaybackManager {
         return currentSong;
     }
 
+    // Interpolated from the last Spotify reading, so it is current between syncs.
     public long getCurrentPositionMs() {
-        return currentPositionMs;
+        return clock.positionAt(SystemClock.elapsedRealtime());
     }
 
     public long getDurationMs() {
@@ -1219,6 +1301,7 @@ public class PlaybackManager {
     public void disconnect() {
         stopPlaybackSession();
         stopPositionTracking();
+        cancelEndOfSongCheck();
         stopListenTracking();
         cancelCurrentSnippetTimer();
         cancelConnectTimeout();

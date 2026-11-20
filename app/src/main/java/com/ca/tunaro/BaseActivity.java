@@ -104,6 +104,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     protected void onStart() {
         super.onStart();
         playbackManager.addListener(this);
+        playbackManager.onUiVisible();
         syncPlaybackBarState();
     }
 
@@ -131,6 +132,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     @Override
     protected void onStop() {
         super.onStop();
+        playbackManager.onUiHidden();
         playbackManager.removeListener(this);
     }
 
@@ -591,8 +593,10 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     public void onPlaybackPositionChanged(long positionMs, long durationMs) {
         runOnUiThread(() -> {
             if (playbackSeekbar != null && !isSeeking) {
-                // Update seekbar max and progress
-                playbackSeekbar.setMax((int) durationMs);
+                // Update seekbar max (only when it changes) and progress
+                if (playbackSeekbar.getMax() != (int) durationMs) {
+                    playbackSeekbar.setMax((int) durationMs);
+                }
                 playbackSeekbar.setProgress((int) positionMs);
 
                 // Update text views if they exist
