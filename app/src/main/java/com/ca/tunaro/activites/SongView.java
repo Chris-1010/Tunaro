@@ -124,8 +124,9 @@ public class SongView extends BaseActivity {
         }
         setupAlbumCover();
         setupPlaylistPanel();
-        setupDynamicBackground();
         setupTabs(loadingFromApi);
+        // After setupTabs: cached colours arrive synchronously and theme the tabs.
+        setupDynamicBackground();
     }
 
     private void startHeaderShimmer() {

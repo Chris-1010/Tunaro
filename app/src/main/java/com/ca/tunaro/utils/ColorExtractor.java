@@ -21,40 +21,88 @@ public class ColorExtractor {
         void onError();
     }
 
+    // Colour pairs are tiny; 64 covers a playlist's worth of covers.
+    private static final int CACHE_SIZE = 64;
+    // Palette only needs a coarse sample; Palette itself downsamples to ~112px.
+    private static final int DECODE_SIZE_PX = 100;
+    private static final int MAX_PALETTE_COLORS = 16;
+
+    private static final ColorRequestCache<ColorExtractionCallback> CACHE =
+            new ColorRequestCache<>(CACHE_SIZE);
+
     /**
-     * Extract dominant color from an image URL
+     * Extract dominant and vibrant colours from an image URL.
+     *
+     * Results are cached per URL; a cached result is delivered synchronously so
+     * gradients appear without a flash. Concurrent requests for the same URL share
+     * one decode. Callbacks run on the main thread.
      *
      * @param context  Android context
      * @param imageUrl URL of the image
-     * @param callback Callback with the extracted color
+     * @param callback Callback with the extracted colours
      */
     public static void extractColors(Context context, String imageUrl, ColorExtractionCallback callback) {
-        Glide.with(context)
+        if (imageUrl == null || imageUrl.isEmpty()) {
+            callback.onError();
+            return;
+        }
+        int[] cached = CACHE.get(imageUrl);
+        if (cached != null) {
+            callback.onColorExtracted(cached[0], cached[1]);
+            return;
+        }
+        if (!CACHE.enqueue(imageUrl, callback)) {
+            return; // A load for this URL is already running.
+        }
+
+        // Application context: the shared load must not be cancelled when the
+        // first requester's activity goes away while other waiters remain.
+        Glide.with(context.getApplicationContext())
                 .asBitmap()
                 .load(imageUrl)
+                .override(DECODE_SIZE_PX)
                 .into(new CustomTarget<Bitmap>() {
+                    private boolean finished;
+                    private boolean resourceReceived;
+
                     @Override
                     public void onResourceReady(@NonNull Bitmap bitmap, @Nullable Transition<? super Bitmap> transition) {
-                        // Generate palette from bitmap
-                        Palette.from(bitmap).generate(palette -> {
-                            if (palette != null) {
-                                // Try to get dominant color, fallback to black if not available
-                                int dominantColor = palette.getDominantColor(Color.BLACK);
-                                int vibrantColor = palette.getVibrantColor(Color.rgb(100, 0, 0));
-                                callback.onColorExtracted(dominantColor, vibrantColor);
-                            } else {
-                                callback.onError();
-                            }
-                        });
+                        resourceReceived = true;
+                        new Palette.Builder(bitmap)
+                                .maximumColorCount(MAX_PALETTE_COLORS)
+                                .generate(palette -> {
+                                    if (palette != null) {
+                                        int dominantColor = palette.getDominantColor(Color.BLACK);
+                                        int vibrantColor = palette.getVibrantColor(Color.rgb(100, 0, 0));
+                                        finish(new int[]{dominantColor, vibrantColor});
+                                    } else {
+                                        finish(null);
+                                    }
+                                });
                     }
 
                     @Override
                     public void onLoadCleared(@Nullable Drawable placeholder) {
+                        // Release waiters if the load is cleared before any bitmap
+                        // arrives; once one has, the palette callback finishes instead.
+                        if (!resourceReceived) finish(null);
                     }
 
                     @Override
                     public void onLoadFailed(@Nullable Drawable errorDrawable) {
-                        callback.onError();
+                        finish(null);
+                    }
+
+                    private void finish(@Nullable int[] colors) {
+                        if (finished) return;
+                        finished = true;
+                        for (ColorExtractionCallback waiter : CACHE.complete(imageUrl, colors)) {
+                            if (colors != null) {
+                                waiter.onColorExtracted(colors[0], colors[1]);
+                            } else {
+                                waiter.onError();
+                            }
+                        }
                     }
                 });
     }
