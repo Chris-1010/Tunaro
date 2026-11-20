@@ -23,6 +23,7 @@ import androidx.fragment.app.Fragment;
 import com.ca.tunaro.R;
 import com.ca.tunaro.utils.UiFeedback;
 import com.ca.tunaro.database.DatabaseHelper;
+import com.ca.tunaro.database.SqlUtils;
 import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.DeveloperHistory;
 import com.ca.tunaro.utils.DarkListDialog;
@@ -93,6 +94,14 @@ public class SqlQueryFragment extends Fragment {
         runButton.setEnabled(false);
         rowCount.setText("Running…");
         resultsText.setText("");
+
+        String rejection = SqlUtils.consoleRejectionReason(sql);
+        if (rejection != null) {
+            resultsText.setText("Error: " + rejection);
+            rowCount.setText("");
+            runButton.setEnabled(true);
+            return;
+        }
 
         Context appContext = requireContext().getApplicationContext();
         AppExecutors.io().execute(() -> {

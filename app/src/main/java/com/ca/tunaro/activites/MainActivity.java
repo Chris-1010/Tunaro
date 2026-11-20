@@ -64,7 +64,6 @@ public class MainActivity extends AppCompatActivity {
     private static final long HEAVY_LAUNCH_JOB_DELAY_MS = 4000;
     // The playlist scan and stale-song refresh run at most once per this interval.
     private static final long HEAVY_LAUNCH_JOB_INTERVAL_MS = 6L * 60L * 60L * 1000L;
-    private static final String PREF_LAST_PLAYLIST_SCAN = "last_launch_playlist_scan_ms";
     private static final String PREF_LAST_SONG_REFRESH = "last_launch_song_refresh_ms";
 
     // Singleton instance
@@ -300,7 +299,7 @@ public class MainActivity extends AppCompatActivity {
             performAutomaticFetch();
         });
         AppExecutors.ioDelayed(() -> {
-            if (AppExecutors.isJobDue(appContext, PREF_LAST_PLAYLIST_SCAN, HEAVY_LAUNCH_JOB_INTERVAL_MS)) {
+            if (AppExecutors.isJobDue(appContext, PlaylistSetup.PREF_LAST_PLAYLIST_SCAN, PlaylistSetup.PLAYLIST_SCAN_INTERVAL_MS)) {
                 performPlaylistSongScan();
             } else {
                 Log.d(TAG, "Playlist scan ran recently; skipping");
@@ -573,7 +572,7 @@ public class MainActivity extends AppCompatActivity {
         if (spotifyApi == null) return;
         Context appContext = getApplicationContext();
         PlaylistSetup.scanAllPlaylistSongs(buildFreshSpotifyApi())
-                .thenRun(() -> AppExecutors.markJobRun(appContext, PREF_LAST_PLAYLIST_SCAN))
+                .thenRun(() -> AppExecutors.markJobRun(appContext, PlaylistSetup.PREF_LAST_PLAYLIST_SCAN))
                 .exceptionally(e -> {
                     Log.e(TAG, "Playlist song scan failed", e);
                     return null;
@@ -758,20 +757,19 @@ public class MainActivity extends AppCompatActivity {
         }, executor);
     }
 
+    /**
+     * A token that is valid now. Never blocks: a still-valid token completes immediately, and an
+     * expired one is handed straight to {@link #refreshAccessToken()}. Waiting on the refresh
+     * from inside a task on {@link #executor} would deadlock, because the refresh is queued on
+     * that same single thread behind the waiting task.
+     */
     public CompletableFuture<String> getValidAccessToken() {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                String currentToken = spotifyApi != null ? spotifyApi.getAccessToken() : null;
-                // Refresh if there's no token, or if the stored deadline has (nearly) passed.
-                if (currentToken == null || isAccessTokenExpired()) {
-                    return refreshAccessToken().get();
-                }
-                return currentToken;
-            } catch (Exception e) {
-                Log.e(TAG, "Error getting valid access token", e);
-                throw new RuntimeException(e);
-            }
-        }, executor);
+        String currentToken = spotifyApi != null ? spotifyApi.getAccessToken() : null;
+        // Refresh if there's no token, or if the stored deadline has (nearly) passed.
+        if (currentToken == null || isAccessTokenExpired()) {
+            return refreshAccessToken();
+        }
+        return CompletableFuture.completedFuture(currentToken);
     }
 
     /**

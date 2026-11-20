@@ -45,6 +45,10 @@ public class PlaylistCache {
     private static final String PREF_NAME = "PlaylistCache";
     private static final String PLAYLISTS_KEY = "cached_playlists";
     private static final String SONGS_KEY_PREFIX = "songs_for_playlist_";
+    // Spotify's track total at the time a complete song list was cached. Spotify counts podcast
+    // episodes and unavailable items that never reach the list, so the list length alone cannot
+    // say whether the list is complete.
+    private static final String SONGS_TOTAL_KEY_PREFIX = "songs_total_for_playlist_";
 
     private final SharedPreferences prefs;
     private final Gson gson;
@@ -68,7 +72,9 @@ public class PlaylistCache {
                         songIds.add(song.getId());
                     }
                     String songIdsJson = gson.toJson(songIds);
-                    prefs.edit().putString(SONGS_KEY_PREFIX + playlist.getId(), songIdsJson).apply();
+                    prefs.edit().putString(SONGS_KEY_PREFIX + playlist.getId(), songIdsJson)
+                            .remove(SONGS_TOTAL_KEY_PREFIX + playlist.getId())
+                            .apply();
                     Log.d(TAG, "Caching " + songIds.size() + " song IDs for playlist: " + playlist.getPlaylistName());
                 } else {
                     // Songs not loaded — preserve whatever song IDs are already cached
@@ -159,16 +165,34 @@ public class PlaylistCache {
         }
     }
 
-    public void updatePlaylistSongs(String playlistId, List<String> songIds) {
+    /**
+     * Store a playlist's complete song list.
+     *
+     * @param remoteTotal Spotify's track total the list was fetched against, or a negative value
+     *                    when unknown
+     */
+    public void updatePlaylistSongs(String playlistId, List<String> songIds, int remoteTotal) {
         try {
             // Store song IDs separately for faster access
             String songIdsJson = gson.toJson(songIds);
-            prefs.edit().putString(SONGS_KEY_PREFIX + playlistId, songIdsJson).apply();
+            SharedPreferences.Editor editor = prefs.edit()
+                    .putString(SONGS_KEY_PREFIX + playlistId, songIdsJson);
+            if (remoteTotal >= 0) editor.putInt(SONGS_TOTAL_KEY_PREFIX + playlistId, remoteTotal);
+            else editor.remove(SONGS_TOTAL_KEY_PREFIX + playlistId);
+            editor.apply();
 
             Log.d(TAG, "Updated playlist " + playlistId + " with " + songIds.size() + " song IDs");
         } catch (Exception e) {
             Log.e(TAG, "Error updating playlist songs", e);
         }
+    }
+
+    /**
+     * Spotify's track total recorded when the playlist's song list was cached, or -1 when the
+     * list was cached without one.
+     */
+    public int getCachedSongTotal(String playlistId) {
+        return prefs.getInt(SONGS_TOTAL_KEY_PREFIX + playlistId, -1);
     }
 
     public void clearCache() {

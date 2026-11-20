@@ -112,7 +112,7 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
 
     private void fetchPlaylists(boolean userInitiated) {
         fetchInFlight = true;
-        PlaylistSetup.refreshPlaylists(mainActivity.getSpotifyApi())
+        PlaylistSetup.refreshPlaylists(mainActivity.getSpotifyApi(), userInitiated)
                 .thenAccept(playlists -> runOnUiThread(() -> {
                     fetchInFlight = false;
                     if (isDestroyed()) return;

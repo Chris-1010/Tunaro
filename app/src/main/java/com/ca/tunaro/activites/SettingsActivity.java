@@ -22,6 +22,7 @@ import com.ca.tunaro.R;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.services.AutomaticFetcher;
+import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.DeviceChooser;
 import com.ca.tunaro.utils.PlaylistCache;
 import com.ca.tunaro.utils.SongCache;
@@ -472,14 +473,16 @@ public class SettingsActivity extends BaseActivity {
                 .setTitle("Clear Cache")
                 .setMessage("This will clear all cached playlists and songs. Are you sure?")
                 .setPositiveButton("Clear", (dialog, which) -> {
-                    // Clear playlist cache
-                    PlaylistCache playlistCache = new PlaylistCache(this);
-                    playlistCache.clearCache();
-
-                    // Clear song cache
-                    SongCache.getInstance(this).clearCache();
-
-                    showMessage("Cache cleared");
+                    // SongCache.clearCache waits on the cache's locks, which an in-flight flush
+                    // or load can hold for hundreds of ms: keep that off the main thread.
+                    android.content.Context appContext = getApplicationContext();
+                    AppExecutors.io().execute(() -> {
+                        new PlaylistCache(appContext).clearCache();
+                        SongCache.getInstance(appContext).clearCache();
+                        runOnUiThread(() -> {
+                            if (!isDestroyed()) showMessage("Cache cleared");
+                        });
+                    });
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
