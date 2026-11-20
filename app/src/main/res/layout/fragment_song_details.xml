@@ -92,7 +92,7 @@
 
                 <TextView
                     android:id="@+id/SongView_AlbumType"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="@dimen/space_xs"
                     android:layout_weight="1"
@@ -339,7 +339,7 @@
             android:alpha="0.45"
             android:gravity="center"
             android:textColor="@color/text_primary"
-            android:textSize="11sp"
+            android:textSize="@dimen/text_caption"
             tools:text="First seen 2 Jan 2025" />
 
         <TextView
@@ -352,7 +352,7 @@
             android:fontFamily="monospace"
             android:gravity="center"
             android:textColor="@color/text_primary"
-            android:textSize="10sp"
+            android:textSize="@dimen/text_caption"
             tools:text="song composite id" />
 
     </LinearLayout>

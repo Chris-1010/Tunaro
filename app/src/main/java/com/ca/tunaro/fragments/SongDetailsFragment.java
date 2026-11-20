@@ -1,8 +1,11 @@
 package com.ca.tunaro.fragments;
 
 import android.content.Intent;
-import android.graphics.Color;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.transition.AutoTransition;
+import android.transition.TransitionManager;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -13,6 +16,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.widget.TextViewCompat;
 import androidx.fragment.app.Fragment;
 
 import com.ca.tunaro.R;
@@ -21,6 +25,7 @@ import com.ca.tunaro.activites.SongView;
 import com.ca.tunaro.activites.SongWebInfoActivity;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.models.SongModel;
+import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.DarkListDialog;
 import com.ca.tunaro.utils.SelectedSongHolder;
 import com.google.android.material.button.MaterialButton;
@@ -29,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public class SongDetailsFragment extends Fragment {
@@ -36,11 +42,13 @@ public class SongDetailsFragment extends Fragment {
     private static final String ARG_SONG = "song";
     private static final String ARG_LOADING = "is_loading";
     private static final String ARG_VARIANT_URIS = "variant_uris";
+    private static final long EXPAND_ANIM_MS = 200L;
 
     private SongModel song;
     private List<String> variantUris;
     private View rootView;
     private boolean isHistoryExpanded = false;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     public static SongDetailsFragment newInstance(SongModel song, boolean isLoading, List<String> variantUris) {
         SongDetailsFragment fragment = new SongDetailsFragment();
@@ -83,8 +91,8 @@ public class SongDetailsFragment extends Fragment {
             shimmer.setVisibility(View.GONE);
             detailsContent.setVisibility(View.VISIBLE);
             setupSongDetails();
-            setupListeningHistory();
             setupMoreDetailsButton();
+            loadDetailsAsync();
         }
 
         return rootView;
@@ -126,14 +134,8 @@ public class SongDetailsFragment extends Fragment {
         // Popularity — show the highest value across all variants
         LinearLayout popularityRow = rootView.findViewById(R.id.popularity_row);
         TextView popularityView = rootView.findViewById(R.id.SongView_SongPopularity);
-        DatabaseHelper dbHelper = DatabaseHelper.getInstance(requireContext());
-        int popularity = variantUris != null && variantUris.size() > 1
-                ? dbHelper.getMaxPopularityForUris(variantUris)
-                : song.getPopularity();
-        if (popularity > 0) {
-            popularityRow.setVisibility(View.VISIBLE);
-            popularityView.setText(getString(R.string.popularity_value, popularity));
-        }
+        // Single-version songs bind immediately; multi-version maxima arrive with loadDetailsAsync().
+        if (!hasVariants()) bindPopularity(song.getPopularity());
 
         // Variants row
         LinearLayout variantsRow = rootView.findViewById(R.id.variants_row);
@@ -144,7 +146,8 @@ public class SongDetailsFragment extends Fragment {
             for (String uri : variantUris) {
                 if (!uri.equals(song.getId())) otherUris.add(uri);
             }
-            variantsValue.setText(otherUris.size() + (otherUris.size() == 1 ? " other version" : " other versions"));
+            variantsValue.setText(getResources().getQuantityString(
+                    R.plurals.other_versions_count, otherUris.size(), otherUris.size()));
             variantsRow.setOnClickListener(v -> openVariantPicker(otherUris));
         }
 
@@ -152,7 +155,7 @@ public class SongDetailsFragment extends Fragment {
         TextView firstSeenView = rootView.findViewById(R.id.first_seen_value);
         String createdAt = formatAbsoluteDate(song.getCreatedAt());
         if (createdAt != null && !createdAt.equals("Unknown")) {
-            firstSeenView.setText("First seen " + createdAt);
+            firstSeenView.setText(getString(R.string.first_seen_value, createdAt));
         } else {
             firstSeenView.setVisibility(View.GONE);
         }
@@ -160,56 +163,83 @@ public class SongDetailsFragment extends Fragment {
         songIdView.setText(song.getId());
     }
 
-    private void setupListeningHistory() {
+    private boolean hasVariants() {
+        return variantUris != null && variantUris.size() > 1;
+    }
+
+    private void bindPopularity(int popularity) {
+        if (popularity <= 0) return;
+        rootView.findViewById(R.id.popularity_row).setVisibility(View.VISIBLE);
+        TextView popularityView = rootView.findViewById(R.id.SongView_SongPopularity);
+        popularityView.setText(getString(R.string.popularity_value, popularity));
+    }
+
+    /** Reads variant popularity and listen history on the I/O pool, then binds on return. */
+    private void loadDetailsAsync() {
+        DatabaseHelper dbHelper = DatabaseHelper.getInstance(requireContext());
+        final boolean variants = hasVariants();
+        final List<String> uris = variants ? new ArrayList<>(variantUris) : null;
+        final String songId = song.getId();
+        final View boundRoot = rootView;
+        AppExecutors.io().execute(() -> {
+            int popularity = variants ? dbHelper.getMaxPopularityForUris(uris) : -1;
+            List<String> history = variants
+                    ? dbHelper.getListenHistoryForUris(uris)
+                    : dbHelper.getListenHistory(songId);
+            Map<String, Integer> grouped = groupListensByTimePeriod(history);
+            int total = history.size();
+            mainHandler.post(() -> {
+                if (!isAdded() || getView() != boundRoot) return;
+                if (variants) bindPopularity(popularity);
+                bindListeningHistory(total, grouped);
+            });
+        });
+    }
+
+    private void bindListeningHistory(int totalListens, Map<String, Integer> groupedListens) {
         LinearLayout historySection = rootView.findViewById(R.id.listening_history_section);
         LinearLayout historyHeader = rootView.findViewById(R.id.listening_history_header);
         LinearLayout historyContent = rootView.findViewById(R.id.listening_history_content);
         TextView listenCountView = rootView.findViewById(R.id.listen_count);
         ImageView expandCollapseIcon = rootView.findViewById(R.id.expand_collapse_icon);
 
-        DatabaseHelper dbHelper = DatabaseHelper.getInstance(requireContext());
-        List<String> listenHistory = variantUris != null && variantUris.size() > 1
-                ? dbHelper.getListenHistoryForUris(variantUris)
-                : dbHelper.getListenHistory(song.getId());
-
-        if (listenHistory.isEmpty()) {
+        if (totalListens == 0) {
             historySection.setVisibility(View.GONE);
             return;
         }
 
-        // Show section and set listen count
         historySection.setVisibility(View.VISIBLE);
-        int totalListens = listenHistory.size();
-        listenCountView.setText(totalListens + (totalListens == 1 ? " listen" : " listens"));
+        listenCountView.setText(getResources().getQuantityString(
+                R.plurals.listen_count, totalListens, totalListens));
 
-        // Group listens by relative time periods
-        Map<String, Integer> groupedListens = groupListensByTimePeriod(listenHistory);
-
-        // Populate history content
+        int rowPadding = getResources().getDimensionPixelSize(R.dimen.space_sm);
+        historyContent.removeAllViews();
         for (Map.Entry<String, Integer> entry : groupedListens.entrySet()) {
             TextView textView = new TextView(requireContext());
-
-            String timeDescription = entry.getKey();
             int count = entry.getValue();
-
-            String displayText = timeDescription;
-            if (count > 1) {
-                displayText += " - " + count + " listens";
-            }
-
+            String displayText = count > 1
+                    ? getResources().getQuantityString(R.plurals.listen_group, count, entry.getKey(), count)
+                    : entry.getKey();
             textView.setText(displayText);
-            textView.setTextColor(Color.WHITE);
-            textView.setTextSize(14f);
-            textView.setPadding(0, 8, 0, 8);
-
+            TextViewCompat.setTextAppearance(textView, R.style.TextAppearance_Tunaro_BodySmall);
+            textView.setPadding(0, rowPadding, 0, rowPadding);
             historyContent.addView(textView);
         }
 
-        // Set up expand/collapse
+        // Restore the expanded state when the view is recreated.
+        historyContent.setVisibility(isHistoryExpanded ? View.VISIBLE : View.GONE);
+        expandCollapseIcon.setRotation(isHistoryExpanded ? 180f : 0f);
+
         historyHeader.setOnClickListener(v -> {
             isHistoryExpanded = !isHistoryExpanded;
+            ViewGroup sceneRoot = (ViewGroup) rootView;
+            TransitionManager.beginDelayedTransition(sceneRoot,
+                    new AutoTransition().setDuration(EXPAND_ANIM_MS));
             historyContent.setVisibility(isHistoryExpanded ? View.VISIBLE : View.GONE);
-            expandCollapseIcon.setRotation(isHistoryExpanded ? 180 : 0);
+            expandCollapseIcon.animate()
+                    .rotation(isHistoryExpanded ? 180f : 0f)
+                    .setDuration(EXPAND_ANIM_MS)
+                    .start();
         });
     }
 
@@ -223,12 +253,19 @@ public class SongDetailsFragment extends Fragment {
 
     private void openVariantPicker(List<String> otherUris) {
         DatabaseHelper db = DatabaseHelper.getInstance(requireContext());
-        List<SongModel> variants = new ArrayList<>();
-        for (String uri : otherUris) {
-            SongModel s = db.getLeanSong(uri);
-            if (s != null) variants.add(s);
-        }
+        AppExecutors.io().execute(() -> {
+            List<SongModel> variants = new ArrayList<>();
+            for (String uri : otherUris) {
+                SongModel s = db.getLeanSong(uri);
+                if (s != null) variants.add(s);
+            }
+            mainHandler.post(() -> {
+                if (isAdded()) showVariantPicker(variants);
+            });
+        });
+    }
 
+    private void showVariantPicker(List<SongModel> variants) {
         if (variants.isEmpty()) return;
 
         if (variants.size() == 1) {
@@ -257,9 +294,9 @@ public class SongDetailsFragment extends Fragment {
 
         // Support both formats - with and without milliseconds
         java.text.SimpleDateFormat formatWithMillis = new java.text.SimpleDateFormat(
-                "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
+                "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT);
         java.text.SimpleDateFormat formatWithoutMillis = new java.text.SimpleDateFormat(
-                "yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault());
+                "yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.ROOT);
 
         formatWithMillis.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
         formatWithoutMillis.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
@@ -336,6 +373,6 @@ public class SongDetailsFragment extends Fragment {
         if (text == null || text.isEmpty()) {
             return text;
         }
-        return text.substring(0, 1).toUpperCase() + text.substring(1).toLowerCase();
+        return text.substring(0, 1).toUpperCase(Locale.ROOT) + text.substring(1).toLowerCase(Locale.ROOT);
     }
 }

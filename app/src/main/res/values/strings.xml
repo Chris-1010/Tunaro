@@ -43,6 +43,19 @@
     <string name="cycle_snippet_end_mode">Cycle snippet end behaviour: stop, loop, continue</string>
 
     <string name="popularity_value">%d%%</string>
+    <string name="first_seen_value">First seen %s</string>
+    <plurals name="listen_count">
+        <item quantity="one">%d listen</item>
+        <item quantity="other">%d listens</item>
+    </plurals>
+    <plurals name="listen_group">
+        <item quantity="one">%1$s - %2$d listen</item>
+        <item quantity="other">%1$s - %2$d listens</item>
+    </plurals>
+    <plurals name="other_versions_count">
+        <item quantity="one">%d other version</item>
+        <item quantity="other">%d other versions</item>
+    </plurals>
     <string name="more_details_url">https://songstats.com/</string>
 
     <string name="library_empty">No annotated songs yet</string>
