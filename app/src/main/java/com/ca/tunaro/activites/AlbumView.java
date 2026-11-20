@@ -38,6 +38,7 @@ import com.ca.tunaro.models.Artist;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.utils.AlbumFormat;
 import com.ca.tunaro.utils.StateMessage;
+import com.ca.tunaro.utils.UiFeedback;
 import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.ColorExtractor;
 import com.ca.tunaro.utils.ImageLoads;
@@ -46,7 +47,6 @@ import com.facebook.shimmer.ShimmerFrameLayout;
 import com.google.android.material.appbar.AppBarLayout;
 import com.google.android.material.appbar.CollapsingToolbarLayout;
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.snackbar.Snackbar;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -430,8 +430,9 @@ public class AlbumView extends BaseActivity implements Song_RecyclerViewInterfac
                 adapter.updateListenCounts(listens);
                 if (album != null || !songs.isEmpty()) {
                     hasLocalData = true;
-                    // A fast failure may have shown the error page before the DB answered.
-                    findViewById(R.id.tracks_error).setVisibility(View.GONE);
+                    // A fast failure may have shown the error page before the DB answered;
+                    // keep it while there are still no tracks to show.
+                    if (!songs.isEmpty()) findViewById(R.id.tracks_error).setVisibility(View.GONE);
                     String cover = album != null ? album.getCoverImageUrl() : null;
                     if (cover == null && !songs.isEmpty()) cover = songs.get(0).getAlbumCoverUrl();
                     renderHeader(album != null ? album.getName() : albumName,
@@ -588,13 +589,10 @@ public class AlbumView extends BaseActivity implements Song_RecyclerViewInterfac
             if (hasRemoteData) return;
             showHeaderShimmer(false);
             showTracksShimmer(false);
-            if (hasLocalData) {
-                // Local data stays on screen; offer a quiet retry rather than an error page.
-                Snackbar.make(findViewById(R.id.main), R.string.album_refresh_failed, Snackbar.LENGTH_LONG)
-                        .setAnchorView(R.id.playback_bar)
-                        .setAction(R.string.retry, v -> retry())
-                        .setActionTextColor(ContextCompat.getColor(this, R.color.accent))
-                        .show();
+            if (!tracks.isEmpty()) {
+                // Local tracks stay on screen; offer a quiet retry rather than an error page.
+                UiFeedback.show(this, getString(R.string.album_refresh_failed),
+                        R.string.retry, this::retry);
             } else {
                 StateMessage.showError(findViewById(R.id.tracks_error),
                         R.string.album_error_title, R.string.album_error_hint, this::retry);
@@ -604,10 +602,8 @@ public class AlbumView extends BaseActivity implements Song_RecyclerViewInterfac
 
     private void retry() {
         findViewById(R.id.tracks_error).setVisibility(View.GONE);
-        if (!hasLocalData) {
-            showHeaderShimmer(true);
-            showTracksShimmer(true);
-        }
+        if (!hasLocalData) showHeaderShimmer(true);
+        if (tracks.isEmpty()) showTracksShimmer(true);
         fetchAlbum();
     }
 

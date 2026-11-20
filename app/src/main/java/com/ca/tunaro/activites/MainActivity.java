@@ -177,10 +177,12 @@ public class MainActivity extends AppCompatActivity {
                             loadingDialog.dismiss();
                         }
                         Log.e(TAG, "Sign-in failed", throwable);
+                        // Finish first so UiFeedback falls back to a Toast, which outlives
+                        // this window; a Snackbar would be destroyed along with it.
+                        finish(); // Close app if authentication fails
                         showMessage(isCancellation(throwable)
                                 ? "Spotify sign-in was cancelled"
                                 : "Couldn't sign in to Spotify. Please try again.");
-                        finish(); // Close app if authentication fails
                     });
                     return null;
                 });
