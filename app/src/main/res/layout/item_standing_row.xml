@@ -6,7 +6,7 @@
     android:id="@+id/standing_card"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    app:cardBackgroundColor="#24FFFFFF"
+    app:cardBackgroundColor="@color/surface_translucent"
     app:cardCornerRadius="10dp"
     app:cardElevation="0dp">
 
@@ -34,6 +34,7 @@
             android:layout_width="30dp"
             android:layout_height="30dp"
             android:layout_marginStart="@dimen/space_sm"
+            android:importantForAccessibility="no"
             android:scaleType="centerCrop" />
 
         <TextView
@@ -45,7 +46,7 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:textColor="@color/text_primary"
-            android:textSize="13sp" />
+            android:textSize="@dimen/text_body_small" />
 
         <TextView
             android:id="@+id/score"
@@ -55,7 +56,7 @@
             android:gravity="center"
             android:minWidth="26dp"
             android:textColor="@color/text_primary"
-            android:textSize="13sp"
+            android:textSize="@dimen/text_body_small"
             android:textStyle="bold" />
 
     </LinearLayout>

@@ -22,6 +22,7 @@
             android:id="@+id/champion_cover"
             android:layout_width="48dp"
             android:layout_height="48dp"
+            android:importantForAccessibility="no"
             android:scaleType="centerCrop" />
 
         <LinearLayout
@@ -39,7 +40,7 @@
                 android:maxLines="1"
                 android:text="Champion"
                 android:textColor="@color/text_primary"
-                android:textSize="15sp"
+                android:textSize="@dimen/text_body"
                 android:textStyle="bold" />
 
             <!-- When · playlist covers · song count -->

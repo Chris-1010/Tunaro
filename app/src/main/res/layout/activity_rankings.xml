@@ -13,9 +13,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="40dp"
         android:text="Rankings"
-        android:textColor="@color/text_primary"
-        android:textSize="30sp"
-        android:textStyle="bold"
+        android:textAppearance="@style/TextAppearance.Tunaro.Display"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -38,7 +36,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:visibility="gone"
-            app:cardBackgroundColor="#26FFFFFF"
+            app:cardBackgroundColor="@color/surface_translucent"
             app:cardCornerRadius="16dp"
             app:cardElevation="0dp">
 
@@ -87,7 +85,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="@dimen/space_sm"
                         android:textColor="@color/accent_muted"
-                        android:textSize="13sp" />
+                        android:textSize="@dimen/text_body_small" />
 
                 </LinearLayout>
 
@@ -173,8 +171,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_sm"
+            android:textAppearance="@style/TextAppearance.Tunaro.Title"
             android:textColor="@color/accent"
-            android:textSize="24sp"
             android:textStyle="bold" />
 
         <TextView
@@ -224,7 +222,7 @@
                     android:layout_height="wrap_content"
                     android:clickable="true"
                     android:focusable="true"
-                    app:cardBackgroundColor="#E0E0E0"
+                    app:cardBackgroundColor="@color/surface_raised"
                     app:cardCornerRadius="12dp"
                     app:cardElevation="4dp">
 
@@ -248,6 +246,7 @@
                             android:id="@+id/cover_a"
                             android:layout_width="80dp"
                             android:layout_height="80dp"
+                            android:contentDescription="@string/album_cover"
                             android:scaleType="centerCrop" />
 
                         <TextView
@@ -258,8 +257,8 @@
                             android:ellipsize="end"
                             android:lines="2"
                             android:textAlignment="center"
-                            android:textColor="@color/black"
-                            android:textSize="15sp"
+                            android:textColor="@color/text_primary"
+                            android:textSize="@dimen/text_body"
                             android:textStyle="bold" />
 
                         <TextView
@@ -270,7 +269,7 @@
                             android:ellipsize="end"
                             android:maxLines="1"
                             android:textAlignment="center"
-                            android:textColor="@color/black"
+                            android:textColor="@color/text_secondary"
                             android:textSize="@dimen/text_caption" />
 
                         <com.google.android.material.button.MaterialButton
@@ -281,7 +280,7 @@
                             android:backgroundTint="@color/accent"
                             android:text="Choose"
                             android:textColor="@color/on_accent"
-                            android:textSize="13sp"
+                            android:textSize="@dimen/text_body_small"
                             app:cornerRadius="18dp" />
 
                     </LinearLayout>
@@ -306,8 +305,7 @@
                 android:layout_marginEnd="@dimen/space_sm"
                 android:layout_marginTop="60dp"
                 android:text="VS"
-                android:textColor="@color/text_primary"
-                android:textSize="18sp"
+                android:textAppearance="@style/TextAppearance.Tunaro.Title"
                 android:textStyle="bold" />
 
             <!-- Side B -->
@@ -331,7 +329,7 @@
                     android:layout_height="wrap_content"
                     android:clickable="true"
                     android:focusable="true"
-                    app:cardBackgroundColor="#E0E0E0"
+                    app:cardBackgroundColor="@color/surface_raised"
                     app:cardCornerRadius="12dp"
                     app:cardElevation="4dp">
 
@@ -355,6 +353,7 @@
                             android:id="@+id/cover_b"
                             android:layout_width="80dp"
                             android:layout_height="80dp"
+                            android:contentDescription="@string/album_cover"
                             android:scaleType="centerCrop" />
 
                         <TextView
@@ -365,8 +364,8 @@
                             android:ellipsize="end"
                             android:lines="2"
                             android:textAlignment="center"
-                            android:textColor="@color/black"
-                            android:textSize="15sp"
+                            android:textColor="@color/text_primary"
+                            android:textSize="@dimen/text_body"
                             android:textStyle="bold" />
 
                         <TextView
@@ -377,7 +376,7 @@
                             android:ellipsize="end"
                             android:maxLines="1"
                             android:textAlignment="center"
-                            android:textColor="@color/black"
+                            android:textColor="@color/text_secondary"
                             android:textSize="@dimen/text_caption" />
 
                         <com.google.android.material.button.MaterialButton
@@ -388,7 +387,7 @@
                             android:backgroundTint="@color/accent"
                             android:text="Choose"
                             android:textColor="@color/on_accent"
-                            android:textSize="13sp"
+                            android:textSize="@dimen/text_body_small"
                             app:cornerRadius="18dp" />
 
                     </LinearLayout>
@@ -472,8 +471,8 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_sm"
             android:text="Final standings"
+            android:textAppearance="@style/TextAppearance.Tunaro.Title"
             android:textColor="@color/accent"
-            android:textSize="24sp"
             android:textStyle="bold" />
 
         <include

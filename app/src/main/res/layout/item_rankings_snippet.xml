@@ -38,6 +38,6 @@
         android:maxLines="1"
         android:text="Snippet"
         android:textColor="@color/text_primary"
-        android:textSize="13sp" />
+        android:textSize="@dimen/text_body_small" />
 
 </LinearLayout>

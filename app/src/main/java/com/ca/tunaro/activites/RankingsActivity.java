@@ -111,6 +111,7 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
     private RankingGame resumeGame;
 
     private List<RankingGame> completedGames = new ArrayList<>();
+    private RankingsHistoryAdapter.Preloaded completedGamesRows;
     private boolean viewingHistory = false;
 
     // Phase containers
@@ -229,7 +230,7 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
         StateMessage.bindEmptyState(leaderboardAdapter, findViewById(R.id.leaderboard_empty),
                 R.drawable.ic_state_leaderboard, R.string.rankings_empty, R.string.rankings_empty_hint);
 
-        historyAdapter = new RankingsHistoryAdapter(this, dbHelper, this::openHistoryDetail);
+        historyAdapter = new RankingsHistoryAdapter(this, this::openHistoryDetail);
         historyRecyclerView.setLayoutManager(new LinearLayoutManager(this));
         historyRecyclerView.setAdapter(historyAdapter);
 
@@ -285,6 +286,7 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
     private void loadData(DatabaseHelper db) {
         restoreInProgressGame(db);
         completedGames = db.getCompletedGames();
+        completedGamesRows = RankingsHistoryAdapter.preload(db, completedGames);
     }
 
     // Reload the saved state off the main thread, then show the setup screen.
@@ -422,7 +424,7 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
         startButton.setVisibility(View.VISIBLE);
 
         // Past results
-        historyAdapter.updateGames(completedGames);
+        historyAdapter.updateGames(completedGames, completedGamesRows);
         pastResultsLabel.setVisibility(completedGames.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
@@ -660,6 +662,7 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
     private void bindContender(SongModel song, ImageView cover, TextView name, TextView artist) {
         name.setText(song.getName());
         artist.setText(song.getArtist());
+        cover.setContentDescription(getString(R.string.album_cover_for, song.getName()));
         Glide.with(this)
                 .load(song.getAlbumCoverUrl())
                 .placeholder(R.drawable.playlist_placeholder)
@@ -840,12 +843,14 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
         executor.execute(() -> {
             Map<String, int[]> eloChanges;
             List<RankingGame> completed;
+            RankingsHistoryAdapter.Preloaded completedRows;
             try {
                 final List<Map<String, int[]>> holder = new ArrayList<>(1);
                 bgDbHelper.runInTransaction(() ->
                         holder.add(finaliseCompletedGame(bgDbHelper, gameId, finished, entrantIds)));
                 eloChanges = holder.get(0);
                 completed = bgDbHelper.getCompletedGames();
+                completedRows = RankingsHistoryAdapter.preload(bgDbHelper, completed);
             } catch (RuntimeException e) {
                 Log.e(TAG, "Failed to finalise game " + gameId, e);
                 runOnUiThread(() -> {
@@ -862,6 +867,7 @@ public class RankingsActivity extends BaseActivity implements Library_RecyclerVi
                 if (isFinishing() || isDestroyed()) return;
                 finalising = false;
                 completedGames = completed;
+                completedGamesRows = completedRows;
                 viewingHistory = false;
                 leaderboardAdapter.setEloChanges(eloChanges);
                 resultsPlaylistIds = new ArrayList<>(activeGamePlaylistIds);

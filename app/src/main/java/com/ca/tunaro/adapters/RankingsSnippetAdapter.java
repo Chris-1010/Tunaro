@@ -100,7 +100,7 @@ public class RankingsSnippetAdapter extends RecyclerView.Adapter<RankingsSnippet
         bg.setCornerRadius(context.getResources().getDisplayMetrics().density * 10);
         bg.setColor(active
                 ? ContextCompat.getColor(context, R.color.accent)
-                : 0x22FFFFFF);
+                : ContextCompat.getColor(context, R.color.surface_translucent));
         return bg;
     }
 

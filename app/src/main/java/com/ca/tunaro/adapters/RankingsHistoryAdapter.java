@@ -35,18 +35,59 @@ public class RankingsHistoryAdapter extends RecyclerView.Adapter<RankingsHistory
     // the true totals).
     private static final int MAX_HISTORY_ICONS = 4;
 
+    /**
+     * Row data read from the database up front, so binding never touches the DB.
+     * Build it with {@link #preload} on a background thread.
+     */
+    public static final class Preloaded {
+        static final Preloaded EMPTY = new Preloaded(new HashMap<>(), new HashMap<>());
+
+        // song uri → champion song (lean)
+        final Map<String, SongModel> champions;
+        // playlist_id → cover url (null when the playlist is gone)
+        final Map<String, String> playlistCovers;
+
+        Preloaded(Map<String, SongModel> champions, Map<String, String> playlistCovers) {
+            this.champions = champions;
+            this.playlistCovers = playlistCovers;
+        }
+    }
+
     private final Context context;
-    private final DatabaseHelper dbHelper;
     private final OnGameClickListener listener;
     private List<RankingGame> games = new ArrayList<>();
-    // playlist_id → cover url, filled lazily so the same playlist isn't re-read
-    // across rows.
-    private final Map<String, String> coverCache = new HashMap<>();
+    private Preloaded preloaded = Preloaded.EMPTY;
 
-    public RankingsHistoryAdapter(Context context, DatabaseHelper dbHelper, OnGameClickListener listener) {
+    public RankingsHistoryAdapter(Context context, OnGameClickListener listener) {
         this.context = context;
-        this.dbHelper = dbHelper;
         this.listener = listener;
+    }
+
+    /**
+     * Reads each game's champion and every referenced playlist cover once.
+     * Blocking: call off the main thread.
+     */
+    public static Preloaded preload(DatabaseHelper db, List<RankingGame> games) {
+        Map<String, SongModel> champions = new HashMap<>();
+        Map<String, String> covers = new HashMap<>();
+        if (games == null) return new Preloaded(champions, covers);
+        for (RankingGame game : games) {
+            if (!game.finalOrder.isEmpty()) {
+                String championId = game.finalOrder.get(0);
+                if (!champions.containsKey(championId)) {
+                    champions.put(championId, db.getLeanSong(championId));
+                }
+            }
+            if (game.playlistIds == null) continue;
+            int seen = 0;
+            for (String id : game.playlistIds) {
+                if (seen++ >= MAX_HISTORY_ICONS) break;
+                if (covers.containsKey(id)) continue;
+                PlaylistModel playlist = db.getPlaylistById(id);
+                covers.put(id, playlist != null ? playlist.getImage() : null);
+            }
+        }
+        return new Preloaded(champions, covers);
     }
 
     @NonNull
@@ -63,7 +104,7 @@ public class RankingsHistoryAdapter extends RecyclerView.Adapter<RankingsHistory
         String championName = "Champion";
         String coverUrl = null;
         if (!game.finalOrder.isEmpty()) {
-            SongModel champion = dbHelper.getLeanSong(game.finalOrder.get(0));
+            SongModel champion = preloaded.champions.get(game.finalOrder.get(0));
             if (champion != null) {
                 championName = champion.getName();
                 coverUrl = champion.getAlbumCoverUrl();
@@ -89,7 +130,7 @@ public class RankingsHistoryAdapter extends RecyclerView.Adapter<RankingsHistory
             icon.setLayoutParams(params);
             icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
             Glide.with(context)
-                    .load(coverForPlaylist(id))
+                    .load(preloaded.playlistCovers.get(id))
                     .apply(ImageLoads.thumbnailPx(iconSize))
                     .placeholder(R.drawable.playlist_placeholder)
                     .error(R.drawable.playlist_placeholder)
@@ -118,17 +159,10 @@ public class RankingsHistoryAdapter extends RecyclerView.Adapter<RankingsHistory
         return games.size();
     }
 
-    public void updateGames(List<RankingGame> newGames) {
+    public void updateGames(List<RankingGame> newGames, Preloaded rowData) {
         this.games = newGames != null ? newGames : new ArrayList<>();
+        this.preloaded = rowData != null ? rowData : Preloaded.EMPTY;
         notifyDataSetChanged();
-    }
-
-    private String coverForPlaylist(String id) {
-        if (coverCache.containsKey(id)) return coverCache.get(id);
-        PlaylistModel playlist = dbHelper.getPlaylistById(id);
-        String cover = playlist != null ? playlist.getImage() : null;
-        coverCache.put(id, cover);
-        return cover;
     }
 
     private int dpToPx(int dp) {
