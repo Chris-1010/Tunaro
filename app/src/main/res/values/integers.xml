@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Motion durations (design direction: 150-250ms, fade/slide only). -->
+    <integer name="motion_press_ms">100</integer>
+    <integer name="motion_screen_ms">220</integer>
+</resources>

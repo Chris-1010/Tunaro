@@ -4,6 +4,7 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.drawable.GradientDrawable;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
@@ -11,20 +12,23 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.ca.tunaro.R;
 import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.models.SongSnippet;
+import com.ca.tunaro.utils.SnippetEditorInput;
 import com.ca.tunaro.utils.SnippetTheme;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 public class SongSnippetsAdapter extends RecyclerView.Adapter<SongSnippetsAdapter.SnippetViewHolder> {
     private final Context context;
-    private List<SongSnippet> snippets;
+    private final List<SongSnippet> snippets = new ArrayList<>();
     private final OnSnippetActionListener listener;
 
     // Live playback state used to drive each row's seekbar.
@@ -48,7 +52,7 @@ public class SongSnippetsAdapter extends RecyclerView.Adapter<SongSnippetsAdapte
 
     public SongSnippetsAdapter(Context context, List<SongSnippet> snippets, OnSnippetActionListener listener) {
         this.context = context;
-        this.snippets = snippets;
+        this.snippets.addAll(snippets);
         this.listener = listener;
     }
 
@@ -83,9 +87,6 @@ public class SongSnippetsAdapter extends RecyclerView.Adapter<SongSnippetsAdapte
         // Set up the seek bar range. Position is driven by playback only.
         long totalDuration = snippet.getEndTime() - snippet.getStartTime();
         holder.snippetSeekBar.setMax((int) Math.max(0, totalDuration));
-
-        // The seekbar reflects playback but is not user-draggable.
-        holder.snippetSeekBar.setOnTouchListener((v, e) -> true);
 
         applyTheme(holder);
         bindSeekBarPosition(holder, snippet, false);
@@ -298,14 +299,39 @@ public class SongSnippetsAdapter extends RecyclerView.Adapter<SongSnippetsAdapte
         return snippets.size();
     }
 
+    /** Replace the rows, animating only what changed. The adapter keeps its own copy of the list. */
     public void updateSnippets(List<SongSnippet> newSnippets) {
-        this.snippets = newSnippets;
-        notifyDataSetChanged();
+        final List<SongSnippet> oldSnippets = new ArrayList<>(snippets);
+        final List<SongSnippet> next = new ArrayList<>(newSnippets);
+        DiffUtil.DiffResult diff = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+            @Override
+            public int getOldListSize() {
+                return oldSnippets.size();
+            }
+
+            @Override
+            public int getNewListSize() {
+                return next.size();
+            }
+
+            @Override
+            public boolean areItemsTheSame(int oldPos, int newPos) {
+                return SnippetEditorInput.sameSnippet(oldSnippets.get(oldPos), next.get(newPos));
+            }
+
+            @Override
+            public boolean areContentsTheSame(int oldPos, int newPos) {
+                return SnippetEditorInput.sameContents(oldSnippets.get(oldPos), next.get(newPos));
+            }
+        });
+        snippets.clear();
+        snippets.addAll(next);
+        diff.dispatchUpdatesTo(this);
     }
 
     public void setTheme(SnippetTheme theme) {
         this.theme = theme;
-        notifyDataSetChanged();
+        notifyItemRangeChanged(0, snippets.size());
     }
 
     public void setVariantUris(List<String> variantUris) {
@@ -357,6 +383,13 @@ public class SongSnippetsAdapter extends RecyclerView.Adapter<SongSnippetsAdapte
             snippetSeekBar = itemView.findViewById(R.id.snippetSeekBar);
             snippetPlayButton = itemView.findViewById(R.id.snippetPlayButton);
             modeButton = itemView.findViewById(R.id.modeButton);
+
+            // The seekbar reflects playback but is not user-draggable: consume touches,
+            // still reporting a click so accessibility services see a consistent gesture.
+            snippetSeekBar.setOnTouchListener((v, e) -> {
+                if (e.getAction() == MotionEvent.ACTION_UP) v.performClick();
+                return true;
+            });
         }
     }
 }

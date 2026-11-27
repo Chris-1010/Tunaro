@@ -6,7 +6,6 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -15,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.ca.tunaro.R;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.models.SpotifyExtendedHistoryEntry;
+import com.ca.tunaro.utils.RunningJobGuard;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
@@ -40,6 +40,7 @@ public class SpotifyHistoryImportActivity extends AppCompatActivity {
     private List<Uri> selectedFileUris = new ArrayList<>();
     private DatabaseHelper databaseHelper;
     private ExecutorService executorService;
+    private RunningJobGuard jobGuard;
 
     private final ActivityResultLauncher<String[]> filePickerLauncher = registerForActivityResult(
             new ActivityResultContracts.OpenMultipleDocuments(),
@@ -57,8 +58,11 @@ public class SpotifyHistoryImportActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_spotify_history_import);
 
-        databaseHelper = new DatabaseHelper(this);
+        databaseHelper = DatabaseHelper.getInstance(this);
         executorService = Executors.newSingleThreadExecutor();
+        jobGuard = new RunningJobGuard(this, "Import in progress",
+                "The import keeps running if you leave, but progress won't be shown and it may "
+                        + "stop if Android closes the app. Leave anyway?");
 
         setupBackButton();
         initializeViews();
@@ -74,7 +78,7 @@ public class SpotifyHistoryImportActivity extends AppCompatActivity {
 
     @Override
     public boolean onSupportNavigateUp() {
-        finish();
+        jobGuard.navigateUp();
         return true;
     }
 
@@ -133,56 +137,65 @@ public class SpotifyHistoryImportActivity extends AppCompatActivity {
         importProgress.setMax(selectedFileUris.size());
         importProgress.setProgress(0);
         importDetails.setVisibility(View.VISIBLE);
+        jobGuard.start();
 
         executorService.execute(() -> {
-            int totalProcessed = 0;
-            int totalAdded = 0;
-            int totalSkipped = 0;
-            int filesProcessed = 0;
-
-            for (Uri uri : selectedFileUris) {
-                String fileName = getFileNameFromUri(uri);
-
-                runOnUiThread(() -> {
-                    importStatus.setText("Processing: " + fileName);
-                });
-
-                ImportResult result = processFile(uri);
-                totalProcessed += result.processed;
-                totalAdded += result.added;
-                totalSkipped += result.skipped;
-                filesProcessed++;
-
-                final int currentFile = filesProcessed;
-                final int finalTotalProcessed = totalProcessed;
-                final int finalTotalAdded = totalAdded;
-                final int finalTotalSkipped = totalSkipped;
-
-                runOnUiThread(() -> {
-                    importProgress.setProgress(currentFile);
-                    importDetails.setText(String.format(
-                            "Files: %d/%d\nTotal entries: %d\nImported: %d\nSkipped: %d",
-                            currentFile, selectedFileUris.size(),
-                            finalTotalProcessed, finalTotalAdded, finalTotalSkipped
-                    ));
-                });
+            try {
+                runImport();
+            } finally {
+                // Release the screen even if a file blew up mid-import.
+                runOnUiThread(() -> jobGuard.stop());
             }
+        });
+    }
 
-            final int finalTotal = totalProcessed;
-            final int finalAdded = totalAdded;
-            final int finalSkipped = totalSkipped;
+    private void runImport() {
+        int totalProcessed = 0;
+        int totalAdded = 0;
+        int totalSkipped = 0;
+        int filesProcessed = 0;
+
+        for (Uri uri : selectedFileUris) {
+            String fileName = getFileNameFromUri(uri);
 
             runOnUiThread(() -> {
-                processingWarningContainer.setVisibility(View.GONE);
-                importProgress.setVisibility(View.GONE);
-                importStatus.setText("Import Complete!");
-                importDetails.setText(String.format(
-                        "Processed %d files\n\nTotal entries: %d\nSuccessfully imported: %d\nSkipped (duplicates/invalid): %d",
-                        selectedFileUris.size(), finalTotal, finalAdded, finalSkipped
-                ));
-                selectFilesButton.setEnabled(true);
-                Toast.makeText(this, "Import completed: " + finalAdded + " listens added", Toast.LENGTH_LONG).show();
+                importStatus.setText("Processing: " + fileName);
             });
+
+            ImportResult result = processFile(uri);
+            totalProcessed += result.processed;
+            totalAdded += result.added;
+            totalSkipped += result.skipped;
+            filesProcessed++;
+
+            final int currentFile = filesProcessed;
+            final int finalTotalProcessed = totalProcessed;
+            final int finalTotalAdded = totalAdded;
+            final int finalTotalSkipped = totalSkipped;
+
+            runOnUiThread(() -> {
+                importProgress.setProgress(currentFile);
+                importDetails.setText(String.format(
+                        "Files: %d/%d\nTotal entries: %d\nImported: %d\nSkipped: %d",
+                        currentFile, selectedFileUris.size(),
+                        finalTotalProcessed, finalTotalAdded, finalTotalSkipped
+                ));
+            });
+        }
+
+        final int finalTotal = totalProcessed;
+        final int finalAdded = totalAdded;
+        final int finalSkipped = totalSkipped;
+
+        runOnUiThread(() -> {
+            processingWarningContainer.setVisibility(View.GONE);
+            importProgress.setVisibility(View.GONE);
+            importStatus.setText("Import Complete!");
+            importDetails.setText(String.format(
+                    "Processed %d files\n\nTotal entries: %d\nSuccessfully imported: %d\nSkipped (duplicates/invalid): %d",
+                    selectedFileUris.size(), finalTotal, finalAdded, finalSkipped
+            ));
+            selectFilesButton.setEnabled(true);
         });
     }
 

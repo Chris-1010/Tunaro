@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/dark_blue"
+    android:background="@color/brand_blue"
     tools:context=".activites.RankingsActivity">
 
     <TextView
@@ -13,9 +13,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="40dp"
         android:text="Rankings"
-        android:textColor="@color/white"
-        android:textSize="30sp"
-        android:textStyle="bold"
+        android:textAppearance="@style/TextAppearance.Tunaro.Display"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -25,9 +23,9 @@
         android:id="@+id/setup_phase"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginStart="24dp"
-        android:layout_marginEnd="24dp"
-        android:layout_marginTop="16dp"
+        android:layout_marginStart="@dimen/space_lg"
+        android:layout_marginEnd="@dimen/space_lg"
+        android:layout_marginTop="@dimen/space_md"
         android:orientation="vertical"
         app:layout_constraintBottom_toTopOf="@+id/playback_bar"
         app:layout_constraintTop_toBottomOf="@+id/rankings_title">
@@ -38,7 +36,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:visibility="gone"
-            app:cardBackgroundColor="#26FFFFFF"
+            app:cardBackgroundColor="@color/surface_translucent"
             app:cardCornerRadius="16dp"
             app:cardElevation="0dp">
 
@@ -46,23 +44,23 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="16dp">
+                android:padding="@dimen/space_md">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Game in progress"
-                    android:textColor="@color/tanAccent"
-                    android:textSize="14sp"
+                    android:textColor="@color/accent"
+                    android:textSize="@dimen/text_body_small"
                     android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/resume_progress"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:layout_marginTop="@dimen/space_xs"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body" />
 
                 <LinearLayout
                     android:id="@+id/resume_covers_row"
@@ -85,9 +83,9 @@
                         android:id="@+id/resume_count"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:textColor="@color/faintTanAccent"
-                        android:textSize="13sp" />
+                        android:layout_marginStart="@dimen/space_sm"
+                        android:textColor="@color/accent_muted"
+                        android:textSize="@dimen/text_body_small" />
 
                 </LinearLayout>
 
@@ -96,9 +94,9 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
-                    android:backgroundTint="@color/tanAccent"
+                    android:backgroundTint="@color/accent"
                     android:text="Resume"
-                    android:textColor="@color/black"
+                    android:textColor="@color/on_accent"
                     app:cornerRadius="22dp" />
 
             </LinearLayout>
@@ -109,26 +107,26 @@
             android:id="@+id/new_game_section"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="@dimen/space_md"
             android:orientation="vertical">
 
             <TextView
                 android:id="@+id/pool_summary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textColor="@color/white"
-                android:textSize="16sp" />
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/start_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:backgroundTint="@color/tanAccent"
+                android:layout_marginTop="@dimen/space_md"
+                android:backgroundTint="@color/accent"
                 android:padding="12dp"
                 android:text="New Game"
-                android:textColor="@color/black"
-                android:textSize="16sp"
+                android:textColor="@color/on_accent"
+                android:textSize="@dimen/text_body"
                 app:cornerRadius="24dp" />
 
         </LinearLayout>
@@ -137,10 +135,10 @@
             android:id="@+id/past_results_label"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
+            android:layout_marginTop="@dimen/space_lg"
             android:text="Past results"
-            android:textColor="@color/faintTanAccent"
-            android:textSize="14sp"
+            android:textColor="@color/accent_muted"
+            android:textSize="@dimen/text_body_small"
             android:textStyle="bold"
             android:visibility="gone" />
 
@@ -148,7 +146,7 @@
             android:id="@+id/history_recycler_view"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="@dimen/space_xs"
             android:layout_weight="1"
             tools:listitem="@layout/item_ranking_history" />
 
@@ -159,8 +157,8 @@
         android:id="@+id/match_phase"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
+        android:layout_marginStart="@dimen/space_md"
+        android:layout_marginEnd="@dimen/space_md"
         android:gravity="center_horizontal"
         android:orientation="vertical"
         android:visibility="gone"
@@ -172,18 +170,18 @@
             android:id="@+id/round_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:textColor="@color/tanAccent"
-            android:textSize="24sp"
+            android:layout_marginTop="@dimen/space_sm"
+            android:textAppearance="@style/TextAppearance.Tunaro.Title"
+            android:textColor="@color/accent"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/match_progress"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:textColor="@color/white"
-            android:textSize="14sp" />
+            android:layout_marginTop="@dimen/space_xs"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_body_small" />
 
         <!-- Standings graph: a reshuffling ladder of the whole field, or swipeable
              round columns of pairings. Takes the space above the cards. -->
@@ -197,7 +195,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="@dimen/space_sm"
             android:gravity="top"
             android:orientation="horizontal">
 
@@ -214,7 +212,7 @@
                     android:id="@+id/border_a"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:padding="4dp"
+                    android:padding="@dimen/space_xs"
                     app:borderCornerRadius="12dp"
                     app:borderStrokeWidth="5dp">
 
@@ -224,7 +222,7 @@
                     android:layout_height="wrap_content"
                     android:clickable="true"
                     android:focusable="true"
-                    app:cardBackgroundColor="#E0E0E0"
+                    app:cardBackgroundColor="@color/surface_raised"
                     app:cardCornerRadius="12dp"
                     app:cardElevation="4dp">
 
@@ -248,40 +246,41 @@
                             android:id="@+id/cover_a"
                             android:layout_width="80dp"
                             android:layout_height="80dp"
+                            android:contentDescription="@string/album_cover"
                             android:scaleType="centerCrop" />
 
                         <TextView
                             android:id="@+id/song_name_a"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
+                            android:layout_marginTop="@dimen/space_sm"
                             android:ellipsize="end"
                             android:lines="2"
                             android:textAlignment="center"
-                            android:textColor="@color/black"
-                            android:textSize="15sp"
+                            android:textColor="@color/text_primary"
+                            android:textSize="@dimen/text_body"
                             android:textStyle="bold" />
 
                         <TextView
                             android:id="@+id/artist_name_a"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
+                            android:layout_marginTop="@dimen/space_xs"
                             android:ellipsize="end"
                             android:maxLines="1"
                             android:textAlignment="center"
-                            android:textColor="@color/black"
-                            android:textSize="12sp" />
+                            android:textColor="@color/text_secondary"
+                            android:textSize="@dimen/text_caption" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/choose_button_a"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:backgroundTint="@color/tanAccent"
+                            android:layout_marginTop="@dimen/space_sm"
+                            android:backgroundTint="@color/accent"
                             android:text="Choose"
-                            android:textColor="@color/black"
-                            android:textSize="13sp"
+                            android:textColor="@color/on_accent"
+                            android:textSize="@dimen/text_body_small"
                             app:cornerRadius="18dp" />
 
                     </LinearLayout>
@@ -302,12 +301,11 @@
                 android:id="@+id/vs_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_marginEnd="8dp"
+                android:layout_marginStart="@dimen/space_sm"
+                android:layout_marginEnd="@dimen/space_sm"
                 android:layout_marginTop="60dp"
                 android:text="VS"
-                android:textColor="@color/white"
-                android:textSize="18sp"
+                android:textAppearance="@style/TextAppearance.Tunaro.Title"
                 android:textStyle="bold" />
 
             <!-- Side B -->
@@ -321,7 +319,7 @@
                     android:id="@+id/border_b"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:padding="4dp"
+                    android:padding="@dimen/space_xs"
                     app:borderCornerRadius="12dp"
                     app:borderStrokeWidth="5dp">
 
@@ -331,7 +329,7 @@
                     android:layout_height="wrap_content"
                     android:clickable="true"
                     android:focusable="true"
-                    app:cardBackgroundColor="#E0E0E0"
+                    app:cardBackgroundColor="@color/surface_raised"
                     app:cardCornerRadius="12dp"
                     app:cardElevation="4dp">
 
@@ -355,40 +353,41 @@
                             android:id="@+id/cover_b"
                             android:layout_width="80dp"
                             android:layout_height="80dp"
+                            android:contentDescription="@string/album_cover"
                             android:scaleType="centerCrop" />
 
                         <TextView
                             android:id="@+id/song_name_b"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
+                            android:layout_marginTop="@dimen/space_sm"
                             android:ellipsize="end"
                             android:lines="2"
                             android:textAlignment="center"
-                            android:textColor="@color/black"
-                            android:textSize="15sp"
+                            android:textColor="@color/text_primary"
+                            android:textSize="@dimen/text_body"
                             android:textStyle="bold" />
 
                         <TextView
                             android:id="@+id/artist_name_b"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
+                            android:layout_marginTop="@dimen/space_xs"
                             android:ellipsize="end"
                             android:maxLines="1"
                             android:textAlignment="center"
-                            android:textColor="@color/black"
-                            android:textSize="12sp" />
+                            android:textColor="@color/text_secondary"
+                            android:textSize="@dimen/text_caption" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/choose_button_b"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:backgroundTint="@color/tanAccent"
+                            android:layout_marginTop="@dimen/space_sm"
+                            android:backgroundTint="@color/accent"
                             android:text="Choose"
-                            android:textColor="@color/black"
-                            android:textSize="13sp"
+                            android:textColor="@color/on_accent"
+                            android:textSize="@dimen/text_body_small"
                             app:cornerRadius="18dp" />
 
                     </LinearLayout>
@@ -422,11 +421,11 @@
                 android:layout_marginEnd="12dp"
                 android:enabled="false"
                 app:icon="@drawable/ic_arrow_back"
-                app:iconTint="@color/tanAccent"
+                app:iconTint="@color/accent"
                 android:text="Undo"
-                android:textColor="@color/tanAccent"
+                android:textColor="@color/accent"
                 app:cornerRadius="22dp"
-                app:strokeColor="@color/tanAccent" />
+                app:strokeColor="@color/accent" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/save_exit_button"
@@ -434,9 +433,9 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Save &amp; exit"
-                android:textColor="@color/tanAccent"
+                android:textColor="@color/accent"
                 app:cornerRadius="22dp"
-                app:strokeColor="@color/tanAccent" />
+                app:strokeColor="@color/accent" />
 
         </LinearLayout>
 
@@ -447,8 +446,8 @@
         android:id="@+id/results_phase"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
+        android:layout_marginStart="@dimen/space_md"
+        android:layout_marginEnd="@dimen/space_md"
         android:gravity="center_horizontal"
         android:orientation="vertical"
         android:visibility="gone"
@@ -461,7 +460,7 @@
             android:id="@+id/results_playlist_icons"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="@dimen/space_md"
             android:gravity="center"
             android:orientation="horizontal"
             android:visibility="gone" />
@@ -470,17 +469,21 @@
             android:id="@+id/leaderboard_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="@dimen/space_sm"
             android:text="Final standings"
-            android:textColor="@color/tanAccent"
-            android:textSize="24sp"
+            android:textAppearance="@style/TextAppearance.Tunaro.Title"
+            android:textColor="@color/accent"
             android:textStyle="bold" />
+
+        <include
+            android:id="@+id/leaderboard_empty"
+            layout="@layout/view_state_message" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/leaderboard_recycler_view"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="@dimen/space_md"
             android:layout_weight="1"
             tools:listitem="@layout/item_leaderboard_entry" />
 
@@ -488,13 +491,13 @@
             android:id="@+id/restart_button"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
-            android:backgroundTint="@color/tanAccent"
+            android:layout_marginTop="@dimen/space_sm"
+            android:layout_marginBottom="@dimen/space_sm"
+            android:backgroundTint="@color/accent"
             android:padding="12dp"
             android:text="Play Again"
-            android:textColor="@color/black"
-            android:textSize="16sp"
+            android:textColor="@color/on_accent"
+            android:textSize="@dimen/text_body"
             app:cornerRadius="24dp" />
 
     </LinearLayout>

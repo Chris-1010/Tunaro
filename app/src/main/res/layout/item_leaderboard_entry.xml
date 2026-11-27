@@ -2,8 +2,10 @@
 <androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
+    android:foreground="?attr/selectableItemBackground"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="8dp"
+    android:layout_marginBottom="@dimen/space_sm"
+    app:cardBackgroundColor="@color/surface"
     app:cardCornerRadius="8dp"
     app:cardElevation="4dp">
 
@@ -19,20 +21,22 @@
             android:layout_width="40dp"
             android:layout_height="wrap_content"
             android:textAlignment="center"
-            android:textSize="18sp"
+            android:textColor="@color/accent"
+            android:textSize="@dimen/text_title"
             android:textStyle="bold" />
 
         <ImageView
             android:id="@+id/album_cover"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="@dimen/space_sm"
+            android:importantForAccessibility="no"
             android:scaleType="centerCrop" />
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
+            android:layout_marginStart="@dimen/space_md"
             android:layout_weight="1"
             android:orientation="vertical">
 
@@ -42,17 +46,19 @@
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textSize="16sp"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body"
                 android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/artist_name"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="@dimen/space_xs"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textSize="14sp" />
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_body_small" />
 
         </LinearLayout>
 
@@ -60,8 +66,8 @@
             android:id="@+id/elo_change"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:textSize="13sp"
+            android:layout_marginStart="@dimen/space_sm"
+            android:textSize="@dimen/text_body_small"
             android:textStyle="bold"
             android:visibility="gone" />
 

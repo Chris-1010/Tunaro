@@ -8,7 +8,6 @@ import android.view.View;
 import android.widget.ImageView;
 import android.widget.PopupMenu;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -17,6 +16,9 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.ca.tunaro.BaseActivity;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.models.PlaylistModel;
+import com.ca.tunaro.utils.PlaylistsEmptyState;
+import com.ca.tunaro.utils.StateMessage;
+import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.PlaylistSetup;
 import com.ca.tunaro.adapters.Playlist_RecyclerViewAdapter;
 import com.ca.tunaro.interfaces.Playlist_RecyclerViewInterface;
@@ -25,6 +27,7 @@ import com.ca.tunaro.utils.SelectedPlaylistHolder;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 public class PlaylistsActivity extends BaseActivity implements Playlist_RecyclerViewInterface {
     private static final String TAG = "PlaylistsActivity";
@@ -38,6 +41,12 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
     private ImageView archiveToggleButton;
     private boolean showingArchived = false;
     private PopupMenu activePopupMenu;
+    // Latest unfiltered playlist list (cached or fresh); null until something has loaded.
+    private ArrayList<PlaylistModel> allPlaylists;
+    private boolean fetchInFlight = false;
+    // Discards filter results that a newer filter pass has superseded.
+    private int filterGeneration = 0;
+    // Content keys of the rendered rows, so a refresh can diff in instead of redrawing.
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,7 +57,7 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
         setContentView(R.layout.activity_playlists);
 
         mainActivity = MainActivity.getInstance();
-        dbHelper = new DatabaseHelper(this);
+        dbHelper = DatabaseHelper.getInstance(this);
 
         // Initialize RecyclerView
         recyclerView = findViewById(R.id.playlists_recycler_view);
@@ -57,6 +66,7 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
 
         adapter = new Playlist_RecyclerViewAdapter(this, playlistModels, this, this::showPlaylistOptions);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        recyclerView.setHasFixedSize(true);
         recyclerView.setAdapter(adapter);
 
         swipeRefreshLayout.setOnRefreshListener(this::refreshData);
@@ -66,28 +76,30 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
         if (mainActivity != null) {
             loadPlaylists();
         } else {
-            showToast("Error: Could not connect to Spotify");
+            showMessage("Couldn't connect to Spotify");
             finish();
         }
     }
 
+    /** Show cached playlists immediately, then revalidate against Spotify and diff in changes. */
     private void loadPlaylists() {
         if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
-            showToast("Spotify API not ready");
+            StateMessage.showError(findViewById(R.id.playlists_state),
+                    R.string.playlists_error_title, R.string.connection_error_hint,
+                    this::retryFirstLoad);
             return;
         }
 
-        swipeRefreshLayout.setRefreshing(true);
-
-        PlaylistSetup.getPlaylistData(mainActivity.getSpotifyApi())
-                .thenAccept(this::updateUIWithFilteredPlaylists)
-                .exceptionally(e -> {
-                    runOnUiThread(() -> {
-                        showToast("Error loading playlists: " + e.getMessage());
-                        swipeRefreshLayout.setRefreshing(false);
-                    });
-                    return null;
-                });
+        PlaylistSetup.getCachedPlaylists().thenAccept(cached -> runOnUiThread(() -> {
+            if (isDestroyed()) return;
+            if (cached != null && !cached.isEmpty()) {
+                if (allPlaylists == null) showPlaylists(cached);
+            } else if (fetchInFlight && allPlaylists == null) {
+                // Nothing cached: show placeholder rows until the network answers.
+                StateMessage.setShimmer(findViewById(R.id.playlists_shimmer), true);
+            }
+        }));
+        fetchPlaylists(false);
     }
 
     private void refreshData() {
@@ -95,16 +107,59 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
             swipeRefreshLayout.setRefreshing(false);
             return;
         }
+        fetchPlaylists(true);
+    }
 
-        PlaylistSetup.refreshPlaylists(mainActivity.getSpotifyApi())
-                .thenAccept(this::updateUIWithFilteredPlaylists)
+    private void fetchPlaylists(boolean userInitiated) {
+        fetchInFlight = true;
+        PlaylistSetup.refreshPlaylists(mainActivity.getSpotifyApi(), userInitiated)
+                .thenAccept(playlists -> runOnUiThread(() -> {
+                    fetchInFlight = false;
+                    if (isDestroyed()) return;
+                    showPlaylists(playlists);
+                }))
                 .exceptionally(e -> {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    Log.e(TAG, "Playlist refresh failed", cause);
                     runOnUiThread(() -> {
-                        showToast("Error refreshing playlists: " + e.getMessage());
+                        fetchInFlight = false;
+                        if (isDestroyed()) return;
                         swipeRefreshLayout.setRefreshing(false);
+                        StateMessage.setShimmer(findViewById(R.id.playlists_shimmer), false);
+                        if (allPlaylists == null) {
+                            // Nothing to show at all: full error state in place of the list.
+                            StateMessage.showError(findViewById(R.id.playlists_state),
+                                    R.string.playlists_error_title, R.string.connection_error_hint,
+                                    this::retryFirstLoad);
+                        } else if (userInitiated) {
+                            // A background revalidation that fails quietly keeps the cached list.
+                            showMessage(getString(R.string.playlists_refresh_failed),
+                                    R.string.retry, () -> {
+                                        if (!fetchInFlight) {
+                                            swipeRefreshLayout.setRefreshing(true);
+                                            refreshData();
+                                        }
+                                    });
+                        }
                     });
                     return null;
                 });
+    }
+
+    private void retryFirstLoad() {
+        if (fetchInFlight) return;
+        if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
+            showMessage("Not connected to Spotify yet");
+            return;
+        }
+        StateMessage.hide(findViewById(R.id.playlists_state));
+        StateMessage.setShimmer(findViewById(R.id.playlists_shimmer), true);
+        fetchPlaylists(false);
+    }
+
+    private void showPlaylists(ArrayList<PlaylistModel> playlists) {
+        allPlaylists = playlists;
+        applyFilter();
     }
 
     private void showPlaylistOptions(View itemView, int position) {
@@ -141,22 +196,22 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
             if (itemId == R.id.action_favourite) {
                 if (dbHelper.isPlaylistFavourited(playlist.getId())) {
                     dbHelper.unfavouritePlaylist(playlist.getId());
-                    showToast("Playlist unfavourited");
+                    showMessage("Playlist unfavourited");
                 } else {
                     dbHelper.favouritePlaylist(playlist.getId());
-                    showToast("Playlist favourited");
+                    showMessage("Playlist favourited");
                 }
-                refreshPlaylists();
+                applyFilter();
                 return true;
             } else if (itemId == R.id.action_archive) {
                 if (showingArchived) {
                     dbHelper.unarchivePlaylist(playlist.getId());
-                    showToast("Playlist unarchived");
+                    showMessage("Playlist unarchived");
                 } else {
                     dbHelper.archivePlaylist(playlist.getId());
-                    showToast("Playlist archived");
+                    showMessage("Playlist archived");
                 }
-                refreshPlaylists();
+                applyFilter();
                 return true;
             }
             return false;
@@ -174,75 +229,79 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
         archiveToggleButton.setImageResource(showingArchived ?
                 R.drawable.playlists :
                 R.drawable.archived_playlists);
-        refreshPlaylists();
+        applyFilter();
     }
 
-    private void refreshPlaylists() {
-        if (mainActivity == null || mainActivity.getSpotifyApi() == null) {
-            return;
-        }
+    /** Re-filter the loaded playlists by archive/favourite state (read off the main thread). */
+    private void applyFilter() {
+        ArrayList<PlaylistModel> source = allPlaylists;
+        if (source == null) return;
+        boolean archived = showingArchived;
+        int generation = ++filterGeneration;
 
-        swipeRefreshLayout.setRefreshing(true);
-
-        if (showingArchived) {
-            PlaylistSetup.getPlaylistData(mainActivity.getSpotifyApi())
-                    .thenAccept(this::updateUIWithFilteredPlaylists)
-                    .exceptionally(e -> {
-                        runOnUiThread(() -> {
-                            showToast("Error loading playlists: " + e.getMessage());
-                            swipeRefreshLayout.setRefreshing(false);
-                        });
-                        return null;
-                    });
-        } else {
-            PlaylistSetup.refreshPlaylists(mainActivity.getSpotifyApi())
-                    .thenAccept(this::updateUIWithFilteredPlaylists)
-                    .exceptionally(e -> {
-                        runOnUiThread(() -> {
-                            showToast("Error refreshing playlists: " + e.getMessage());
-                            swipeRefreshLayout.setRefreshing(false);
-                        });
-                        return null;
-                    });
-        }
+        CompletableFuture.supplyAsync(() -> filterPlaylists(source, archived), AppExecutors.io())
+                .thenAccept(filtered -> runOnUiThread(() -> {
+                    if (isDestroyed() || generation != filterGeneration) return;
+                    renderPlaylists(filtered);
+                }))
+                .exceptionally(e -> {
+                    Log.e(TAG, "Filtering playlists failed", e);
+                    runOnUiThread(() -> swipeRefreshLayout.setRefreshing(false));
+                    return null;
+                });
     }
 
-    private void updateUIWithFilteredPlaylists(ArrayList<PlaylistModel> playlists) {
+    private ArrayList<PlaylistModel> filterPlaylists(ArrayList<PlaylistModel> playlists, boolean archived) {
         List<String> archivedIds = dbHelper.getArchivedPlaylistIds();
         List<String> favouritedIds = dbHelper.getFavouritedPlaylistIds();
         ArrayList<PlaylistModel> filteredPlaylists = new ArrayList<>();
 
         for (PlaylistModel playlist : playlists) {
-            boolean isArchived = archivedIds.contains(playlist.getId());
-            boolean isFavourited = favouritedIds.contains(playlist.getId());
-
-            playlist.setFavourite(isFavourited);
-
-            if (isArchived == showingArchived) {
+            playlist.setFavourite(favouritedIds.contains(playlist.getId()));
+            if (archivedIds.contains(playlist.getId()) == archived) {
                 filteredPlaylists.add(playlist);
             }
         }
 
         // Favourite Playlists come first
-        filteredPlaylists.sort((p1, p2) -> {
-            if (p1.isFavourite() && !p2.isFavourite()) return -1;
-            if (!p1.isFavourite() && p2.isFavourite()) return 1;
-            return 0;
-        });
-
-        runOnUiThread(() -> {
-            // Update title to show if in archived mode
-            TextView titleView = findViewById(R.id.playlists_title);
-            if (titleView != null) {
-                titleView.setText(showingArchived ? "Archived Playlists" : "Your Playlists");
-            }
-
-            playlistModels.clear();
-            playlistModels.addAll(filteredPlaylists);
-            adapter.notifyDataSetChanged();
-            swipeRefreshLayout.setRefreshing(false);
-        });
+        filteredPlaylists.sort((p1, p2) -> Boolean.compare(p2.isFavourite(), p1.isFavourite()));
+        return filteredPlaylists;
     }
+
+    private void renderPlaylists(ArrayList<PlaylistModel> filtered) {
+        TextView titleView = findViewById(R.id.playlists_title);
+        if (titleView != null) {
+            titleView.setText(showingArchived ? "Archived Playlists" : "Your Playlists");
+        }
+
+        adapter.submitPlaylists(filtered);
+        if (!fetchInFlight) swipeRefreshLayout.setRefreshing(false);
+        StateMessage.setShimmer(findViewById(R.id.playlists_shimmer), false);
+        renderEmptyState(filtered.size());
+    }
+
+    private void renderEmptyState(int visibleCount) {
+        int total = allPlaylists != null ? allPlaylists.size() : 0;
+        View state = findViewById(R.id.playlists_state);
+        switch (PlaylistsEmptyState.resolve(showingArchived, total, visibleCount)) {
+            case NO_PLAYLISTS:
+                StateMessage.showEmpty(state, R.drawable.ic_state_playlist,
+                        R.string.playlists_empty, R.string.playlists_empty_hint);
+                break;
+            case ALL_ARCHIVED:
+                StateMessage.showEmpty(state, R.drawable.ic_state_playlist,
+                        R.string.playlists_all_archived, R.string.playlists_all_archived_hint);
+                break;
+            case NO_ARCHIVED:
+                StateMessage.showEmpty(state, R.drawable.ic_state_playlist,
+                        R.string.playlists_archived_empty, R.string.playlists_archived_empty_hint);
+                break;
+            default:
+                StateMessage.hide(state);
+                break;
+        }
+    }
+
 
     @Override
     public void onItemClick(int position, View itemView) {
@@ -259,17 +318,6 @@ public class PlaylistsActivity extends BaseActivity implements Playlist_Recycler
         // Start the PlaylistView activity
         Intent intent = new Intent(this, PlaylistView.class);
         startActivity(intent);
-        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
 
-    @Override
-    public void finish() {
-        super.finish();
-        overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out);
-    }
-
-    private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "showed Toast: " + message);
-    }
 }

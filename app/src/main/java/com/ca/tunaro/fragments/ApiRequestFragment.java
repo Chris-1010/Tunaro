@@ -20,13 +20,13 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
 import com.ca.tunaro.R;
+import com.ca.tunaro.utils.UiFeedback;
 import com.ca.tunaro.activites.MainActivity;
 import com.ca.tunaro.utils.DeveloperHistory;
 import com.ca.tunaro.utils.SecurePrefs;
@@ -409,7 +409,7 @@ public class ApiRequestFragment extends Fragment {
     private void showHistory() {
         List<DeveloperHistory.ApiEntry> history = DeveloperHistory.getApiRequests(requireContext());
         if (history.isEmpty()) {
-            Toast.makeText(requireContext(), "No request history yet", Toast.LENGTH_SHORT).show();
+            UiFeedback.show(requireActivity(), "No request history yet");
             return;
         }
 

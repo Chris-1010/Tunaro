@@ -197,7 +197,7 @@ public class SwissGraphView extends LinearLayout {
         GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(dp(16));
         if (isSelected) {
-            bg.setColor(getColor(R.color.tanAccent));
+            bg.setColor(getColor(R.color.accent));
         } else {
             bg.setColor(0x22FFFFFF);
             bg.setStroke(dp(1), 0x55FFFFFF);
@@ -271,7 +271,7 @@ public class SwissGraphView extends LinearLayout {
             TextView header = new TextView(getContext());
             header.setText(round.label);
             header.setTextSize(12f);
-            header.setTextColor(getColor(R.color.tanAccent));
+            header.setTextColor(getColor(R.color.accent));
             header.setPadding(dp(2), 0, dp(2), dp(6));
             columnView.addView(header, new LayoutParams(boxW, WRAP_CONTENT));
 

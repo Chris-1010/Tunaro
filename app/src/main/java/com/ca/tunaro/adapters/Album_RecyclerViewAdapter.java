@@ -16,6 +16,7 @@ import com.ca.tunaro.R;
 import com.ca.tunaro.models.AlbumModel;
 
 import java.util.ArrayList;
+import com.ca.tunaro.utils.ImageLoads;
 
 /**
  * Renders an artist's discography in ArtistView's Albums tab. The contextual third line shows
@@ -88,6 +89,7 @@ public class Album_RecyclerViewAdapter extends RecyclerView.Adapter<Album_Recycl
 
         Glide.with(context)
                 .load(album.getCoverImageUrl())
+                .apply(ImageLoads.thumbnail(context, 64))
                 .placeholder(R.drawable.song_placeholder)
                 .error(R.drawable.song_placeholder)
                 .transition(DrawableTransitionOptions.withCrossFade())

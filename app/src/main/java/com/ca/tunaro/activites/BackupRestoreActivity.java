@@ -17,6 +17,7 @@ import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.models.SongNote;
 import com.ca.tunaro.models.SongSnippet;
+import com.ca.tunaro.utils.RunningJobGuard;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -53,6 +54,7 @@ public class BackupRestoreActivity extends AppCompatActivity {
     private Uri selectedFileUri;
     private DatabaseHelper dbHelper;
     private ExecutorService executor;
+    private RunningJobGuard jobGuard;
 
     private final ActivityResultLauncher<String[]> filePicker = registerForActivityResult(
             new ActivityResultContracts.OpenDocument(),
@@ -71,8 +73,11 @@ public class BackupRestoreActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_backup_restore);
 
-        dbHelper = new DatabaseHelper(this);
+        dbHelper = DatabaseHelper.getInstance(this);
         executor = Executors.newSingleThreadExecutor();
+        jobGuard = new RunningJobGuard(this, "Restore in progress",
+                "The restore keeps running if you leave, but progress won't be shown and it may "
+                        + "stop if Android closes the app. Leave anyway?");
 
         selectFileButton = findViewById(R.id.select_file_button);
         startButton = findViewById(R.id.start_button);
@@ -93,7 +98,7 @@ public class BackupRestoreActivity extends AppCompatActivity {
 
     @Override
     public boolean onSupportNavigateUp() {
-        finish();
+        jobGuard.navigateUp();
         return true;
     }
 
@@ -111,6 +116,7 @@ public class BackupRestoreActivity extends AppCompatActivity {
         progressBar.setVisibility(View.VISIBLE);
         progressBar.setIndeterminate(true);
         detailsText.setVisibility(View.VISIBLE);
+        jobGuard.start();
 
         executor.execute(() -> runRestore(spotifyApi));
     }
@@ -244,29 +250,30 @@ public class BackupRestoreActivity extends AppCompatActivity {
             int listensAdded = 0;
             int rowCount = 0;
 
-            DatabaseHelper.ListenImportBatch listenBatch = dbHelper.beginListenImportBatch();
-            for (JsonElement e : listenArray) {
-                JsonObject entry = e.getAsJsonObject();
-                String songId = resolveSongId(entry.get("songId").getAsString(), compositeToTrackId);
-                if (songId == null) continue; // unresolvable composite key — skip
-                String timestamp = entry.get("listenTimestamp").getAsString();
-                String uuid = entry.has("uuid") ? entry.get("uuid").getAsString() : null;
+            // close() flushes the final partial batch, even if the loop exits early.
+            try (DatabaseHelper.ListenImportBatch listenBatch = dbHelper.beginListenImportBatch()) {
+                for (JsonElement e : listenArray) {
+                    JsonObject entry = e.getAsJsonObject();
+                    String songId = resolveSongId(entry.get("songId").getAsString(), compositeToTrackId);
+                    if (songId == null) continue; // unresolvable composite key — skip
+                    String timestamp = entry.get("listenTimestamp").getAsString();
+                    String uuid = entry.has("uuid") ? entry.get("uuid").getAsString() : null;
 
-                dbHelper.addListenToBatch(listenBatch, uuid, songId, timestamp);
-                listensAdded++;
+                    dbHelper.addListenToBatch(listenBatch, uuid, songId, timestamp);
+                    listensAdded++;
 
-                rowCount++;
-                if (rowCount % 5000 == 0) {
-                    dbHelper.flushListenBatch(listenBatch);
-                    final int addedSnap = listensAdded;
-                    final int rowSnap = rowCount;
-                    runOnUiThread(() -> {
-                        progressBar.setProgress(rowSnap);
-                        details("Listens imported: " + addedSnap);
-                    });
+                    rowCount++;
+                    if (rowCount % 5000 == 0) {
+                        dbHelper.flushListenBatch(listenBatch);
+                        final int addedSnap = listensAdded;
+                        final int rowSnap = rowCount;
+                        runOnUiThread(() -> {
+                            progressBar.setProgress(rowSnap);
+                            details("Listens imported: " + addedSnap);
+                        });
+                    }
                 }
             }
-            dbHelper.flushListenBatch(listenBatch);
 
             // Import notes
             status("Importing notes (" + notesArray.size() + " entries)...");
@@ -318,6 +325,7 @@ public class BackupRestoreActivity extends AppCompatActivity {
             final int finalPlaylistsArchived = playlistsArchived;
 
             runOnUiThread(() -> {
+                jobGuard.stop();
                 warningContainer.setVisibility(View.GONE);
                 progressBar.setVisibility(View.GONE);
                 statusText.setText("Restore complete!");
@@ -335,7 +343,9 @@ public class BackupRestoreActivity extends AppCompatActivity {
         } catch (Exception e) {
             Log.e(TAG, "Restore failed", e);
             runOnUiThread(() -> {
+                jobGuard.stop();
                 warningContainer.setVisibility(View.GONE);
+                progressBar.setVisibility(View.GONE);
                 statusText.setText("Restore failed: " + e.getMessage());
                 selectFileButton.setEnabled(true);
                 startButton.setEnabled(true);

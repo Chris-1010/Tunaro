@@ -1,7 +1,6 @@
 package com.ca.tunaro.adapters;
 
 import android.content.Context;
-import android.graphics.Color;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -9,6 +8,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import com.ca.tunaro.utils.ImageLoads;
 
 public class RankingsLeaderboardAdapter extends RecyclerView.Adapter<RankingsLeaderboardAdapter.ViewHolder> {
     private final Context context;
@@ -52,6 +53,7 @@ public class RankingsLeaderboardAdapter extends RecyclerView.Adapter<RankingsLea
 
         Glide.with(context)
                 .load(entry.song.getAlbumCoverUrl())
+                .apply(ImageLoads.thumbnail(context, 48))
                 .placeholder(R.drawable.playlist_placeholder)
                 .error(R.drawable.playlist_placeholder)
                 .into(holder.albumCoverImage);
@@ -60,10 +62,10 @@ public class RankingsLeaderboardAdapter extends RecyclerView.Adapter<RankingsLea
         if (change != null) {
             holder.eloChangeText.setText(String.format(Locale.getDefault(), "%+d → %+d",
                     change[0] - ELO_BASELINE, change[1] - ELO_BASELINE));
-            int colour = change[1] > change[0] ? Color.parseColor("#4CAF50")
-                    : change[1] < change[0] ? Color.parseColor("#E57373")
-                    : Color.parseColor("#AAAAAA");
-            holder.eloChangeText.setTextColor(colour);
+            int colourRes = change[1] > change[0] ? R.color.success_text
+                    : change[1] < change[0] ? R.color.danger_text
+                    : R.color.text_tertiary;
+            holder.eloChangeText.setTextColor(ContextCompat.getColor(context, colourRes));
             holder.eloChangeText.setVisibility(View.VISIBLE);
         } else {
             holder.eloChangeText.setVisibility(View.GONE);

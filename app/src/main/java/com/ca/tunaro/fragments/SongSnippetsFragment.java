@@ -1,12 +1,13 @@
 package com.ca.tunaro.fragments;
 
-import android.graphics.Color;
+import android.content.Context;
 import android.os.Bundle;
 import android.os.Handler;
-import android.util.Log;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
@@ -14,34 +15,40 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.ca.tunaro.utils.AppExecutors;
+import com.ca.tunaro.utils.SnippetEditorInput;
+import com.ca.tunaro.utils.StateMessage;
 import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.R;
+import com.ca.tunaro.utils.UiFeedback;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.models.SongSnippet;
 import com.ca.tunaro.adapters.SongSnippetsAdapter;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.utils.ColorExtractor;
 import com.ca.tunaro.utils.SnippetTheme;
+import com.google.android.material.textfield.TextInputLayout;
 import com.spotify.android.appremote.api.SpotifyAppRemote;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 public class SongSnippetsFragment extends Fragment implements PlaybackManager.PlaybackListener {
-    private static final String TAG = "SongSnippetsFragment";
-
     private View snippetCreationOverlay;
     private long snippetStartTime = -1;
     private long snippetEndTime = -1;
     private EditText startTimeInput, endTimeInput;
+    private TextInputLayout startTimeLayout, endTimeLayout;
     private Button previewStartButton, previewEndButton, saveSnippetButton;
     private View snippetRangeOverlay, snippetStartMarker, snippetEndMarker;
     private SeekBar snippetSeekBar;
@@ -66,6 +73,22 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
     private List<String> variantUris;
     private SnippetTheme currentTheme;
 
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private Context appContext;
+    private int loadGeneration;
+    private boolean emptyStateBound;
+
+    /** Overlay show/hide motion, matching the design's 150-250ms fade/slide. */
+    private static final long OVERLAY_ANIM_MS = 200;
+
+    // Enabled only while the editor overlay is open, so Back closes it instead of leaving SongView.
+    private final OnBackPressedCallback closeOverlayOnBack = new OnBackPressedCallback(false) {
+        @Override
+        public void handleOnBackPressed() {
+            hideSnippetCreationOverlay();
+        }
+    };
+
     public static SongSnippetsFragment newInstance(SongModel song, List<String> variantUris) {
         SongSnippetsFragment fragment = new SongSnippetsFragment();
         Bundle args = new Bundle();
@@ -83,7 +106,8 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
         spotifyAppRemote = PlaybackManager.getInstance().getSpotifyAppRemote();
 
 
-        dbHelper = new DatabaseHelper(requireContext());
+        appContext = requireContext().getApplicationContext();
+        dbHelper = DatabaseHelper.getInstance(appContext);
         if (getArguments() != null) {
             variantUris = getArguments().getStringArrayList("variantUris");
         }
@@ -96,15 +120,59 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
         addSnippetButton.setOnClickListener(v -> showSnippetCreationOverlay());
         setupSnippetsList();
 
-        // Load snippets — merge across variants so all versions' snippets are visible
-        snippets = variantUris != null && variantUris.size() > 1
-                ? dbHelper.getSongSnippetsForUris(variantUris)
-                : dbHelper.getSongSnippets(song.getId());
-        snippetAdapter.updateSnippets(snippets);
-
+        loadSnippets();
         applySnippetTheme();
 
         return view;
+    }
+
+    @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+        requireActivity().getOnBackPressedDispatcher()
+                .addCallback(getViewLifecycleOwner(), closeOverlayOnBack);
+    }
+
+    @Override
+    public void onDestroyView() {
+        mainHandler.removeCallbacksAndMessages(null);
+        super.onDestroyView();
+    }
+
+    /** Post {@code task} to the main thread, dropping it if the view has gone. */
+    private void postToUi(Runnable task) {
+        mainHandler.post(() -> {
+            if (isAdded() && getView() != null) task.run();
+        });
+    }
+
+    /**
+     * Read the snippets off the main thread (merged across variants so every version's snippets
+     * show), then refresh the list and the tab badge.
+     */
+    private void loadSnippets() {
+        if (song == null) return;
+        final int generation = ++loadGeneration;
+        final List<String> uris = variantUris != null ? new ArrayList<>(variantUris) : null;
+        final String songId = song.getId();
+        AppExecutors.io().execute(() -> {
+            List<SongSnippet> loaded = uris != null && uris.size() > 1
+                    ? dbHelper.getSongSnippetsForUris(uris)
+                    : dbHelper.getSongSnippets(songId);
+            postToUi(() -> {
+                if (generation != loadGeneration) return;
+                snippets = new ArrayList<>(loaded);
+                snippetAdapter.updateSnippets(loaded);
+                if (!emptyStateBound) {
+                    // Bound after the first read so "No snippets yet" never flashes while loading.
+                    emptyStateBound = true;
+                    StateMessage.bindEmptyState(snippetAdapter,
+                            ((View) snippetsRecyclerView.getParent()).findViewById(R.id.snippets_empty),
+                            R.drawable.ic_state_snippet, R.string.snippets_empty, R.string.snippets_empty_hint);
+                }
+                updateSnippetsBadge(loaded.size());
+            });
+        });
     }
 
     /**
@@ -113,10 +181,19 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
      */
     private void applySnippetTheme() {
         String coverUrl = song != null ? song.getAlbumCoverUrl() : null;
-        if (coverUrl == null && song != null) {
-            SongModel lean = dbHelper.getLeanSong(song.getId());
-            if (lean != null) coverUrl = lean.getAlbumCoverUrl();
+        if (coverUrl != null || song == null) {
+            themeFromCover(coverUrl);
+            return;
         }
+        final String songId = song.getId();
+        AppExecutors.io().execute(() -> {
+            SongModel lean = dbHelper.getLeanSong(songId);
+            String leanCover = lean != null ? lean.getAlbumCoverUrl() : null;
+            postToUi(() -> themeFromCover(leanCover));
+        });
+    }
+
+    private void themeFromCover(@Nullable String coverUrl) {
         if (coverUrl == null) {
             applyTheme(SnippetTheme.fallback());
             return;
@@ -124,13 +201,13 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
         ColorExtractor.extractColors(requireContext(), coverUrl, new ColorExtractor.ColorExtractionCallback() {
             @Override
             public void onColorExtracted(int dominantColor, int vibrantColor) {
-                if (!isAdded()) return;
+                if (!isAdded() || getView() == null) return;
                 applyTheme(SnippetTheme.from(vibrantColor, dominantColor));
             }
 
             @Override
             public void onError() {
-                if (!isAdded()) return;
+                if (!isAdded() || getView() == null) return;
                 applyTheme(SnippetTheme.fallback());
             }
         });
@@ -158,7 +235,7 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
 
         // Opaque, readable card fill: the album tint composited over a dark base.
         int cardColor = androidx.core.graphics.ColorUtils.compositeColors(
-                currentTheme.rowBackground, Color.parseColor("#1A1A1A"));
+                currentTheme.rowBackground, ContextCompat.getColor(requireContext(), R.color.surface_raised));
         View card = snippetCreationOverlay.findViewById(R.id.snippet_controls_card);
         if (card instanceof androidx.cardview.widget.CardView) {
             ((androidx.cardview.widget.CardView) card).setCardBackgroundColor(cardColor);
@@ -169,7 +246,7 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
         if (titleLayout instanceof com.google.android.material.textfield.TextInputLayout) {
             com.google.android.material.textfield.TextInputLayout til =
                     (com.google.android.material.textfield.TextInputLayout) titleLayout;
-            int unfocused = Color.parseColor("#B3FFFFFF");
+            int unfocused = ContextCompat.getColor(requireContext(), R.color.text_secondary);
             int focused = currentTheme.seekbarProgress;
             android.content.res.ColorStateList boxColors = new android.content.res.ColorStateList(
                     new int[][]{
@@ -248,7 +325,7 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
 
     private void setupSnippetsList() {
         // Setup recycler view with the adapter
-        snippetAdapter = new SongSnippetsAdapter(requireContext(), snippets, new SongSnippetsAdapter.OnSnippetActionListener() {
+        snippetAdapter = new SongSnippetsAdapter(requireContext(), new ArrayList<>(), new SongSnippetsAdapter.OnSnippetActionListener() {
             @Override
             public void onPlaySnippet(SongSnippet snippet) {
                 // Playback logic
@@ -273,6 +350,7 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
         // Setup recycler view
         snippetsRecyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
         snippetsRecyclerView.setAdapter(snippetAdapter);
+        emptyStateBound = false;
     }
 
     private void playSnippet(SongSnippet snippet) {
@@ -296,16 +374,25 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
             }
         }
 
+        if (snippetCreationOverlay == null) return;
+
         // Reset state if creating a new snippet
         if (editingSnippet == null) {
             snippetStartTime = -1;
             snippetEndTime = -1;
+            // Start blank rather than showing the last edited snippet's title.
+            EditText titleInput = snippetCreationOverlay.findViewById(R.id.snippet_title_input);
+            CheckBox includeInRankings = snippetCreationOverlay.findViewById(R.id.include_in_rankings);
+            titleInput.setText("");
+            includeInRankings.setChecked(true);
         }
+        clearTimeErrors();
         updateTimeDisplays();
         updateSnippetMarkers();
+        updateButtonStates();
 
-        // Show the overlay
-        snippetCreationOverlay.setVisibility(View.VISIBLE);
+        animateOverlayIn();
+        closeOverlayOnBack.setEnabled(true);
 
         // Setup playback bar with current song
         setupSnippetPlaybackBar();
@@ -330,6 +417,8 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
 
         startTimeInput = snippetCreationOverlay.findViewById(R.id.start_time_input);
         endTimeInput = snippetCreationOverlay.findViewById(R.id.end_time_input);
+        startTimeLayout = snippetCreationOverlay.findViewById(R.id.start_time_layout);
+        endTimeLayout = snippetCreationOverlay.findViewById(R.id.end_time_layout);
         setupTimeInputListeners();
 
         // Setup seekbar
@@ -356,6 +445,7 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
         // Set Start button
         setStartButton.setOnClickListener(v -> {
             snippetStartTime = playbackManager.getCurrentPositionMs();
+            clearTimeErrors();
             updateTimeDisplays();
             updateSnippetMarkers();
             updateButtonStates();
@@ -366,11 +456,12 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
             long currentPos = playbackManager.getCurrentPositionMs();
             if (snippetStartTime != -1 && currentPos > snippetStartTime) {
                 snippetEndTime = currentPos;
+                endTimeLayout.setError(null);
                 updateTimeDisplays();
                 updateSnippetMarkers();
                 updateButtonStates();
             } else {
-                showToast("End time must be after start time");
+                endTimeLayout.setError(SnippetEditorInput.errorText(SnippetEditorInput.NOT_AFTER_START));
             }
         });
 
@@ -393,58 +484,46 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
             }
         });
 
-        // Save button
+        // Save button: commit any typed times first, then validate in place so the
+        // overlay (and what was typed) stays open on a bad value.
         saveSnippetButton.setOnClickListener(v -> {
-            String title = titleInput.getText().toString();
-            boolean includeRankings = includeInRankings.isChecked();
-
+            boolean startOk = commitStartInput();
+            boolean endOk = commitEndInput();
+            if (!startOk || !endOk) return;
             if (snippetStartTime == -1 || snippetEndTime == -1) {
-                showToast("Please set both start and end times");
+                if (snippetStartTime == -1) startTimeLayout.setError("Set a start time");
+                if (snippetEndTime == -1) endTimeLayout.setError("Set an end time");
                 return;
             }
 
+            String title = titleInput.getText() != null ? titleInput.getText().toString() : "";
+            boolean includeRankings = includeInRankings.isChecked();
+
             if (editingSnippet != null) {
-                // Update existing snippet
-                editingSnippet.setTitle(title);
-                editingSnippet.setStartTime(snippetStartTime);
-                editingSnippet.setEndTime(snippetEndTime);
-                editingSnippet.setIncludeInRankings(includeRankings);
-
-                dbHelper.editSnippet(editingSnippet);
-
-                // Update the list
-                for (int i = 0; i < snippets.size(); i++) {
-                    if (snippets.get(i).getId() == editingSnippet.getId()) {
-                        snippets.set(i, editingSnippet);
-                        break;
-                    }
-                }
-
-                snippetAdapter.updateSnippets(snippets);
-                showToast("Snippet updated");
-                editingSnippet = null; // Clear the editing state
+                // Edit a copy so the row bound in the adapter stays a faithful snapshot for diffing.
+                SongSnippet updated = SnippetEditorInput.copy(editingSnippet);
+                updated.setTitle(title);
+                updated.setStartTime(snippetStartTime);
+                updated.setEndTime(snippetEndTime);
+                updated.setIncludeInRankings(includeRankings);
+                AppExecutors.io().execute(() -> {
+                    dbHelper.editSnippet(updated);
+                    UiFeedback.show(appContext, "Snippet updated");
+                    postToUi(this::loadSnippets);
+                });
             } else {
-                // Create new snippet (existing code)
-                long snippetNo = snippets.size() + 1;
-                for (SongSnippet existingSnippet : snippets) {
-                    if (existingSnippet.getSnippetNo() >= snippetNo) {
-                        snippetNo = existingSnippet.getSnippetNo() + 1;
-                    }
-                }
-
+                long snippetNo = SnippetEditorInput.nextSnippetNo(snippets, snippets.size());
                 SongSnippet newSnippet = new SongSnippet(null, song.getId(), snippetNo, title,
                         snippetStartTime, snippetEndTime, includeRankings);
-
-                long id = dbHelper.addSnippet(newSnippet);
-                if (id != -1) {
-                    newSnippet.setId(id);
-                    snippets.add(newSnippet);
-                    snippetAdapter.updateSnippets(snippets);
-                    updateSnippetsBadge();
-                    showToast("Snippet saved");
-                } else {
-                    showToast("Error saving snippet");
-                }
+                AppExecutors.io().execute(() -> {
+                    long id = dbHelper.addSnippet(newSnippet);
+                    if (id == -1) {
+                        UiFeedback.show(appContext, "Couldn't save the snippet");
+                        return;
+                    }
+                    UiFeedback.show(appContext, "Snippet saved");
+                    postToUi(this::loadSnippets);
+                });
             }
 
             hideSnippetCreationOverlay();
@@ -460,12 +539,19 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
                         .setTitle("Delete Snippet")
                         .setMessage("Are you sure you want to delete this snippet?")
                         .setPositiveButton("Delete", (dialog, which) -> {
-                            dbHelper.deleteSnippet(editingSnippet.getId());
-                            snippets.removeIf(snippet -> snippet.getId() == editingSnippet.getId());
+                            if (editingSnippet == null) return;
+                            final long snippetId = editingSnippet.getId();
+                            // Drop any load already in flight so it cannot restore the deleted row.
+                            ++loadGeneration;
+                            snippets.removeIf(snippet -> snippet.getId() == snippetId);
                             snippetAdapter.updateSnippets(snippets);
-                            updateSnippetsBadge();
-                            showToast("Snippet deleted");
+                            updateSnippetsBadge(snippets.size());
                             hideSnippetCreationOverlay();
+                            AppExecutors.io().execute(() -> {
+                                dbHelper.deleteSnippet(snippetId);
+                                UiFeedback.show(appContext, "Snippet deleted");
+                                postToUi(this::loadSnippets);
+                            });
                         })
                         .setNegativeButton("Cancel", null)
                         .show();
@@ -479,11 +565,9 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
                 // Wrong song is playing, play the correct song
                 if (playbackManager.isConnected()) {
                     playbackManager.playSong(song);
-                    showToast("Playing " + song.getName() + " for snippet creation");
                 } else {
                     playbackManager.connectSpotify(requireContext(), () -> {
                         playbackManager.playSong(song);
-                        showToast("Playing " + song.getName() + " for snippet creation");
                     });
                 }
             } else {
@@ -497,75 +581,117 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
         warningPlayButton.setOnClickListener(v -> {
             if (playbackManager.isConnected()) {
                 playbackManager.playSong(song);
-                showToast("Playing " + song.getName() + " for snippet creation");
             } else {
                 playbackManager.connectSpotify(requireContext(), () -> {
                     playbackManager.playSong(song);
-                    showToast("Playing " + song.getName() + " for snippet creation");
                 });
             }
         });
     }
 
     private void setupTimeInputListeners() {
+        // IME "next" on start moves to end; "done" on end commits and closes the keyboard.
         startTimeInput.setOnEditorActionListener((v, actionId, event) -> {
-            String timeText = startTimeInput.getText().toString();
-            long timeMs = parseTimeString(timeText);
-            if (timeMs != -1 && timeMs < song.getDuration()) {
-                snippetStartTime = timeMs;
-                updateSnippetMarkers();
-                updateButtonStates();
-                return true;
-            } else {
-                showToast("Invalid start time format. Use M:SS.mmm");
-                updateTimeDisplays();
-                return false;
+            if (commitStartInput()) {
+                endTimeInput.requestFocus();
             }
+            return true;
         });
 
         endTimeInput.setOnEditorActionListener((v, actionId, event) -> {
-            String timeText = endTimeInput.getText().toString();
-            long timeMs = parseTimeString(timeText);
-            if (timeMs != -1 && timeMs < song.getDuration() && (snippetStartTime == -1 || timeMs > snippetStartTime)) {
-                snippetEndTime = timeMs;
-                updateSnippetMarkers();
-                updateButtonStates();
-                return true;
-            } else {
-                showToast("Invalid end time format or must be after start time");
-                updateTimeDisplays();
-                return false;
+            if (commitEndInput()) {
+                endTimeInput.clearFocus();
+                hideKeyboard();
             }
+            return true;
         });
 
-        // Also update on focus lost
+        // Also commit on focus loss; a bad value keeps its text and shows the error in the field.
         startTimeInput.setOnFocusChangeListener((v, hasFocus) -> {
-            if (!hasFocus) {
-                String timeText = startTimeInput.getText().toString();
-                long timeMs = parseTimeString(timeText);
-                if (timeMs != -1 && timeMs < song.getDuration()) {
-                    snippetStartTime = timeMs;
-                    updateSnippetMarkers();
-                    updateButtonStates();
-                } else {
-                    updateTimeDisplays(); // Reset to valid value
-                }
-            }
+            if (!hasFocus) commitStartInput();
         });
-
         endTimeInput.setOnFocusChangeListener((v, hasFocus) -> {
-            if (!hasFocus) {
-                String timeText = endTimeInput.getText().toString();
-                long timeMs = parseTimeString(timeText);
-                if (timeMs != -1 && timeMs < song.getDuration() && (snippetStartTime == -1 || timeMs > snippetStartTime)) {
-                    snippetEndTime = timeMs;
-                    updateSnippetMarkers();
-                    updateButtonStates();
-                } else {
-                    updateTimeDisplays(); // Reset to valid value
-                }
-            }
+            if (!hasFocus) commitEndInput();
         });
+    }
+
+    /**
+     * Validate the typed start time and apply it when valid. An empty field with no time set is
+     * left alone. Returns false (with a field error) when the text is invalid.
+     */
+    private boolean commitStartInput() {
+        if (startTimeInput == null || song == null) return true;
+        String text = startTimeInput.getText() != null ? startTimeInput.getText().toString() : "";
+        if (text.trim().isEmpty() && snippetStartTime == -1) {
+            startTimeLayout.setError(null);
+            return true;
+        }
+        long timeMs = SnippetEditorInput.parseTime(text);
+        int result = SnippetEditorInput.validateStart(timeMs, song.getDuration());
+        startTimeLayout.setError(SnippetEditorInput.errorText(result));
+        if (result != SnippetEditorInput.VALID) return false;
+        snippetStartTime = timeMs;
+        updateSnippetMarkers();
+        updateButtonStates();
+        return true;
+    }
+
+    /** As {@link #commitStartInput()}, for the end time (which must also follow the start). */
+    private boolean commitEndInput() {
+        if (endTimeInput == null || song == null) return true;
+        String text = endTimeInput.getText() != null ? endTimeInput.getText().toString() : "";
+        if (text.trim().isEmpty() && snippetEndTime == -1) {
+            endTimeLayout.setError(null);
+            return true;
+        }
+        long timeMs = SnippetEditorInput.parseTime(text);
+        int result = SnippetEditorInput.validateEnd(timeMs, snippetStartTime, song.getDuration());
+        endTimeLayout.setError(SnippetEditorInput.errorText(result));
+        if (result != SnippetEditorInput.VALID) return false;
+        snippetEndTime = timeMs;
+        updateSnippetMarkers();
+        updateButtonStates();
+        return true;
+    }
+
+    private void clearTimeErrors() {
+        if (startTimeLayout != null) startTimeLayout.setError(null);
+        if (endTimeLayout != null) endTimeLayout.setError(null);
+    }
+
+    private void hideKeyboard() {
+        if (snippetCreationOverlay == null) return;
+        InputMethodManager imm = ContextCompat.getSystemService(requireContext(), InputMethodManager.class);
+        if (imm != null) imm.hideSoftInputFromWindow(snippetCreationOverlay.getWindowToken(), 0);
+    }
+
+    /** Fade the scrim in and slide the editor card up from slightly below. */
+    private void animateOverlayIn() {
+        View card = snippetCreationOverlay.findViewById(R.id.snippet_controls_card);
+        float offset = getResources().getDimension(R.dimen.space_xl);
+        snippetCreationOverlay.animate().cancel();
+        card.animate().cancel();
+        snippetCreationOverlay.setAlpha(0f);
+        snippetCreationOverlay.setVisibility(View.VISIBLE);
+        card.setTranslationY(offset);
+        snippetCreationOverlay.animate().alpha(1f).setDuration(OVERLAY_ANIM_MS).withEndAction(null).start();
+        card.animate().translationY(0f).setDuration(OVERLAY_ANIM_MS)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+    }
+
+    /** Reverse of {@link #animateOverlayIn()}; the overlay goes GONE once the fade finishes. */
+    private void animateOverlayOut() {
+        final View overlay = snippetCreationOverlay;
+        View card = overlay.findViewById(R.id.snippet_controls_card);
+        float offset = getResources().getDimension(R.dimen.space_xl);
+        overlay.animate().cancel();
+        card.animate().cancel();
+        card.animate().translationY(offset).setDuration(OVERLAY_ANIM_MS)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator()).start();
+        overlay.animate().alpha(0f).setDuration(OVERLAY_ANIM_MS).withEndAction(() -> {
+            overlay.setVisibility(View.GONE);
+            overlay.setAlpha(1f);
+        }).start();
     }
 
     private void setupSnippetPlaybackBar() {
@@ -609,7 +735,7 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
         }
 
         isUpdatingPlayback = true;
-        playbackUpdateHandler = new Handler();
+        playbackUpdateHandler = new Handler(Looper.getMainLooper());
         playbackUpdateRunnable = new Runnable() {
             @Override
             public void run() {
@@ -655,8 +781,8 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
     }
 
     private void updateTimeDisplays() {
-        String startText = snippetStartTime != -1 ? formatTimeWithMilliseconds(snippetStartTime) : "";
-        String endText = snippetEndTime != -1 ? formatTimeWithMilliseconds(snippetEndTime) : "";
+        String startText = snippetStartTime != -1 ? SnippetEditorInput.formatTime(snippetStartTime) : "";
+        String endText = snippetEndTime != -1 ? SnippetEditorInput.formatTime(snippetEndTime) : "";
 
         startTimeInput.setText(startText);
         endTimeInput.setText(endText);
@@ -716,9 +842,14 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
     }
 
     private void hideSnippetCreationOverlay() {
+        closeOverlayOnBack.setEnabled(false);
         if (snippetCreationOverlay != null) {
-            snippetCreationOverlay.setVisibility(View.GONE);
+            hideKeyboard();
+            View focused = snippetCreationOverlay.findFocus();
+            if (focused != null) focused.clearFocus();
+            animateOverlayOut();
             stopPlaybackUpdates();
+            clearTimeErrors();
 
             // Reset editing state
             editingSnippet = null;
@@ -767,49 +898,6 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
         }
     }
 
-    private long parseTimeString(String timeStr) {
-        if (timeStr == null || timeStr.trim().isEmpty()) {
-            return -1;
-        }
-
-        try {
-            // Expected format: M:SS.mmm or MM:SS.mmm
-            String[] parts = timeStr.split(":");
-            if (parts.length != 2) return -1;
-
-            int minutes = Integer.parseInt(parts[0]);
-
-            String[] secondsParts = parts[1].split("\\.");
-            if (secondsParts.length != 2) return -1;
-
-            int seconds = Integer.parseInt(secondsParts[0]);
-            int milliseconds = Integer.parseInt(secondsParts[1]);
-
-            // Ensure milliseconds is 3 digits (pad or truncate)
-            if (secondsParts[1].length() == 1) {
-                milliseconds *= 100;
-            } else if (secondsParts[1].length() == 2) {
-                milliseconds *= 10;
-            } else if (secondsParts[1].length() > 3) {
-                milliseconds = Integer.parseInt(secondsParts[1].substring(0, 3));
-            }
-
-            return (minutes * 60 * 1000L) + (seconds * 1000L) + milliseconds;
-
-        } catch (NumberFormatException e) {
-            return -1;
-        }
-    }
-
-    private String formatTimeWithMilliseconds(long timeMs) {
-        int totalMs = (int) timeMs;
-        int minutes = totalMs / (60 * 1000);
-        int seconds = (totalMs % (60 * 1000)) / 1000;
-        int milliseconds = totalMs % 1000;
-
-        return String.format(Locale.getDefault(), "%d:%02d.%03d", minutes, seconds, milliseconds);
-    }
-
     private void updateSnippetCreationWarning() {
         TextView warningText = snippetCreationOverlay.findViewById(R.id.snippet_warning_text);
         ImageButton warningPlayButton = snippetCreationOverlay.findViewById(R.id.snippet_warning_play_button);
@@ -818,7 +906,7 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
             if (!isCorrectSongPlaying()) {
                 warningText.setVisibility(View.VISIBLE);
                 warningText.setText("Play this song to create a snippet");
-                warningText.setTextColor(getResources().getColor(android.R.color.holo_orange_light));
+                warningText.setTextColor(ContextCompat.getColor(requireContext(), R.color.warning));
                 warningPlayButton.setVisibility(View.VISIBLE);
             } else {
                 warningText.setVisibility(View.GONE);
@@ -832,18 +920,10 @@ public class SongSnippetsFragment extends Fragment implements PlaybackManager.Pl
         return currentlyPlaying != null && currentlyPlaying.getId().equals(song.getId());
     }
 
-    private void updateSnippetsBadge() {
+    private void updateSnippetsBadge(int count) {
         if (getActivity() instanceof com.ca.tunaro.activites.SongView) {
-            int count = (variantUris != null && variantUris.size() > 1
-                    ? dbHelper.getSongSnippetsForUris(variantUris)
-                    : dbHelper.getSongSnippets(song.getId())).size();
             ((com.ca.tunaro.activites.SongView) getActivity()).updateTabBadge(2, count);
         }
-    }
-
-    private void showToast(String message) {
-            Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show();
-            Log.v(TAG, "showed Toast: " + message);
     }
 
     @Override

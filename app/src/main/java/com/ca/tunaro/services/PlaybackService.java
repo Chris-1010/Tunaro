@@ -28,6 +28,7 @@ import com.bumptech.glide.request.transition.Transition;
 import com.ca.tunaro.R;
 import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.models.SongModel;
+import com.ca.tunaro.utils.LaunchRouting;
 
 /**
  * Foreground service acting purely as a lifetime anchor for a playback session
@@ -323,6 +324,11 @@ public class PlaybackService extends Service implements PlaybackManager.Playback
         if (launch == null) {
             launch = new Intent();
         }
+        // Behave like the launcher icon: bring an existing task forward as the user
+        // left it. MainActivity finishes itself if it lands on top of a live task;
+        // with no task (process killed) it runs the normal splash/recovery path.
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+        launch.putExtra(LaunchRouting.EXTRA_FROM_NOTIFICATION, true);
         int flags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             flags |= PendingIntent.FLAG_IMMUTABLE;

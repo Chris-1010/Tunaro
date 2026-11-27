@@ -19,7 +19,9 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.ca.tunaro.utils.StateMessage;
 import com.ca.tunaro.R;
+import com.ca.tunaro.utils.UiFeedback;
 import com.ca.tunaro.activites.AlbumView;
 import com.ca.tunaro.activites.ArtistView;
 import com.ca.tunaro.activites.MainActivity;
@@ -277,8 +279,7 @@ public class ArtistAlbumsFragment extends Fragment
         MainActivity mainActivity = MainActivity.getInstance();
         if (mainActivity == null || mainActivity.getSpotifyApi() == null) return;
 
-        android.widget.Toast.makeText(requireContext(),
-                "Playing " + album.getName(), android.widget.Toast.LENGTH_SHORT).show();
+        UiFeedback.show(requireActivity(), "Playing " + album.getName());
 
         mainActivity.executeWithTokenRefresh(() -> mainActivity.getSpotifyApi()
                         .getAlbumsTracks(album.getAlbumId()).limit(50).build())
@@ -338,11 +339,28 @@ public class ArtistAlbumsFragment extends Fragment
     }
 
     private void showEmpty(boolean show) {
-        TextView label = rootView.findViewById(R.id.empty_label);
-        // Distinguish "nothing loaded" from "search matched nothing".
+        View label = rootView.findViewById(R.id.empty_label);
+        if (!show) {
+            StateMessage.hide(label);
+            return;
+        }
+        // Distinguish "nothing loaded" from "search matched nothing" and "load failed".
         boolean searching = searchQuery != null && !searchQuery.trim().isEmpty();
-        label.setText(searching ? "No matches" : "No releases found");
-        label.setVisibility(show ? View.VISIBLE : View.GONE);
+        ArtistView host = host();
+        if (searching) {
+            StateMessage.showEmpty(label, R.drawable.ic_search,
+                    R.string.artist_albums_no_matches, R.string.library_no_matches_hint);
+        } else if (host != null && host.isDiscographyFailed()) {
+            StateMessage.showError(label, R.string.artist_albums_error,
+                    R.string.connection_error_hint, () -> {
+                        StateMessage.hide(label);
+                        showShimmer(true);
+                        host.retryDiscography();
+                    });
+        } else {
+            StateMessage.showEmpty(label, R.drawable.ic_state_playlist,
+                    R.string.artist_albums_empty, 0);
+        }
     }
 
     private ArtistView host() {

@@ -2,14 +2,13 @@ package com.ca.tunaro.activites;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
 import android.view.View;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
-import android.widget.Toast;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -19,8 +18,11 @@ import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.adapters.LibrarySongAdapter;
 import com.ca.tunaro.interfaces.Library_RecyclerViewInterface;
 import com.ca.tunaro.R;
+import com.ca.tunaro.utils.StateMessage;
 import com.ca.tunaro.utils.SelectedSongHolder;
 import com.ca.tunaro.models.SongModel;
+import com.ca.tunaro.utils.AppExecutors;
+import com.ca.tunaro.utils.LibrarySearch;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,6 +34,8 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
     private DatabaseHelper dbHelper;
     private final List<SongModel> allSongs = new ArrayList<>();
     private EditText searchBar;
+    // onCreate already loads once; onResume reloads only on later returns (e.g. back from SongView).
+    private boolean skipNextResumeReload = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -43,22 +47,40 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
 
         Log.d(TAG, "LibraryActivity onCreate MainActivity.getInstance()");
         if (MainActivity.getInstance() == null) {
-            showToast("Could not connect to Spotify");
+            showMessage("Couldn't connect to Spotify");
             finish();
             return;
         }
 
-        dbHelper = new DatabaseHelper(this);
+        dbHelper = DatabaseHelper.getInstance(this);
 
         RecyclerView recyclerView = findViewById(R.id.library_recycler_view);
         adapter = new LibrarySongAdapter(this, this);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         recyclerView.setAdapter(adapter);
+        recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(RecyclerView rv, int newState) {
+                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) hideKeyboard();
+            }
+        });
 
         searchBar = findViewById(R.id.search_bar);
         setupSearchBar();
 
-        loadSongsWithNotes();
+        loadSongsWithNotes(true);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (adapter == null) return; // onCreate bailed out early.
+        if (skipNextResumeReload) {
+            skipNextResumeReload = false;
+            return;
+        }
+        // Notes may have been added or removed elsewhere; DiffUtil keeps the scroll position.
+        loadSongsWithNotes(false);
     }
 
     private void setupSearchBar() {
@@ -69,62 +91,48 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
             }
             @Override public void afterTextChanged(Editable s) {}
         });
+        searchBar.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                hideKeyboard();
+                return true;
+            }
+            return false;
+        });
     }
 
-    private void loadSongsWithNotes() {
-        List<String> songIds = dbHelper.getSongIdsWithNotes();
-
-        setLoadingState(true);
-        allSongs.clear();
-        adapter.clearSongs();
-
-        // Load from DB first, fall back to Spotify API for any unknown songs
-        loadSongsSequentially(songIds, 0);
+    private void hideKeyboard() {
+        InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (imm != null) imm.hideSoftInputFromWindow(searchBar.getWindowToken(), 0);
+        searchBar.clearFocus();
     }
 
-    private void loadSongsSequentially(List<String> songIds, int index) {
-        if (index >= songIds.size()) {
-            setLoadingState(false);
-            return;
+    // showSpinner is false for silent refreshes so the current list stays on screen.
+    private void loadSongsWithNotes(boolean showSpinner) {
+        if (showSpinner) {
+            setLoadingState(true);
+            setEmptyState(false);
         }
-
-        String songId = songIds.get(index);
-
-        // Try DB first
-        SongModel dbSong = dbHelper.getLeanSong(songId);
-        if (dbSong != null) {
+        AppExecutors.io().execute(() -> {
+            List<String> songIds = dbHelper.getSongIdsWithNotes();
+            List<SongModel> songs = dbHelper.getLeanSongs(songIds);
+            if (songs.size() < songIds.size()) {
+                // Songs missing from the DB are back-filled by the next playlist sync / orphan pass.
+                Log.w(TAG, "Skipped " + (songIds.size() - songs.size()) + " library songs not in DB");
+            }
             runOnUiThread(() -> {
-                allSongs.add(dbSong);
-                adapter.addSong(dbSong);
-                loadSongsSequentially(songIds, index + 1);
+                if (isFinishing() || isDestroyed()) return;
+                allSongs.clear();
+                allSongs.addAll(songs);
+                setLoadingState(false);
+                filterSongs(searchBar.getText().toString());
             });
-            return;
-        }
-
-        // Not in DB — should not happen in normal flow. Skip; song data will be
-        // populated on the next playlist sync / orphan back-fill.
-        Log.w(TAG, "Song not in DB, skipping library entry: " + songId);
-        new Handler(Looper.getMainLooper()).post(() -> loadSongsSequentially(songIds, index + 1));
+        });
     }
 
     private void filterSongs(String query) {
-        if (query == null || query.isEmpty()) {
-            adapter.updateSongs(allSongs);
-            return;
-        }
-
-        List<SongModel> filteredList = new ArrayList<>();
-        String lowercaseQuery = query.toLowerCase().trim();
-
-        for (SongModel song : allSongs) {
-            if (song.getName().toLowerCase().contains(lowercaseQuery) ||
-                    song.getArtist().toLowerCase().contains(lowercaseQuery) ||
-                    song.getAlbumName().toLowerCase().contains(lowercaseQuery)) {
-                filteredList.add(song);
-            }
-        }
-
-        adapter.updateSongs(filteredList);
+        List<SongModel> filtered = LibrarySearch.filter(allSongs, query);
+        adapter.updateSongs(filtered);
+        setEmptyState(filtered.isEmpty());
     }
 
     @Override
@@ -134,13 +142,6 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
         Intent intent = new Intent(this, SongView.class);
         intent.putExtra("source", "library");
         startActivity(intent);
-        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
-    }
-
-    @Override
-    public void finish() {
-        super.finish();
-        overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out);
     }
 
     private void setLoadingState(boolean isLoading) {
@@ -150,8 +151,19 @@ public class LibraryActivity extends BaseActivity implements Library_RecyclerVie
         }
     }
 
-    private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "showed Toast: " + message);
+    // Shows the empty message: "no annotated songs" when the library is empty, "no matches" when
+    // only the current search filters everything out.
+    private void setEmptyState(boolean isEmpty) {
+        View emptyView = findViewById(R.id.empty_view);
+        if (!isEmpty) {
+            StateMessage.hide(emptyView);
+        } else if (allSongs.isEmpty()) {
+            StateMessage.showEmpty(emptyView, R.drawable.ic_state_library,
+                    R.string.library_empty, R.string.library_empty_hint);
+        } else {
+            StateMessage.showEmpty(emptyView, R.drawable.ic_search,
+                    R.string.library_no_matches, R.string.library_no_matches_hint);
+        }
     }
+
 }

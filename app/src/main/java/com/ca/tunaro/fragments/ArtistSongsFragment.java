@@ -19,6 +19,7 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.ca.tunaro.utils.StateMessage;
 import com.ca.tunaro.R;
 import com.ca.tunaro.activites.ArtistView;
 import com.ca.tunaro.activites.MainActivity;
@@ -30,6 +31,7 @@ import com.ca.tunaro.interfaces.Song_RecyclerViewInterface;
 import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.models.AlbumModel;
 import com.ca.tunaro.models.SongModel;
+import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.SelectedSongHolder;
 import com.google.android.material.button.MaterialButton;
 
@@ -56,6 +58,7 @@ public class ArtistSongsFragment extends Fragment
     private View rootView;
     private RecyclerView recyclerView;
     private Song_RecyclerViewAdapter adapter;
+    private boolean firstResume = true;
     private QueueLineDecoration queueLineDecoration;
     // URI of the row currently highlighted as now-playing; drives targeted decoration refreshes.
     private String highlightedUri;
@@ -110,6 +113,7 @@ public class ArtistSongsFragment extends Fragment
 
         recyclerView = rootView.findViewById(R.id.songs_recycler_view);
         recyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
+        recyclerView.setHasFixedSize(true);
         adapter = new Song_RecyclerViewAdapter(requireContext(), this, displayed);
         adapter.setShowArtist(false); // The page already belongs to this artist.
         recyclerView.setAdapter(adapter);
@@ -119,11 +123,7 @@ public class ArtistSongsFragment extends Fragment
         // Swipe an album cover right to add/remove the song from the queue: refresh the line.
         adapter.setOnQueueChangeListener((position, added) -> recyclerView.invalidateItemDecorations());
 
-        DatabaseHelper db = new DatabaseHelper(requireContext());
-        localUris = db.getArtistLocalSongUris(artistId);
-        localSongs.addAll(db.getArtistLocalSongs(artistId));
-        db.close();
-        adapter.setAddedUris(localUris);
+        loadLocalSongs();
 
         // Reflect any toggle already flipped on the host before this tab was created.
         if (host() != null) addedOnlyFilter = host().isAddedFilterActive();
@@ -136,6 +136,27 @@ public class ArtistSongsFragment extends Fragment
         fetchTopTracks();
 
         return rootView;
+    }
+
+    // Reads the artist's locally-added songs off the main thread, then refreshes the added
+    // markers and (when the added-only filter is on) the rendered list.
+    private void loadLocalSongs() {
+        DatabaseHelper db = DatabaseHelper.getInstance(requireContext());
+        final String id = artistId;
+        AppExecutors.io().execute(() -> {
+            Set<String> uris = db.getArtistLocalSongUris(id);
+            List<SongModel> added = db.getArtistLocalSongs(id);
+            android.app.Activity activity = getActivity();
+            if (activity == null) return;
+            activity.runOnUiThread(() -> {
+                if (!isAdded() || adapter == null) return;
+                localUris = uris;
+                localSongs.clear();
+                localSongs.addAll(added);
+                adapter.setAddedUris(localUris);
+                if (addedOnlyFilter) applySort();
+            });
+        });
     }
 
     //#region Sorting
@@ -468,7 +489,7 @@ public class ArtistSongsFragment extends Fragment
     // can now be trusted to run through consecutive queued rows. Mirrors PlaylistView.onQueueCreated.
     private void onQueueCreated() {
         if (queueLineDecoration != null) queueLineDecoration.setQueueMatchesDisplay(true);
-        if (adapter != null) adapter.notifyDataSetChanged();
+        if (adapter != null) adapter.refreshPlaybackState();
         recyclerView.invalidateItemDecorations();
         SongModel current = PlaybackManager.getInstance().getCurrentSong();
         highlightedUri = current != null ? current.getUri() : null;
@@ -495,7 +516,7 @@ public class ArtistSongsFragment extends Fragment
         SongModel current = PlaybackManager.getInstance().getCurrentSong();
         String newUri = current != null ? current.getUri() : null;
         if (!java.util.Objects.equals(newUri, highlightedUri)) {
-            adapter.notifyDataSetChanged();
+            adapter.refreshPlaybackState();
             recyclerView.invalidateItemDecorations();
             highlightedUri = newUri;
         }
@@ -542,11 +563,20 @@ public class ArtistSongsFragment extends Fragment
     }
 
     private void showEmpty(boolean show) {
-        TextView label = rootView.findViewById(R.id.empty_label);
+        View label = rootView.findViewById(R.id.empty_label);
+        if (!show) {
+            StateMessage.hide(label);
+            return;
+        }
         // Distinguish "nothing loaded" from "search matched nothing".
         boolean searching = searchQuery != null && !searchQuery.trim().isEmpty();
-        label.setText(searching ? "No matches" : "No songs found");
-        label.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (searching) {
+            StateMessage.showEmpty(label, R.drawable.ic_search,
+                    R.string.library_no_matches, R.string.library_no_matches_hint);
+        } else {
+            StateMessage.showEmpty(label, R.drawable.ic_state_library,
+                    R.string.artist_songs_empty, 0);
+        }
     }
 
     private ArtistView host() {
@@ -559,11 +589,22 @@ public class ArtistSongsFragment extends Fragment
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        // A note or snippet may have changed in SongView; refresh the row icons.
+        // The adapter loaded them on creation, so the first resume is skipped.
+        if (firstResume) firstResume = false;
+        else if (adapter != null) adapter.refreshAnnotationFlags();
+    }
+
+    @Override
     public void onDestroyView() {
         super.onDestroyView();
+        firstResume = true;
         ArtistView host = host();
         if (host != null) host.removeDiscographyListener(this);
     }
+
 
     //#endregion
 }

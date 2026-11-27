@@ -11,14 +11,14 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="@dimen/space_md">
 
         <!-- Shimmer placeholder shown while metadata is being fetched from API -->
         <com.facebook.shimmer.ShimmerFrameLayout
             android:id="@+id/details_shimmer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="24dp"
+            android:layout_marginBottom="@dimen/space_lg"
             android:visibility="gone"
             tools:visibility="visible">
 
@@ -67,7 +67,7 @@
             android:id="@+id/details_content"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="24dp"
+            android:layout_marginBottom="@dimen/space_lg"
             android:orientation="vertical">
 
             <!-- Album Row -->
@@ -87,19 +87,19 @@
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="5dp"
                     android:text="From"
-                    android:textColor="@android:color/white"
-                    android:textSize="14sp" />
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body_small" />
 
                 <TextView
                     android:id="@+id/SongView_AlbumType"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="4dp"
+                    android:layout_marginEnd="@dimen/space_xs"
                     android:layout_weight="1"
                     android:maxLines="1"
                     android:overScrollMode="never"
                     android:textColor="#4CAF50"
-                    android:textSize="14sp"
+                    android:textSize="@dimen/text_body_small"
                     android:textStyle="bold"
                     tools:text="Single" />
 
@@ -108,7 +108,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginHorizontal="5dp"
                     android:background="@drawable/rounded_md"
-                    android:backgroundTint="@color/dark_blue"
+                    android:backgroundTint="@color/brand_blue"
                     android:gravity="center"
                     android:orientation="horizontal"
                     android:paddingHorizontal="10dp"
@@ -120,16 +120,16 @@
                         android:layout_height="wrap_content"
                         android:maxWidth="150dp"
                         android:textAlignment="center"
-                        android:textColor="@android:color/white"
-                        android:textSize="14sp"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_body_small"
                         android:textStyle="bold"
                         tools:text="Album Name" />
 
                     <ImageView
                         android:layout_width="16dp"
                         android:layout_height="16dp"
-                        android:layout_marginStart="8dp"
-                        android:layout_marginEnd="4dp"
+                        android:layout_marginStart="@dimen/space_sm"
+                        android:layout_marginEnd="@dimen/space_xs"
                         android:contentDescription="@string/empty"
                         android:src="@drawable/ic_external_link"
                         app:tint="@color/white" />
@@ -148,15 +148,15 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="Released"
-                    android:textColor="@android:color/white"
-                    android:textSize="14sp" />
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body_small" />
 
                 <TextView
                     android:id="@+id/SongView_ReleaseDate"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="@android:color/white"
-                    android:textSize="14sp"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body_small"
                     tools:text="24 Oct 2024" />
             </LinearLayout>
 
@@ -172,15 +172,15 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="Duration"
-                    android:textColor="@android:color/white"
-                    android:textSize="14sp" />
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body_small" />
 
                 <TextView
                     android:id="@+id/SongView_SongDuration"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="@android:color/white"
-                    android:textSize="14sp"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body_small"
                     tools:text="3m 25s" />
             </LinearLayout>
 
@@ -199,15 +199,15 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="Popularity"
-                    android:textColor="@android:color/white"
-                    android:textSize="14sp" />
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body_small" />
 
                 <TextView
                     android:id="@+id/SongView_SongPopularity"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="@android:color/white"
-                    android:textSize="14sp"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body_small"
                     tools:text="75%" />
             </LinearLayout>
 
@@ -230,16 +230,16 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="Variants"
-                    android:textColor="@android:color/white"
-                    android:textSize="14sp" />
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body_small" />
 
                 <TextView
                     android:id="@+id/variants_value"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="4dp"
-                    android:textColor="@android:color/white"
-                    android:textSize="14sp"
+                    android:layout_marginEnd="@dimen/space_xs"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body_small"
                     tools:text="2 encountered" />
 
                 <ImageView
@@ -256,7 +256,7 @@
             android:id="@+id/listening_history_section"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
+            android:layout_marginBottom="@dimen/space_md"
             android:orientation="vertical"
             android:visibility="visible">
 
@@ -277,17 +277,17 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="Listening History"
-                    android:textColor="@android:color/white"
-                    android:textSize="16sp"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body"
                     android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/listen_count"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="8dp"
-                    android:textColor="@android:color/white"
-                    android:textSize="14sp"
+                    android:layout_marginEnd="@dimen/space_sm"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body_small"
                     tools:text="5 listens" />
 
                 <ImageView
@@ -306,7 +306,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:paddingHorizontal="12dp"
-                android:paddingTop="8dp"
+                android:paddingTop="@dimen/space_sm"
                 android:paddingBottom="12dp"
                 android:visibility="gone"
                 tools:visibility="visible">
@@ -320,14 +320,14 @@
             android:id="@+id/more_details_button"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:paddingVertical="16dp"
+            android:layout_marginTop="@dimen/space_sm"
+            android:paddingVertical="@dimen/space_md"
             android:text="More Details"
             android:textAlignment="center"
-            android:textColor="@android:color/white"
-            android:textSize="16sp"
+            android:textColor="@color/on_accent"
+            android:textSize="@dimen/text_body"
             android:textStyle="bold"
-            app:backgroundTint="@color/purple_700"
+            app:backgroundTint="@color/accent"
             app:cornerRadius="12dp"
             style="@style/Widget.MaterialComponents.Button" />
 
@@ -335,11 +335,11 @@
             android:id="@+id/first_seen_value"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
+            android:layout_marginTop="@dimen/space_lg"
             android:alpha="0.45"
             android:gravity="center"
-            android:textColor="@android:color/white"
-            android:textSize="11sp"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_caption"
             tools:text="First seen 2 Jan 2025" />
 
         <TextView
@@ -347,12 +347,12 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
-            android:layout_marginBottom="16dp"
+            android:layout_marginBottom="@dimen/space_md"
             android:alpha="0.35"
             android:fontFamily="monospace"
             android:gravity="center"
-            android:textColor="@android:color/white"
-            android:textSize="10sp"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_caption"
             tools:text="song composite id" />
 
     </LinearLayout>

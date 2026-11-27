@@ -1,8 +1,12 @@
 package com.ca.tunaro.adapters;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Outline;
 import android.graphics.Rect;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -15,6 +19,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.cardview.widget.CardView;
 import androidx.core.content.ContextCompat;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
@@ -25,13 +30,31 @@ import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.models.SongRankInfo;
 import com.ca.tunaro.interfaces.Song_RecyclerViewInterface;
+import com.ca.tunaro.utils.AppExecutors;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import com.ca.tunaro.utils.ImageLoads;
 
 public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_RecyclerViewAdapter.ViewHolder> {
+    private static final String TAG = "SongAdapter";
+
+    // Partial-rebind payloads: each refreshes one aspect of a row without
+    // touching the rest (notably without reloading the album cover).
+    private static final Object PAYLOAD_CONTEXT = new Object();
+    private static final Object PAYLOAD_FLAGS = new Object();
+    private static final Object PAYLOAD_PLAYBACK = new Object();
+
     private final Context context;
+    // Row fills: the now-playing row gets the active surface, others the standard surface.
+    private final int rowColor;
+    private final int activeRowColor;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Song_RecyclerViewInterface recyclerViewInterface;
     private ArrayList<SongModel> songModels;
     private final DatabaseHelper dbHelper;
@@ -47,12 +70,58 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
     private Map<String, Integer> popularityMap = null;
     private Map<String, String> lastListenedMap = null;
     private Map<String, SongRankInfo> rankInfoMap = null;
+    // Album page only: track number per song URI, shown by CONTEXT_ALBUM_TRACK.
+    private Map<String, Integer> trackNumberMap = null;
+
+    /** Contextual-line mode for the album page: "track · duration · listens". */
+    public static final int CONTEXT_ALBUM_TRACK = 9;
+    // Song IDs that have notes / snippets, preloaded off the main thread so
+    // binding a row never queries the database.
+    private Set<String> noteIds = Collections.emptySet();
+    private Set<String> snippetIds = Collections.emptySet();
+    private int flagsGeneration = 0;
 
     public Song_RecyclerViewAdapter(Context context, Song_RecyclerViewInterface recyclerViewInterface, ArrayList<SongModel> songModels) {
         this.context = context;
+        this.rowColor = ContextCompat.getColor(context, R.color.surface);
+        this.activeRowColor = ContextCompat.getColor(context, R.color.active_surface);
         this.recyclerViewInterface = recyclerViewInterface;
-        this.songModels = songModels;
-        this.dbHelper = new DatabaseHelper(context);
+        // Own a copy: callers mutate and re-submit their list, which would
+        // otherwise leave nothing for updateSongs to diff against.
+        this.songModels = new ArrayList<>(songModels);
+        this.dbHelper = DatabaseHelper.getInstance(context);
+        refreshAnnotationFlags();
+    }
+
+    /**
+     * Reloads which songs have notes/snippets on the I/O executor, then refreshes
+     * the indicator icons of bound rows if anything changed. Call when returning
+     * to the list, since a note may have been added or removed meanwhile.
+     */
+    public void refreshAnnotationFlags() {
+        final int generation = ++flagsGeneration;
+        AppExecutors.io().execute(() -> {
+            Set<String> notes;
+            Set<String> snippets;
+            try {
+                notes = new HashSet<>(dbHelper.getSongIdsWithNotes());
+                snippets = new HashSet<>(dbHelper.getSongIdsWithSnippets());
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Failed to load note/snippet flags", e);
+                return;
+            }
+            mainHandler.post(() -> {
+                if (generation != flagsGeneration) return; // A newer load superseded this one.
+                boolean changed = !notes.equals(noteIds) || !snippets.equals(snippetIds);
+                noteIds = notes;
+                snippetIds = snippets;
+                if (changed) notifyAllRows(PAYLOAD_FLAGS);
+            });
+        });
+    }
+
+    private void notifyAllRows(Object payload) {
+        if (!songModels.isEmpty()) notifyItemRangeChanged(0, songModels.size(), payload);
     }
 
     @NonNull
@@ -75,20 +144,7 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
             holder.artistView.setVisibility(View.GONE);
         }
 
-        // Active/queue state indicators
-        PlaybackManager pm = PlaybackManager.getInstance();
-        SongModel currentSong = pm.getCurrentSong();
-        boolean isPlaying = currentSong != null && currentSong.getUri().equals(model.getUri());
-        holder.cardView.setForeground(isPlaying
-                ? context.getDrawable(R.drawable.song_active_border)
-                : null);
-        holder.cardView.setCardBackgroundColor(isPlaying
-                ? 0xFF162B1E  // dark green tint over blueBlack
-                : 0xFF111f28);
-
-        // Lime-green left edge on the album cover for songs queued (upcoming).
-        boolean queued = pm.isInQueue(model);
-        holder.showQueuedEdge(queued);
+        bindPlaybackState(holder, model);
 
         // Reset any in-progress swipe visuals when the row is (re)bound.
         holder.swipeConsumedClick = false;
@@ -97,25 +153,58 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         holder.queueSwipeOverlay.setAlpha(1f);
         holder.queueSwipeIcon.setVisibility(View.GONE);
 
-
         // Load image using Glide
         Glide.with(context)
                 .load(model.getAlbumCoverUrl())
+                .apply(ImageLoads.thumbnail(context, 60))
                 .placeholder(R.drawable.song_placeholder)
                 .error(R.drawable.song_placeholder)
                 .transition(DrawableTransitionOptions.withCrossFade())
                 .into(holder.imageCoverView);
 
-        // "Added" tick — only shown in contexts that supply an added-URI set (ArtistView Songs tab).
+        bindFlags(holder, model);
+        bindContextualInfo(holder, model);
+    }
+
+    @Override
+    public void onBindViewHolder(@NonNull ViewHolder holder, int position, @NonNull List<Object> payloads) {
+        if (payloads.isEmpty()) {
+            onBindViewHolder(holder, position);
+            return;
+        }
+        SongModel model = songModels.get(position);
+        for (Object payload : payloads) {
+            if (payload == PAYLOAD_PLAYBACK) bindPlaybackState(holder, model);
+            else if (payload == PAYLOAD_FLAGS) bindFlags(holder, model);
+            else if (payload == PAYLOAD_CONTEXT) bindContextualInfo(holder, model);
+            else {
+                onBindViewHolder(holder, position);
+                return;
+            }
+        }
+    }
+
+    // Now-playing highlight and the lime queued edge on the album cover.
+    private void bindPlaybackState(ViewHolder holder, SongModel model) {
+        PlaybackManager pm = PlaybackManager.getInstance();
+        SongModel currentSong = pm.getCurrentSong();
+        boolean isPlaying = currentSong != null && currentSong.getUri().equals(model.getUri());
+        holder.cardView.setForeground(isPlaying
+                ? context.getDrawable(R.drawable.song_active_border)
+                : null);
+        holder.cardView.setCardBackgroundColor(isPlaying ? activeRowColor : rowColor);
+        holder.showQueuedEdge(pm.isInQueue(model));
+    }
+
+    // "Added" tick plus the has-notes / has-snippets icons, all from preloaded sets.
+    private void bindFlags(ViewHolder holder, SongModel model) {
         boolean added = addedUris != null && addedUris.contains(model.getId());
         holder.addedIcon.setVisibility(added ? View.VISIBLE : View.GONE);
+        holder.hasNotesIcon.setVisibility(noteIds.contains(model.getId()) ? View.VISIBLE : View.GONE);
+        holder.hasSnippetsIcon.setVisibility(snippetIds.contains(model.getId()) ? View.VISIBLE : View.GONE);
+    }
 
-        // Check if the song has notes/snippets and show/hide the corresponding icon accordingly
-        if (dbHelper.hasSongNotes(model.getId())) holder.hasNotesIcon.setVisibility(View.VISIBLE);
-        else holder.hasNotesIcon.setVisibility(View.GONE);
-        if (dbHelper.hasSongSnippets(model.getId())) holder.hasSnippetsIcon.setVisibility(View.VISIBLE);
-        else holder.hasSnippetsIcon.setVisibility(View.GONE);
-
+    private void bindContextualInfo(ViewHolder holder, SongModel model) {
         // Handle contextual information display
         if (shouldShowContextualInfo) {
             holder.contextualInfoView.setVisibility(View.VISIBLE);
@@ -131,9 +220,12 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
                     break;
 
                 case 1: // Last Listened
-                    String lastListened = lastListenedMap != null
-                            ? lastListenedMap.get(model.getId())
-                            : dbHelper.getMostRecentListenTimestamp(model.getId());
+                    if (lastListenedMap == null) {
+                        // Timestamps are still loading; leave the line blank meanwhile.
+                        holder.contextualInfoView.setText("");
+                        break;
+                    }
+                    String lastListened = lastListenedMap.get(model.getId());
                     if (lastListened != null) {
                         String formattedTime = DatabaseHelper.getRelativeTimeDescription(lastListened);
                         holder.contextualInfoView.setText("Last listened: " + formattedTime);
@@ -167,6 +259,15 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
                     String formattedReleaseDate = formatReleaseDateForDisplay(releaseDate);
                     holder.contextualInfoView.setText("Released: " + formattedReleaseDate);
                     break;
+
+                case CONTEXT_ALBUM_TRACK: {
+                    Integer trackNumber = trackNumberMap != null ? trackNumberMap.get(model.getId()) : null;
+                    int listens = listenCountMap != null ? listenCountMap.getOrDefault(model.getId(), 0) : 0;
+                    holder.contextualInfoView.setText(com.ca.tunaro.utils.AlbumFormat.trackLine(
+                            trackNumber != null ? trackNumber : 0,
+                            com.ca.tunaro.utils.AlbumFormat.clockDuration(model.getDuration()), listens));
+                    break;
+                }
 
                 case 8: // Rank (Elo)
                     SongRankInfo rankInfo = rankInfoMap != null ? rankInfoMap.get(model.getId()) : null;
@@ -278,10 +379,15 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         // queue. The album cover stays put; a green/red overlay wipes in from
         // the cover's left edge, tracking the swipe distance. The action
         // commits once the swipe passes a threshold, then the overlay eases out.
+        // Taps are never consumed here (the listener returns false), so the
+        // views' own onTouchEvent still fires performClick and TalkBack's
+        // click path is untouched. Calling performClick from the listener
+        // would double-fire the row click.
+        @SuppressLint("ClickableViewAccessibility")
         private void attachQueueSwipe() {
             final int touchSlop = ViewConfiguration.get(itemView.getContext()).getScaledTouchSlop();
-            final int addColor = ContextCompat.getColor(itemView.getContext(), R.color.queueAddGreen);
-            final int removeColor = ContextCompat.getColor(itemView.getContext(), R.color.queueRemoveRed);
+            final int addColor = ContextCompat.getColor(itemView.getContext(), R.color.success);
+            final int removeColor = ContextCompat.getColor(itemView.getContext(), R.color.danger);
 
             View.OnTouchListener swipeListener = new View.OnTouchListener() {
                 float downX, downY;
@@ -430,9 +536,26 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         }
     }
 
-    public void updateSongs(ArrayList<SongModel> newSongs) {
-        this.songModels = newSongs;
-        notifyDataSetChanged();
+    /**
+     * Replaces the list, dispatching a URI-keyed diff so unchanged rows keep
+     * their views (and their loaded covers) instead of all rebinding. The list
+     * is copied, so callers may keep mutating their own instance.
+     */
+    public void updateSongs(List<SongModel> newSongs) {
+        ArrayList<SongModel> next = new ArrayList<>(newSongs);
+        ArrayList<SongModel> previous = this.songModels;
+        this.songModels = next;
+        if (previous.isEmpty()) {
+            if (!next.isEmpty()) notifyItemRangeInserted(0, next.size());
+            return;
+        }
+        if (!SongListDiff.shouldDiff(previous.size(), next.size())) {
+            notifyDataSetChanged();
+            return;
+        }
+        DiffUtil.calculateDiff(new SongListDiff(previous, next),
+                        SongListDiff.shouldDetectMoves(previous.size(), next.size()))
+                .dispatchUpdatesTo(this);
     }
 
     private ArrayList<SongModel> getSongModels() {
@@ -447,18 +570,24 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
         return context;
     }
 
-    // Rebind only the rows matching the given URIs, without refreshing the whole
-    // list. Currently unused: onPlaybackStateChanged falls back to
-    // notifyDataSetChanged because queue membership shifts across many rows on a
-    // track change. TODO: use this as a targeted optimisation once the queued
-    // state is cheap to recompute per-row.
+    /**
+     * Re-evaluates the now-playing highlight and queued edge of every row after a
+     * track change or new queue. Queue membership can shift across arbitrary rows,
+     * so all rows are flagged, but only via a lightweight payload: just the bound
+     * rows rebind, and only their playback indicators (no cover reload).
+     */
+    public void refreshPlaybackState() {
+        notifyAllRows(PAYLOAD_PLAYBACK);
+    }
+
+    // Refresh the playback indicators of only the rows matching the given URIs
+    // (every occurrence, since a playlist can hold the same song twice).
     public void refreshRowsForUris(String... uris) {
         for (String uri : uris) {
             if (uri == null) continue;
             for (int i = 0; i < songModels.size(); i++) {
                 if (uri.equals(songModels.get(i).getUri())) {
-                    notifyItemChanged(i);
-                    break;
+                    notifyItemChanged(i, PAYLOAD_PLAYBACK);
                 }
             }
         }
@@ -482,40 +611,47 @@ public class Song_RecyclerViewAdapter extends RecyclerView.Adapter<Song_Recycler
     public void updateSortContext(int sortOption) {
         this.currentSortOption = sortOption;
         // Show contextual info for Date Added (0), Last Listened (1), Length (3), Popularity (5), Listen Count (6), Release Date (7), and Rank (8)
-        this.shouldShowContextualInfo = (sortOption == 0 || sortOption == 1 || sortOption == 3 || sortOption == 5 || sortOption == 6 || sortOption == 7 || sortOption == 8);
-        notifyDataSetChanged();
+        this.shouldShowContextualInfo = (sortOption == 0 || sortOption == 1 || sortOption == 3 || sortOption == 5 || sortOption == 6 || sortOption == 7 || sortOption == 8
+                || sortOption == CONTEXT_ALBUM_TRACK);
+        notifyAllRows(PAYLOAD_CONTEXT);
     }
 
     // Hide the artist-name row (ArtistView Songs tab). Default true elsewhere.
     public void setShowArtist(boolean showArtist) {
+        if (this.showArtist == showArtist) return;
         this.showArtist = showArtist;
-        notifyDataSetChanged();
+        if (!songModels.isEmpty()) notifyItemRangeChanged(0, songModels.size());
     }
 
     // Marks which songs are locally added (their URI shows a green tick). Pass null to disable.
     public void setAddedUris(java.util.Set<String> addedUris) {
         this.addedUris = addedUris;
-        notifyDataSetChanged();
+        notifyAllRows(PAYLOAD_FLAGS);
     }
 
     public void updateListenCounts(Map<String, Integer> listenCountMap) {
         this.listenCountMap = listenCountMap;
-        notifyDataSetChanged();
+        notifyAllRows(PAYLOAD_CONTEXT);
     }
 
     public void updatePopularityMap(Map<String, Integer> popularityMap) {
         this.popularityMap = popularityMap;
-        notifyDataSetChanged();
+        notifyAllRows(PAYLOAD_CONTEXT);
     }
 
     public void updateLastListenedMap(Map<String, String> lastListenedMap) {
         this.lastListenedMap = lastListenedMap;
-        notifyDataSetChanged();
+        notifyAllRows(PAYLOAD_CONTEXT);
+    }
+
+    public void updateTrackNumbers(Map<String, Integer> trackNumberMap) {
+        this.trackNumberMap = trackNumberMap;
+        notifyAllRows(PAYLOAD_CONTEXT);
     }
 
     public void updateRankInfoMap(Map<String, SongRankInfo> rankInfoMap) {
         this.rankInfoMap = rankInfoMap;
-        notifyDataSetChanged();
+        notifyAllRows(PAYLOAD_CONTEXT);
     }
 
     private String formatDateForDisplay(Date date) {

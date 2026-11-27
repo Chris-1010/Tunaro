@@ -1,26 +1,55 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
+    <!-- ===== Design tokens (see design direction). Reference these by name. ===== -->
+
+    <!-- Canvas and surfaces. -->
+    <color name="bg_base">#0A1520</color>
+    <color name="surface">#111F28</color>
+    <color name="surface_raised">#1A2B36</color>
+    <!-- Faint white wash for cards that sit over a gradient (Rankings rows). -->
+    <color name="surface_translucent">#24FFFFFF</color>
+    <color name="playback_bar_base">#00012E</color>
+
+    <!-- Brand and accent. -->
+    <color name="accent">#E3CDB3</color>
+    <color name="accent_muted">#80E3CDB3</color>
+    <color name="on_accent">#111F28</color>
+    <color name="brand_blue">#00116A</color>
+    <color name="brand_teal">#1FB5A0</color>
+
+    <!-- "Active" signal: now-playing / queued only. -->
+    <color name="active">#32CD32</color>
+    <color name="active_surface">#162B1E</color>
+
+    <!-- Status. -->
+    <color name="success">#2E7D32</color>
+    <color name="danger">#C62828</color>
+    <!-- Lighter success/danger for small text on dark surfaces (legible contrast). -->
+    <color name="success_text">#4CAF50</color>
+    <color name="danger_text">#E57373</color>
+    <!-- Danger tint for destructive-action panels (danger at ~12% alpha). -->
+    <color name="danger_surface">#1FC62828</color>
+    <color name="warning">#FF9800</color>
+
+    <!-- Text and lines on dark surfaces. -->
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#B3FFFFFF</color>
+    <color name="text_tertiary">#80FFFFFF</color>
+    <color name="divider">#1AFFFFFF</color>
+
+    <!-- ===== Neutrals and utility colours. ===== -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    <color name="dark_blue">#00116A</color>
     <color name="darker_grey">#202020</color>
     <color name="transparent_black">#80000000</color>
-    <color name="blueBlack">#111f28</color>
-    <color name="tanAccent">#e3cdb3</color>
-    <color name="faintTanAccent">#80E3CDB3</color>
-    <color name="purpleTheme">#4C00B7</color>
+    <!-- Dark scrim behind floating panels over album art. -->
+    <color name="panel_scrim">#CC000000</color>
+    <!-- Faint white fill for icon buttons on dark panels. -->
+    <color name="control_overlay">#33FFFFFF</color>
     <color name="shimmer_placeholder">#6F6F6F</color>
-    <color name="limeGreen">#32CD32</color>
-    <color name="queueAddGreen">#2E7D32</color>
-    <color name="queueRemoveRed">#C62828</color>
-    <color name="playback_bar_base">#00012E</color>
+
     <!-- Splash gradient: dark blue (bottom-left) -> lighter blue/green (top-right) -->
-    <color name="splash_gradient_start">#00116A</color>
+    <color name="splash_gradient_start">@color/brand_blue</color>
     <color name="splash_gradient_center">#0B3C7A</color>
-    <color name="splash_gradient_end">#1FB5A0</color>
+    <color name="splash_gradient_end">@color/brand_teal</color>
 </resources>

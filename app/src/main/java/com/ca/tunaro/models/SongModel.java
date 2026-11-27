@@ -107,6 +107,26 @@ public class SongModel implements Serializable, Playable {
         this.isPlayable = true;
     }
 
+    // Copy constructor — field-for-field copy so shared cached instances are never mutated
+    public SongModel(SongModel other) {
+        this.id = other.id;
+        this.name = other.name;
+        this.primaryArtist = other.primaryArtist;
+        this.duration = other.duration;
+        this.uri = other.uri;
+        this.coverImageUrl = other.coverImageUrl;
+        this.popularity = other.popularity;
+        this.albumName = other.albumName;
+        this.releaseDate = other.releaseDate;
+        this.dateAddedToPlaylist = other.dateAddedToPlaylist;
+        this.artists = other.artists != null ? other.artists.clone() : null;
+        this.albumId = other.albumId;
+        this.albumType = other.albumType;
+        this.isrc = other.isrc;
+        this.isPlayable = other.isPlayable;
+        this.createdAt = other.createdAt;
+    }
+
     //#endregion
 
     //#region Nested Album class (used at Spotify API call sites)

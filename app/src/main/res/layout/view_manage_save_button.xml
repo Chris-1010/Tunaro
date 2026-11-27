@@ -6,10 +6,10 @@
     android:id="@+id/manage_save"
     android:layout_width="wrap_content"
     android:layout_height="64dp"
-    android:backgroundTint="#32CD32"
+    android:backgroundTint="@color/active"
     android:text="@string/save"
     android:textColor="@android:color/black"
-    android:textSize="20sp"
+    android:textSize="@dimen/text_title"
     android:textStyle="bold"
     android:visibility="gone"
     app:cornerRadius="14dp" />

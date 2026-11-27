@@ -8,6 +8,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
@@ -17,6 +18,8 @@ import com.ca.tunaro.interfaces.Playlist_RecyclerViewInterface;
 import com.ca.tunaro.R;
 
 import java.util.ArrayList;
+import java.util.List;
+import com.ca.tunaro.utils.ImageLoads;
 
 public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_RecyclerViewAdapter.ViewHolder> {
     public interface OnItemLongClickListener {
@@ -26,7 +29,9 @@ public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_
     private final Playlist_RecyclerViewInterface recyclerViewInterface;
 
     private final Context context;
-    private ArrayList<PlaylistModel> playlistModels;
+    private final ArrayList<PlaylistModel> playlistModels;
+    // Content key of each rendered row, parallel to playlistModels.
+    private final ArrayList<String> renderedKeys = new ArrayList<>();
 
     private final OnItemLongClickListener longClickListener;
 
@@ -61,6 +66,7 @@ public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_
         // Load image using Glide
         Glide.with(context)
                 .load(model.getImage())
+                .apply(ImageLoads.thumbnail(context, 100))
                 .placeholder(R.drawable.playlist_placeholder)
                 .error(R.drawable.playlist_placeholder)
                 .transition(DrawableTransitionOptions.withCrossFade())
@@ -72,9 +78,41 @@ public class Playlist_RecyclerViewAdapter extends RecyclerView.Adapter<Playlist_
         return playlistModels.size();
     }
 
-    public void updatePlaylists(ArrayList<PlaylistModel> newPlaylists) {
-        this.playlistModels = newPlaylists;
-        notifyDataSetChanged();
+    /**
+     * Replaces the rows (in the list shared with the host) via a diff keyed by
+     * playlist ID. Content is compared against a snapshot of what each row last
+     * displayed, since PlaylistModel instances are mutated in place.
+     */
+    public void submitPlaylists(List<PlaylistModel> newPlaylists) {
+        final List<String> oldIds = new ArrayList<>();
+        for (PlaylistModel p : playlistModels) oldIds.add(p.getId());
+        final List<String> oldKeys = new ArrayList<>(renderedKeys);
+        final List<PlaylistModel> next = new ArrayList<>(newPlaylists);
+        final List<String> newKeys = new ArrayList<>();
+        for (PlaylistModel p : next) newKeys.add(contentKey(p));
+
+        DiffUtil.DiffResult diff = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+            @Override public int getOldListSize() { return oldIds.size(); }
+            @Override public int getNewListSize() { return next.size(); }
+            @Override public boolean areItemsTheSame(int o, int n) {
+                return java.util.Objects.equals(oldIds.get(o), next.get(n).getId());
+            }
+            @Override public boolean areContentsTheSame(int o, int n) {
+                return o < oldKeys.size() && oldKeys.get(o).equals(newKeys.get(n));
+            }
+        });
+
+        playlistModels.clear();
+        playlistModels.addAll(next);
+        renderedKeys.clear();
+        renderedKeys.addAll(newKeys);
+        diff.dispatchUpdatesTo(this);
+    }
+
+    /** Everything a playlist row displays; a change here rebinds the row. */
+    private static String contentKey(PlaylistModel p) {
+        return p.getPlaylistName() + '\u0000' + p.getSongCount() + '\u0000' + p.getImage()
+                + '\u0000' + p.isFavourite();
     }
 
     public static class ViewHolder extends RecyclerView.ViewHolder {

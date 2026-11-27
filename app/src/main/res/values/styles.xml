@@ -2,12 +2,118 @@
 <resources>
     <style name="roundedImageView" parent="">
         <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">8dp</item>
+        <item name="cornerSize">@dimen/radius_row</item>
     </style>
 
     <style name="WhiteSpinnerTheme" parent="ThemeOverlay.AppCompat">
         <item name="android:textColorPrimary">@color/white</item>
         <item name="android:textColor">@color/white</item>
         <item name="colorControlNormal">@color/white</item>
+    </style>
+
+    <!-- Rounded dark text input (search fields, inline editors). -->
+    <style name="Widget.Tunaro.Input" parent="Widget.AppCompat.EditText">
+        <item name="android:background">@drawable/input_background_dark</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textColorHint">@color/text_tertiary</item>
+        <item name="android:padding">@dimen/space_sm</item>
+        <item name="android:paddingStart">@dimen/space_md</item>
+        <item name="android:paddingEnd">@dimen/space_md</item>
+    </style>
+
+    <!-- Outlined input for dialogs (note editor). -->
+    <style name="Widget.Tunaro.NoteInputLayout" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+        <item name="boxStrokeColor">@color/accent</item>
+        <item name="hintTextColor">@color/accent</item>
+        <item name="android:textColorHint">@color/text_tertiary</item>
+        <item name="boxCornerRadiusTopStart">@dimen/radius_row</item>
+        <item name="boxCornerRadiusTopEnd">@dimen/radius_row</item>
+        <item name="boxCornerRadiusBottomStart">@dimen/radius_row</item>
+        <item name="boxCornerRadiusBottomEnd">@dimen/radius_row</item>
+        <item name="errorTextColor">@color/danger_text</item>
+        <item name="boxStrokeErrorColor">@color/danger_text</item>
+        <item name="errorIconTint">@color/danger_text</item>
+    </style>
+
+    <!-- Alert dialogs: raised surface with 16dp corners, white text, accent buttons. -->
+    <style name="ThemeOverlay.Tunaro.Dialog" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/dialog_background</item>
+        <item name="colorSurface">@color/surface_raised</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorSecondary">@color/accent</item>
+        <item name="colorControlActivated">@color/accent</item>
+        <item name="colorControlNormal">@color/text_secondary</item>
+        <item name="colorError">@color/danger_text</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="android:textColorHint">@color/text_tertiary</item>
+        <item name="android:textColorAlertDialogListItem">@color/text_primary</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.Tunaro.DialogButton</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.Tunaro.DialogButton</item>
+        <item name="buttonBarNeutralButtonStyle">@style/Widget.Tunaro.DialogButton</item>
+    </style>
+
+    <style name="Widget.Tunaro.DialogButton" parent="Widget.MaterialComponents.Button.TextButton.Dialog">
+        <item name="android:textColor">@color/accent</item>
+    </style>
+
+    <!-- Bottom sheets: raised surface, 16dp top corners, transparent content roots. -->
+    <style name="ThemeOverlay.Tunaro.BottomSheet" parent="ThemeOverlay.MaterialComponents.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/Widget.Tunaro.BottomSheet</item>
+        <item name="colorSurface">@color/surface_raised</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorSecondary">@color/accent</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="android:navigationBarColor">@color/surface_raised</item>
+    </style>
+
+    <style name="Widget.Tunaro.BottomSheet" parent="Widget.MaterialComponents.BottomSheet.Modal">
+        <item name="backgroundTint">@color/surface_raised</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.Tunaro.Sheet</item>
+    </style>
+
+    <style name="ShapeAppearance.Tunaro.Sheet" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSizeTopLeft">@dimen/radius_card</item>
+        <item name="cornerSizeTopRight">@dimen/radius_card</item>
+        <item name="cornerSizeBottomLeft">0dp</item>
+        <item name="cornerSizeBottomRight">0dp</item>
+    </style>
+
+    <!-- Type scale. Default font family; colours are the text tokens. -->
+    <style name="TextAppearance.Tunaro" parent="TextAppearance.AppCompat">
+        <item name="android:textColor">@color/text_primary</item>
+    </style>
+
+    <!-- Screen titles. -->
+    <style name="TextAppearance.Tunaro.Display">
+        <item name="android:textSize">@dimen/text_display</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- Section headers / header names. -->
+    <style name="TextAppearance.Tunaro.Title">
+        <item name="android:textSize">@dimen/text_title</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <!-- Row primary text. -->
+    <style name="TextAppearance.Tunaro.Body">
+        <item name="android:textSize">@dimen/text_body</item>
+    </style>
+
+    <!-- Row secondary text. -->
+    <style name="TextAppearance.Tunaro.BodySmall">
+        <item name="android:textSize">@dimen/text_body_small</item>
+        <item name="android:textColor">@color/text_secondary</item>
+    </style>
+
+    <!-- Metadata and chips. -->
+    <style name="TextAppearance.Tunaro.Caption">
+        <item name="android:textSize">@dimen/text_caption</item>
+        <item name="android:textColor">@color/text_tertiary</item>
     </style>
 </resources>

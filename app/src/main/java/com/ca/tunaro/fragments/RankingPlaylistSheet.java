@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import com.ca.tunaro.utils.ImageLoads;
 
 /**
  * Playlist picker for starting a ranking game. Reuses the "add to playlist" grid
@@ -125,11 +126,25 @@ public class RankingPlaylistSheet extends BottomSheetDialogFragment {
         super.onDestroyView();
     }
 
+    // Read the playlists off the main thread; the grid and empty label stay hidden
+    // until the result lands.
     private void loadPlaylists() {
-        DatabaseHelper db = new DatabaseHelper(requireContext());
-        List<PlaylistModel> playlists = db.getNonArchivedPlaylists();
-        db.close();
+        recycler.setVisibility(View.GONE);
+        emptyLabel.setVisibility(View.GONE);
+        updateSelectionUi();
+        final Context ctx = requireContext().getApplicationContext();
+        executor.execute(() -> {
+            List<PlaylistModel> playlists = DatabaseHelper.getInstance(ctx).getNonArchivedPlaylists();
+            View root = getView();
+            if (root == null) return;
+            root.post(() -> {
+                if (getView() == null || getContext() == null) return;
+                bindPlaylists(playlists);
+            });
+        });
+    }
 
+    private void bindPlaylists(List<PlaylistModel> playlists) {
         // Wrap each playlist as an unselected grid cell (no song context, so
         // containsSong is always false and every pick is an "addition").
         List<DatabaseHelper.ManagablePlaylist> cells = new ArrayList<>();
@@ -177,6 +192,7 @@ public class RankingPlaylistSheet extends BottomSheetDialogFragment {
             icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
             Glide.with(this)
                     .load(playlist.imageUrl)
+                    .apply(ImageLoads.thumbnailPx(size))
                     .placeholder(R.drawable.playlist_placeholder)
                     .error(R.drawable.playlist_placeholder)
                     .into(icon);
@@ -195,12 +211,11 @@ public class RankingPlaylistSheet extends BottomSheetDialogFragment {
         final int token = ++countRequestToken;
         final Context ctx = requireContext().getApplicationContext();
         executor.execute(() -> {
-            DatabaseHelper db = new DatabaseHelper(ctx);
+            DatabaseHelper db = DatabaseHelper.getInstance(ctx);
             Set<String> union = new HashSet<>();
             for (String id : selectedIds) {
                 union.addAll(db.getActiveSongUrisForPlaylist(id));
             }
-            db.close();
             int count = union.size();
             View root = getView();
             if (root == null) return;

@@ -10,238 +10,277 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 
 import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-public class SongCache {
+/**
+ * Process-wide song metadata cache. The SharedPreferences blob is parsed once into memory; reads are
+ * served from the in-memory maps and writes are flushed back on the I/O pool, debounced so a burst of
+ * cacheSongs calls costs a single serialisation.
+ *
+ * Returned SongModels are copies, so callers may mutate playlist-context fields (date added) without
+ * leaking them into other playlists.
+ */
+public final class SongCache {
     //#region Constants and Fields
     private static final String TAG = "SongCache";
     private static final String PREF_NAME = "SongCache";
     private static final String SONGS_KEY = "cached_songs";
     private static final String CACHE_TIMESTAMPS_KEY = "cache_timestamps";
-    private static final long CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000L; // 7 days
+    static final long CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000L; // 7 days
+    private static final long WRITE_DEBOUNCE_MS = 1000L;
+
+    private static volatile SongCache instance;
 
     private final SharedPreferences prefs;
     private final Gson gson;
+    private final Map<String, SongModel> songs = new ConcurrentHashMap<>();
+    private final Map<String, Long> timestamps = new ConcurrentHashMap<>();
+    private final Object loadLock = new Object();
+    private final Object writeLock = new Object();
+    private final AtomicBoolean writeScheduled = new AtomicBoolean(false);
+    private volatile boolean loaded = false;
     //#endregion
 
-    public SongCache(Context context) {
-        this.prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+    public static SongCache getInstance(Context context) {
+        SongCache local = instance;
+        if (local == null) {
+            synchronized (SongCache.class) {
+                local = instance;
+                if (local == null) {
+                    local = new SongCache(context.getApplicationContext());
+                    instance = local;
+                }
+            }
+        }
+        return local;
+    }
+
+    private SongCache(Context appContext) {
+        this.prefs = appContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
         this.gson = new GsonBuilder()
                 .serializeNulls()
                 .create();
     }
 
     //#region Cache Operations
-    public void cacheSongs(List<SongModel> songs) {
-        if (songs == null || songs.isEmpty()) {
+
+    /** Parses the persisted cache on the I/O pool so the first blocking read finds it ready. */
+    public void preloadAsync() {
+        if (!loaded) AppExecutors.io().execute(this::ensureLoaded);
+    }
+
+    public void cacheSongs(List<SongModel> newSongs) {
+        if (newSongs == null || newSongs.isEmpty()) {
             Log.w(TAG, "Cannot cache null or empty song list");
             return;
         }
-
-        try {
-            // Parse JSON once
-            Map<String, SongModel> cachedSongs = getCachedSongsMap();
-            Map<String, Long> timestamps = getCacheTimestamps();
-
-            long currentTime = System.currentTimeMillis();
-            int addedCount = 0;
-
-            // Add all songs to the maps
-            for (SongModel song : songs) {
-                if (song != null && song.getId() != null) {
-                    cachedSongs.put(song.getId(), song);
-                    timestamps.put(song.getId(), currentTime);
-                    addedCount++;
-                }
+        ensureLoaded();
+        long now = System.currentTimeMillis();
+        boolean changed = false;
+        for (SongModel song : newSongs) {
+            if (song != null && song.getId() != null) {
+                songs.put(song.getId(), new SongModel(song));
+                timestamps.put(song.getId(), now);
+                changed = true;
             }
-
-            // Write JSON once
-            saveCachedSongs(cachedSongs);
-            saveCacheTimestamps(timestamps);
-        } catch (Exception e) {
-            Log.e(TAG, "Error batch caching songs", e);
         }
+        if (changed) scheduleWrite();
     }
 
+    /** Fresh (unexpired) cached songs for {@code songIds}, keyed by ID. Blocks until the cache is loaded. */
     public Map<String, SongModel> getCachedSongsMap(List<String> songIds) {
         if (songIds == null || songIds.isEmpty()) return new HashMap<>();
-
-        try {
-            Map<String, SongModel> cachedSongsMap = getCachedSongsMap();
-            Map<String, Long> timestamps = getCacheTimestamps();
-            Map<String, SongModel> result = new HashMap<>();
-
-            for (String songId : songIds) {
-                Long cacheTime = timestamps.get(songId);
-
-                // Check if cache entry exists and is not expired
-                if (cacheTime != null && !isExpired(cacheTime)) {
-                    SongModel song = cachedSongsMap.get(songId);
-                    if (song != null) {
-                        result.put(songId, song);
-                    }
-                }
-            }
-
-            Log.d(TAG, "Batch retrieved " + result.size() + " songs from cache");
-            return result;
-        } catch (Exception e) {
-            Log.e(TAG, "Error batch retrieving cached songs", e);
-            return new HashMap<>();
+        ensureLoaded();
+        Map<String, SongModel> result = selectFresh(songs, timestamps, songIds, System.currentTimeMillis());
+        for (Map.Entry<String, SongModel> entry : result.entrySet()) {
+            entry.setValue(new SongModel(entry.getValue()));
         }
+        Log.d(TAG, "Batch retrieved " + result.size() + " songs from cache");
+        return result;
     }
 
+    /** Fresh cached song, or null. Blocks until the cache is loaded. */
     public SongModel getCachedSong(String songId) {
         if (songId == null) return null;
+        ensureLoaded();
+        return freshCopy(songId);
+    }
 
-        try {
-            Map<String, Long> timestamps = getCacheTimestamps();
-            Long cacheTime = timestamps.get(songId);
-
-            // Check if cache entry exists and is not expired
-            if (cacheTime == null || isExpired(cacheTime)) {
-                if (cacheTime != null) {
-                    Log.d(TAG, "Cache entry expired for song: " + songId);
-                    removeCachedSong(songId);
-                }
-                return null;
-            }
-
-            Map<String, SongModel> cachedSongs = getCachedSongsMap();
-            SongModel song = cachedSongs.get(songId);
-
-            if (song != null) {
-                Log.d(TAG, "Cache hit for song: " + songId);
-            }
-
-            return song;
-        } catch (Exception e) {
-            Log.e(TAG, "Error retrieving cached song: " + songId, e);
+    /**
+     * Non-blocking variant of {@link #getCachedSong}: returns null (and starts loading) when the
+     * persisted cache has not been parsed yet. Safe to call on the main thread.
+     */
+    public SongModel peekCachedSong(String songId) {
+        if (songId == null) return null;
+        if (!loaded) {
+            preloadAsync();
             return null;
         }
+        return freshCopy(songId);
     }
 
     public void removeCachedSong(String songId) {
         if (songId == null) return;
-
-        try {
-            Map<String, SongModel> cachedSongs = getCachedSongsMap();
-            Map<String, Long> timestamps = getCacheTimestamps();
-
-            cachedSongs.remove(songId);
-            timestamps.remove(songId);
-
-            saveCachedSongs(cachedSongs);
-            saveCacheTimestamps(timestamps);
-
-            Log.d(TAG, "Removed cached song: " + songId);
-        } catch (Exception e) {
-            Log.e(TAG, "Error removing cached song: " + songId, e);
-        }
+        ensureLoaded();
+        boolean removed = songs.remove(songId) != null;
+        removed |= timestamps.remove(songId) != null;
+        if (removed) scheduleWrite();
     }
 
     public void clearExpiredEntries() {
-        try {
-            Map<String, SongModel> cachedSongs = getCachedSongsMap();
-            Map<String, Long> timestamps = getCacheTimestamps();
-
-            int removedCount = 0;
-            for (String songId : timestamps.keySet().toArray(new String[0])) {
-                Long cacheTime = timestamps.get(songId);
-                if (cacheTime != null && isExpired(cacheTime)) {
-                    cachedSongs.remove(songId);
-                    timestamps.remove(songId);
-                    removedCount++;
-                }
-            }
-
-            if (removedCount > 0) {
-                saveCachedSongs(cachedSongs);
-                saveCacheTimestamps(timestamps);
-                Log.d(TAG, "Cleared " + removedCount + " expired cache entries");
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Error clearing expired entries", e);
+        ensureLoaded();
+        int removedCount = pruneExpired(songs, timestamps, System.currentTimeMillis());
+        if (removedCount > 0) {
+            scheduleWrite();
+            Log.d(TAG, "Cleared " + removedCount + " expired cache entries");
         }
     }
 
     public void clearCache() {
         Log.d(TAG, "Clearing entire song cache");
-        prefs.edit().clear().apply();
+        synchronized (loadLock) {
+            songs.clear();
+            timestamps.clear();
+            loaded = true;
+        }
+        synchronized (writeLock) {
+            prefs.edit().clear().apply();
+        }
     }
     //#endregion
 
     //#region Private Helper Methods
-    private Map<String, SongModel> getCachedSongsMap() {
-        try {
-            String songsJson = prefs.getString(SONGS_KEY, null);
-            if (songsJson == null) {
-                return new HashMap<>();
-            }
+    private SongModel freshCopy(String songId) {
+        Long cacheTime = timestamps.get(songId);
+        if (cacheTime == null) return null;
+        if (isExpired(cacheTime, System.currentTimeMillis())) return null;
+        SongModel song = songs.get(songId);
+        return song != null ? new SongModel(song) : null;
+    }
 
-            Type mapType = new TypeToken<Map<String, SongModel>>(){}.getType();
-            Map<String, SongModel> songs = gson.fromJson(songsJson, mapType);
-            return songs != null ? songs : new HashMap<>();
+    private void ensureLoaded() {
+        if (loaded) return;
+        synchronized (loadLock) {
+            if (loaded) return;
+            Map<String, SongModel> storedSongs = parse(SONGS_KEY,
+                    new TypeToken<Map<String, SongModel>>(){}.getType());
+            Map<String, Long> storedTimestamps = parse(CACHE_TIMESTAMPS_KEY,
+                    new TypeToken<Map<String, Long>>(){}.getType());
+            // putIfAbsent: anything cached in memory meanwhile is newer than the stored copy.
+            for (Map.Entry<String, SongModel> e : storedSongs.entrySet()) {
+                if (e.getKey() != null && e.getValue() != null) songs.putIfAbsent(e.getKey(), e.getValue());
+            }
+            for (Map.Entry<String, Long> e : storedTimestamps.entrySet()) {
+                if (e.getKey() != null && e.getValue() != null) timestamps.putIfAbsent(e.getKey(), e.getValue());
+            }
+            loaded = true;
+            Log.d(TAG, "Loaded " + songs.size() + " cached songs");
+        }
+    }
+
+    private <T> Map<String, T> parse(String key, Type mapType) {
+        try {
+            String json = prefs.getString(key, null);
+            if (json == null) return new HashMap<>();
+            Map<String, T> parsed = gson.fromJson(json, mapType);
+            return parsed != null ? parsed : new HashMap<>();
         } catch (Exception e) {
-            Log.e(TAG, "Error parsing cached songs", e);
+            Log.e(TAG, "Error parsing " + key, e);
             return new HashMap<>();
         }
     }
 
-    private Map<String, Long> getCacheTimestamps() {
-        try {
-            String timestampsJson = prefs.getString(CACHE_TIMESTAMPS_KEY, null);
-            if (timestampsJson == null) {
-                return new HashMap<>();
+    private void scheduleWrite() {
+        if (writeScheduled.compareAndSet(false, true)) {
+            AppExecutors.ioDelayed(this::flush, WRITE_DEBOUNCE_MS);
+        }
+    }
+
+    private void flush() {
+        // Reset before snapshotting so a change racing the snapshot schedules another flush.
+        writeScheduled.set(false);
+        synchronized (writeLock) {
+            try {
+                String songsJson = gson.toJson(new HashMap<>(songs));
+                String timestampsJson = gson.toJson(new HashMap<>(timestamps));
+                prefs.edit()
+                        .putString(SONGS_KEY, songsJson)
+                        .putString(CACHE_TIMESTAMPS_KEY, timestampsJson)
+                        .apply();
+            } catch (Exception e) {
+                Log.e(TAG, "Error saving song cache", e);
             }
-
-            Type mapType = new TypeToken<Map<String, Long>>(){}.getType();
-            Map<String, Long> timestamps = gson.fromJson(timestampsJson, mapType);
-            return timestamps != null ? timestamps : new HashMap<>();
-        } catch (Exception e) {
-            Log.e(TAG, "Error parsing cache timestamps", e);
-            return new HashMap<>();
         }
     }
+    //#endregion
 
-    private void saveCachedSongs(Map<String, SongModel> songs) {
-        try {
-            String songsJson = gson.toJson(songs);
-            prefs.edit().putString(SONGS_KEY, songsJson).apply();
-        } catch (Exception e) {
-            Log.e(TAG, "Error saving cached songs", e);
-        }
+    //#region Pure logic (unit-tested)
+    static boolean isExpired(long cacheTime, long now) {
+        return now - cacheTime > CACHE_EXPIRY_MS;
     }
 
-    private void saveCacheTimestamps(Map<String, Long> timestamps) {
-        try {
-            String timestampsJson = gson.toJson(timestamps);
-            prefs.edit().putString(CACHE_TIMESTAMPS_KEY, timestampsJson).apply();
-        } catch (Exception e) {
-            Log.e(TAG, "Error saving cache timestamps", e);
+    /** Entries of {@code ids} present in both maps and not expired at {@code now}. */
+    static Map<String, SongModel> selectFresh(Map<String, SongModel> songs, Map<String, Long> timestamps,
+                                              List<String> ids, long now) {
+        Map<String, SongModel> result = new HashMap<>();
+        for (String id : ids) {
+            if (id == null) continue;
+            Long cacheTime = timestamps.get(id);
+            if (cacheTime == null || isExpired(cacheTime, now)) continue;
+            SongModel song = songs.get(id);
+            if (song != null) result.put(id, song);
         }
+        return result;
     }
 
-    private boolean isExpired(long cacheTime) {
-        return System.currentTimeMillis() - cacheTime > CACHE_EXPIRY_MS;
+    /** Removes expired entries (and orphaned songs with no timestamp); returns how many were dropped. */
+    static int pruneExpired(Map<String, SongModel> songs, Map<String, Long> timestamps, long now) {
+        int removed = 0;
+        for (String id : new ArrayList<>(timestamps.keySet())) {
+            Long cacheTime = timestamps.get(id);
+            if (cacheTime != null && isExpired(cacheTime, now)) {
+                timestamps.remove(id);
+                songs.remove(id);
+                removed++;
+            }
+        }
+        for (String id : new ArrayList<>(songs.keySet())) {
+            if (!timestamps.containsKey(id)) {
+                songs.remove(id);
+                removed++;
+            }
+        }
+        return removed;
+    }
+
+    /**
+     * Songs for {@code orderedIds} in order, taken from {@code found}; IDs with no entry are appended
+     * to {@code missingOut}.
+     */
+    public static ArrayList<SongModel> orderedHits(List<String> orderedIds, Map<String, SongModel> found,
+                                                   List<String> missingOut) {
+        ArrayList<SongModel> hits = new ArrayList<>();
+        for (String id : orderedIds) {
+            SongModel song = found.get(id);
+            if (song != null) {
+                hits.add(song);
+            } else {
+                missingOut.add(id);
+            }
+        }
+        return hits;
     }
     //#endregion
 
     //#region Cache Statistics
     public int getCacheSize() {
-        return getCachedSongsMap().size();
-    }
-
-    public long getCacheMemoryUsage() {
-        try {
-            String songsJson = prefs.getString(SONGS_KEY, "");
-            String timestampsJson = prefs.getString(CACHE_TIMESTAMPS_KEY, "");
-            return songsJson.length() + timestampsJson.length();
-        } catch (Exception e) {
-            return 0;
-        }
+        ensureLoaded();
+        return songs.size();
     }
     //#endregion
 }

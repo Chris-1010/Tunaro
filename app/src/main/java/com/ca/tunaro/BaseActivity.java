@@ -20,9 +20,9 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.dynamicanimation.animation.DynamicAnimation;
 import androidx.dynamicanimation.animation.SpringAnimation;
@@ -36,7 +36,9 @@ import com.ca.tunaro.activites.SongView;
 import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.utils.ColorExtractor;
+import com.ca.tunaro.utils.ScreenTransitions;
 import com.ca.tunaro.utils.SelectedSongHolder;
+import com.ca.tunaro.utils.UiFeedback;
 
 import java.util.Locale;
 import java.util.Objects;
@@ -94,6 +96,59 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     private static final float CAROUSEL_RUBBER_BAND = 0.35f;
     private static final int CAROUSEL_GRADIENT_CROSSFADE_MS = 250;
 
+    // Set when this screen hands off to a fresh task (recovery, re-auth) so the
+    // finish() that follows does not replace the system animation with a back slide.
+    private boolean leavingForNewTask;
+
+    /**
+     * Every in-app navigation gets the shared forward slide. Screens that open as a
+     * sheet (settings, now-playing) call overridePendingTransition afterwards,
+     * which takes precedence.
+     */
+    @Override
+    public void startActivity(Intent intent, @Nullable Bundle options) {
+        super.startActivity(intent, options);
+        String target = intent.getComponent() != null ? intent.getComponent().getPackageName() : null;
+        if (ScreenTransitions.isInAppForward(getPackageName(), target, intent.getFlags())) {
+            overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+        } else if ((intent.getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK) != 0) {
+            leavingForNewTask = true;
+        }
+    }
+
+    /**
+     * The shared back slide, mirroring {@link #startActivity(Intent, Bundle)}. Sheet
+     * screens override finish() and apply their own exit after calling super.
+     */
+    @Override
+    public void finish() {
+        super.finish();
+        if (!leavingForNewTask && !isTaskRoot()) {
+            overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
+        }
+    }
+
+    /** Alpha applied to the content of entry points that are not built yet. */
+    protected static final float COMING_SOON_ALPHA = 0.45f;
+
+    /**
+     * Render an entry point that is not built yet as visibly disabled: no taps,
+     * ripple, focus or press-scale, with the given content views dimmed. A "Soon"
+     * badge, if the layout has one, is left out of {@code dimmed} so it stays legible.
+     */
+    protected static void markComingSoon(@Nullable View tile, View... dimmed) {
+        if (tile == null) return;
+        tile.setEnabled(false);
+        tile.setClickable(false);
+        tile.setLongClickable(false);
+        tile.setFocusable(false);
+        tile.setStateListAnimator(null);
+        tile.setForeground(null);
+        for (View view : dimmed) {
+            if (view != null) view.setAlpha(COMING_SOON_ALPHA);
+        }
+    }
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -104,6 +159,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     protected void onStart() {
         super.onStart();
         playbackManager.addListener(this);
+        playbackManager.onUiVisible();
         syncPlaybackBarState();
     }
 
@@ -112,6 +168,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         super.onResume();
 
         Log.d(TAG, "onResume");
+        UiFeedback.setForegroundActivity(this);
 
         if (checkForRecovery()) return;
 
@@ -129,8 +186,15 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     }
 
     @Override
+    protected void onPause() {
+        super.onPause();
+        UiFeedback.clearForegroundActivity(this);
+    }
+
+    @Override
     protected void onStop() {
         super.onStop();
+        playbackManager.onUiHidden();
         playbackManager.removeListener(this);
     }
 
@@ -534,7 +598,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         if (currentSong == null) return;
         MainActivity mainActivity = MainActivity.getInstance();
         if (mainActivity == null) {
-            showToast("Unable to open song view");
+            showMessage("Couldn't open this song right now");
             return;
         }
         // Skip if the SongView for this song is already the selected one.
@@ -591,8 +655,10 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     public void onPlaybackPositionChanged(long positionMs, long durationMs) {
         runOnUiThread(() -> {
             if (playbackSeekbar != null && !isSeeking) {
-                // Update seekbar max and progress
-                playbackSeekbar.setMax((int) durationMs);
+                // Update seekbar max (only when it changes) and progress
+                if (playbackSeekbar.getMax() != (int) durationMs) {
+                    playbackSeekbar.setMax((int) durationMs);
+                }
                 playbackSeekbar.setProgress((int) positionMs);
 
                 // Update text views if they exist
@@ -804,8 +870,17 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         applyPlaybackBarGradient(song.getAlbumCoverUrl());
     }
 
+    // Cover URL of the most recent gradient request. A cached colour resolves at once while an
+    // earlier uncached one may still be decoding, so callbacks for any other URL are stale.
+    private String pendingGradientUrl;
+
+    private boolean isStaleGradient(String albumCoverUrl) {
+        return isDestroyed() || isFinishing() || !albumCoverUrl.equals(pendingGradientUrl);
+    }
+
     private void applyPlaybackBarGradient(String albumCoverUrl) {
         if (playbackBarBackground == null) return;
+        pendingGradientUrl = albumCoverUrl;
 
         if (albumCoverUrl == null || albumCoverUrl.isEmpty()) {
             setPlaybackBarGradient(getColor(R.color.playback_bar_base));
@@ -815,13 +890,13 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         ColorExtractor.extractColors(this, albumCoverUrl, new ColorExtractor.ColorExtractionCallback() {
             @Override
             public void onColorExtracted(int dominantColor, int vibrantColor) {
-                if (isDestroyed() || isFinishing()) return;
+                if (isStaleGradient(albumCoverUrl)) return;
                 setPlaybackBarGradient(vibrantColor);
             }
 
             @Override
             public void onError() {
-                if (isDestroyed() || isFinishing()) return;
+                if (isStaleGradient(albumCoverUrl)) return;
                 setPlaybackBarGradient(getColor(R.color.playback_bar_base));
             }
         });
@@ -852,6 +927,7 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
     // vibrant colour is ready.
     private void crossFadeGradient(String albumCoverUrl) {
         if (playbackBarBackground == null) return;
+        pendingGradientUrl = albumCoverUrl;
         if (albumCoverUrl == null || albumCoverUrl.isEmpty()) {
             crossFadeGradientToColor(getColor(R.color.playback_bar_base));
             return;
@@ -859,13 +935,13 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         ColorExtractor.extractColors(this, albumCoverUrl, new ColorExtractor.ColorExtractionCallback() {
             @Override
             public void onColorExtracted(int dominantColor, int vibrantColor) {
-                if (isDestroyed() || isFinishing()) return;
+                if (isStaleGradient(albumCoverUrl)) return;
                 crossFadeGradientToColor(vibrantColor);
             }
 
             @Override
             public void onError() {
-                if (isDestroyed() || isFinishing()) return;
+                if (isStaleGradient(albumCoverUrl)) return;
                 crossFadeGradientToColor(getColor(R.color.playback_bar_base));
             }
         });
@@ -926,8 +1002,13 @@ public class BaseActivity extends AppCompatActivity implements PlaybackManager.P
         return String.format(Locale.getDefault(), "%d:%02d", minutes, seconds);
     }
 
-    private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "showed Toast: " + message);
+    /** Show a short message as a Snackbar above the playback bar. */
+    protected void showMessage(CharSequence message) {
+        UiFeedback.show(this, message);
+    }
+
+    /** Show a message with an action button (e.g. Retry) above the playback bar. */
+    protected void showMessage(CharSequence message, @StringRes int actionLabel, Runnable action) {
+        UiFeedback.show(this, message, actionLabel, action);
     }
 }

@@ -51,9 +51,8 @@ dependencies {
     implementation("androidx.dynamicanimation:dynamicanimation:1.0.0")
     implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
-    implementation("androidx.navigation:navigation-fragment:2.7.6")
-    implementation("androidx.navigation:navigation-ui:2.7.6")
-    implementation("com.google.code.gson:gson:2.6.1")
+    // Pinned explicitly: previously pulled in at this version by the unused navigation libs.
+    implementation("androidx.fragment:fragment:1.6.2")
     implementation(files("./libs/spotify-app-remote-release-0.8.0.aar"))
     implementation("com.squareup.okhttp3:okhttp:4.9.1");
     implementation("se.michaelthelin.spotify:spotify-web-api-java:8.4.1")
@@ -74,6 +73,6 @@ dependencies {
 
     implementation("com.facebook.shimmer:shimmer:0.5.0")
     implementation("com.github.bumptech.glide:glide:4.16.0")
-    annotationProcessor("com.github.bumptech.glide:compiler:4.12.0")
+    annotationProcessor("com.github.bumptech.glide:compiler:4.16.0")
     implementation("androidx.palette:palette:1.0.0")
 }

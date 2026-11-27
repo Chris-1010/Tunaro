@@ -1,8 +1,6 @@
 package com.ca.tunaro.utils;
 
 import android.content.Context;
-import android.graphics.Color;
-import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.widget.ArrayAdapter;
 import android.widget.LinearLayout;
@@ -17,8 +15,9 @@ import com.ca.tunaro.R;
 import java.util.List;
 
 /**
- * Dark rounded dialog presenting a tappable list of items
- * (Developer screen command history, SongView variant picker).
+ * Dialog presenting a tappable list of items (Developer screen command history,
+ * SongView variant picker). Surface, corners and text colours come from the app's
+ * alertDialogTheme.
  */
 public class DarkListDialog {
 
@@ -31,15 +30,14 @@ public class DarkListDialog {
 
         TextView titleView = new TextView(context);
         titleView.setText(title);
-        titleView.setTextColor(Color.WHITE);
-        titleView.setTextSize(17);
-        titleView.setTypeface(null, Typeface.BOLD);
-        int pad = Math.round(18 * density);
-        titleView.setPadding(pad, pad, pad, Math.round(8 * density));
+        titleView.setTextAppearance(R.style.TextAppearance_Tunaro_Title);
+        int pad = context.getResources().getDimensionPixelSize(R.dimen.space_lg);
+        titleView.setPadding(pad, pad, pad,
+                context.getResources().getDimensionPixelSize(R.dimen.space_sm));
 
         ListView listView = new ListView(context);
         listView.setAdapter(new ArrayAdapter<>(context, R.layout.item_history_entry, items));
-        listView.setDivider(new ColorDrawable(0x33FFFFFF));
+        listView.setDivider(new ColorDrawable(ContextCompat.getColor(context, R.color.divider)));
         listView.setDividerHeight(Math.round(density));
 
         LinearLayout container = new LinearLayout(context);
@@ -50,11 +48,6 @@ public class DarkListDialog {
         AlertDialog dialog = new AlertDialog.Builder(context)
                 .setView(container)
                 .create();
-
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawable(
-                    ContextCompat.getDrawable(context, R.drawable.rounded_dialog_dark));
-        }
 
         listView.setOnItemClickListener((parent, view, position, id) -> {
             dialog.dismiss();

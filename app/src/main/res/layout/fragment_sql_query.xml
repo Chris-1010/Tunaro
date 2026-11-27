@@ -12,15 +12,15 @@
         android:layout_marginStart="12dp"
         android:layout_marginTop="12dp"
         android:layout_marginEnd="12dp"
-        android:background="#1AFFFFFF"
+        android:background="@color/divider"
         android:fontFamily="monospace"
         android:gravity="top"
         android:hint="SELECT * FROM songs LIMIT 10"
         android:inputType="textMultiLine|textNoSuggestions"
         android:minLines="3"
         android:padding="10dp"
-        android:textColor="@color/white"
-        android:textColorHint="#66FFFFFF"
+        android:textColor="@color/text_primary"
+        android:textColorHint="@color/text_tertiary"
         android:textSize="13sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -31,7 +31,7 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="12dp"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="@dimen/space_sm"
         android:layout_marginEnd="12dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
@@ -44,14 +44,14 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textColor="#99FFFFFF"
-            android:textSize="12sp" />
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_caption" />
 
         <ImageView
             android:id="@+id/history_button"
             android:layout_width="36dp"
             android:layout_height="36dp"
-            android:layout_marginEnd="8dp"
+            android:layout_marginEnd="@dimen/space_sm"
             android:contentDescription="@string/empty"
             android:padding="6dp"
             android:src="@drawable/ic_history"
@@ -62,13 +62,13 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Run"
-            android:textSize="14sp" />
+            android:textSize="@dimen/text_body_small" />
     </LinearLayout>
 
     <HorizontalScrollView
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="@dimen/space_xs"
         android:fillViewport="true"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -86,7 +86,7 @@
                 android:layout_height="wrap_content"
                 android:fontFamily="monospace"
                 android:padding="12dp"
-                android:textColor="@color/white"
+                android:textColor="@color/text_primary"
                 android:textIsSelectable="true"
                 android:textSize="11sp" />
 

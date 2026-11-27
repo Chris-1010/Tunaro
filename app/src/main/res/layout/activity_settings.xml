@@ -13,9 +13,8 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="40dp"
         android:text="Settings"
-        android:textColor="@color/white"
-        android:textSize="30sp"
-        android:textStyle="bold"
+        android:textAppearance="@style/TextAppearance.Tunaro.Display"
+        android:textColor="@color/text_primary"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -23,7 +22,7 @@
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="24dp"
+        android:layout_marginTop="@dimen/space_lg"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/settings_title">
 
@@ -31,36 +30,36 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:padding="@dimen/space_md">
 
             <!--#region Automatic Fetcher Section -->
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="32dp"
-                android:layout_marginBottom="16dp"
+                android:layout_marginTop="@dimen/space_xl"
+                android:layout_marginBottom="@dimen/space_md"
                 android:text="Automatic Spotify Listening History Fetching"
-                android:textColor="@color/white"
-                android:textSize="20sp"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_title"
                 android:textStyle="bold" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="@dimen/space_md"
                 android:text="Register to automatically sync your Spotify listening history without keeping the app open"
-                android:textColor="@color/white"
-                android:textSize="14sp" />
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body_small" />
 
             <!-- Before Registration State -->
             <Button
                 android:id="@+id/register_fetcher_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="@dimen/space_md"
                 android:text="Register for Automatic Fetching"
-                android:textSize="16sp"
+                android:textSize="@dimen/text_body"
                 android:visibility="gone" />
 
             <!-- After Registration State -->
@@ -68,18 +67,18 @@
                 android:id="@+id/fetcher_username"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:textColor="@color/white"
-                android:textSize="14sp"
+                android:layout_marginBottom="@dimen/space_sm"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body_small"
                 android:visibility="gone" />
 
             <TextView
                 android:id="@+id/fetcher_statistics"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:textColor="@color/white"
-                android:textSize="14sp"
+                android:layout_marginBottom="@dimen/space_md"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body_small"
                 android:visibility="gone" />
 
             <!-- Fetch in progress indicator -->
@@ -87,7 +86,7 @@
                 android:id="@+id/fetcher_progress_layout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="@dimen/space_md"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:visibility="gone">
@@ -103,15 +102,15 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Fetching listening history..."
-                    android:textColor="@color/white"
-                    android:textSize="14sp" />
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body_small" />
             </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/fetcher_enable_layout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="@dimen/space_md"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:visibility="gone">
@@ -121,8 +120,8 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="Enable automatic fetching"
-                    android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body" />
 
                 <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/fetcher_enable_switch"
@@ -135,9 +134,9 @@
                 android:id="@+id/import_spotify_history_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp"
+                android:layout_marginBottom="@dimen/space_lg"
                 android:text="Import Spotify Listening History"
-                android:textSize="16sp" />
+                android:textSize="@dimen/text_body" />
 
             <!--#endregion-->
 
@@ -146,36 +145,47 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:layout_marginBottom="16dp"
+                android:layout_marginTop="@dimen/space_md"
+                android:layout_marginBottom="@dimen/space_md"
                 android:text="Tunaro Data Management"
-                android:textColor="@color/white"
-                android:textSize="20sp"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_title"
                 android:textStyle="bold" />
+
+            <com.google.android.material.progressindicator.LinearProgressIndicator
+                android:id="@+id/data_progress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/space_sm"
+                android:indeterminate="true"
+                android:visibility="gone"
+                app:indicatorColor="@color/accent"
+                app:trackColor="@color/divider"
+                app:trackCornerRadius="2dp" />
 
             <Button
                 android:id="@+id/import_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
+                android:layout_marginBottom="@dimen/space_sm"
                 android:text="Import Tunaro Data"
-                android:textSize="16sp" />
+                android:textSize="@dimen/text_body" />
 
             <Button
                 android:id="@+id/export_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
+                android:layout_marginBottom="@dimen/space_sm"
                 android:text="Export Tunaro Data"
-                android:textSize="16sp" />
+                android:textSize="@dimen/text_body" />
 
             <Button
                 android:id="@+id/restore_backup_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp"
+                android:layout_marginBottom="@dimen/space_lg"
                 android:text="Restore from v7 Backup"
-                android:textSize="16sp" />
+                android:textSize="@dimen/text_body" />
 
             <!--#endregion -->
 
@@ -184,11 +194,11 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="32dp"
-                android:layout_marginBottom="8dp"
+                android:layout_marginTop="@dimen/space_xl"
+                android:layout_marginBottom="@dimen/space_sm"
                 android:text="Snippet Playback"
-                android:textColor="@color/white"
-                android:textSize="20sp"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_title"
                 android:textStyle="bold" />
 
             <TextView
@@ -196,14 +206,14 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
                 android:text="What happens when a snippet reaches its end by default"
-                android:textColor="@color/white"
-                android:textSize="14sp" />
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body_small" />
 
             <RadioGroup
                 android:id="@+id/snippet_default_mode_group"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp"
+                android:layout_marginBottom="@dimen/space_lg"
                 android:orientation="vertical">
 
                 <RadioButton
@@ -212,8 +222,8 @@
                     android:layout_height="wrap_content"
                     android:buttonTint="@color/white"
                     android:text="Stop — pause at the snippet's end"
-                    android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body" />
 
                 <RadioButton
                     android:id="@+id/snippet_mode_loop"
@@ -221,8 +231,8 @@
                     android:layout_height="wrap_content"
                     android:buttonTint="@color/white"
                     android:text="Loop — replay the snippet range"
-                    android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body" />
 
                 <RadioButton
                     android:id="@+id/snippet_mode_detach"
@@ -230,8 +240,8 @@
                     android:layout_height="wrap_content"
                     android:buttonTint="@color/white"
                     android:text="Continue — play on into the rest of the song"
-                    android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body" />
             </RadioGroup>
 
             <!--#endregion-->
@@ -241,17 +251,17 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:layout_marginBottom="8dp"
+                android:layout_marginTop="@dimen/space_md"
+                android:layout_marginBottom="@dimen/space_sm"
                 android:text="End of Queue"
-                android:textColor="@color/white"
-                android:textSize="20sp"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_title"
                 android:textStyle="bold" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp"
+                android:layout_marginBottom="@dimen/space_lg"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
@@ -265,15 +275,15 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Stop at end of queue"
-                        android:textColor="@color/white"
-                        android:textSize="16sp" />
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_body" />
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Off: keep playing recommendations. On: pause when the queue runs out."
-                        android:textColor="@color/white"
-                        android:textSize="14sp" />
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_body_small" />
                 </LinearLayout>
 
                 <androidx.appcompat.widget.SwitchCompat
@@ -289,25 +299,25 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="32dp"
-                android:layout_marginBottom="16dp"
+                android:layout_marginTop="@dimen/space_xl"
+                android:layout_marginBottom="@dimen/space_md"
                 android:text="Playback Device"
-                android:textColor="@color/white"
-                android:textSize="20sp"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_title"
                 android:textStyle="bold" />
 
             <Button
                 android:id="@+id/choose_device_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp"
+                android:layout_marginBottom="@dimen/space_lg"
                 android:text="Choose Playback Device"
-                android:textSize="16sp" />
+                android:textSize="@dimen/text_body" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="@dimen/space_md"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
@@ -316,8 +326,8 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="Check playback device"
-                    android:textColor="@color/white"
-                    android:textSize="16sp" />
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body" />
 
                 <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/device_check_switch"
@@ -329,41 +339,41 @@
                 android:id="@+id/device_name_label"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
+                android:layout_marginBottom="@dimen/space_sm"
                 android:text="Your device name:"
-                android:textColor="@color/white"
-                android:textSize="14sp"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body_small"
                 android:visibility="gone" />
 
             <EditText
                 android:id="@+id/device_name_input"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:background="@android:drawable/editbox_background"
+                android:layout_marginBottom="@dimen/space_md"
+                style="@style/Widget.Tunaro.Input"
                 android:hint="Enter your device name (e.g., iPhone, PC)"
+                android:imeOptions="actionDone"
+                android:inputType="text"
                 android:padding="12dp"
-                android:textColor="@color/black"
-                android:textColorHint="@color/black"
                 android:visibility="gone" />
 
             <Button
                 android:id="@+id/discover_devices_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="@dimen/space_md"
                 android:text="Discover Available Devices"
-                android:textSize="14sp"
+                android:textSize="@dimen/text_body_small"
                 android:visibility="gone" />
 
             <TextView
                 android:id="@+id/available_devices_text"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp"
+                android:layout_marginBottom="@dimen/space_lg"
                 android:fontFamily="monospace"
-                android:textColor="@color/white"
-                android:textSize="12sp"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_caption"
                 android:visibility="gone" />
 
             <!--#endregion-->
@@ -374,37 +384,37 @@
                 android:id="@+id/danger_zone_section"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:layout_marginBottom="16dp"
-                android:background="#33FF0000"
+                android:layout_marginTop="@dimen/space_md"
+                android:layout_marginBottom="@dimen/space_md"
+                android:background="@drawable/danger_zone_background"
                 android:orientation="vertical"
-                android:padding="16dp">
+                android:padding="@dimen/space_md">
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
+                    android:layout_marginBottom="@dimen/space_md"
                     android:text="Danger Zone"
-                    android:textColor="#FF6666"
-                    android:textSize="20sp"
+                    android:textColor="@color/danger_text"
+                    android:textSize="@dimen/text_title"
                     android:textStyle="bold" />
 
                 <Button
                     android:id="@+id/clear_cache_button"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="8dp"
+                    android:layout_marginBottom="@dimen/space_sm"
                     android:text="Clear Cache"
-                    android:textSize="16sp" />
+                    android:textSize="@dimen/text_body" />
 
                 <Button
                     android:id="@+id/deregister_fetcher_button"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:backgroundTint="#D32F2F"
+                    android:backgroundTint="@color/danger"
                     android:text="Deregister Automatic Fetcher"
-                    android:textColor="#FFFFFF"
-                    android:textSize="16sp"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body"
                     android:visibility="gone" />
             </LinearLayout>
 

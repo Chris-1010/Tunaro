@@ -38,6 +38,10 @@ public class PlaylistSetup {
     // re-read the whole table. Refreshed on every scan.
     private static volatile Map<String, DatabaseHelper.PlaylistScanInfo> trackCountSnapshot;
 
+    /** Throttle key and interval shared by the launch scan and the Playlists screen rescan. */
+    public static final String PREF_LAST_PLAYLIST_SCAN = "last_launch_playlist_scan_ms";
+    public static final long PLAYLIST_SCAN_INTERVAL_MS = 6L * 60L * 60L * 1000L;
+
     public static class SongLoadResult {
         public final ArrayList<SongModel> songs;
         public final boolean needsCaching;
@@ -55,10 +59,12 @@ public class PlaylistSetup {
     public static void initialize(Context context) {
         appContext = context.getApplicationContext();
         playlistCache = new PlaylistCache(appContext);
-        songCache = new SongCache(appContext);
+        songCache = SongCache.getInstance(appContext);
 
-        // Clean up expired song cache entries on initialization
-        songCache.clearExpiredEntries();
+        // Parse the song cache and prune expired entries off the main thread, so the
+        // first playlist open reads straight from memory.
+        SongCache cache = songCache;
+        AppExecutors.io().execute(cache::clearExpiredEntries);
     }
 
     private static <T> CompletableFuture<T> failedFuture(Throwable ex) {
@@ -86,23 +92,26 @@ public class PlaylistSetup {
                 });
     }
 
-    public static CompletableFuture<ArrayList<PlaylistModel>> getPlaylistData(SpotifyApi spotifyApi) {
-        ArrayList<PlaylistModel> cachedPlaylists = playlistCache.getCachedPlaylists();
-        if (cachedPlaylists != null) {
-            return CompletableFuture.completedFuture(cachedPlaylists);
-        }
+    /**
+     * The last cached playlist list, read off the main thread. Completes with null when nothing
+     * is cached yet. Callers show this immediately and then revalidate with
+     * {@link #refreshPlaylists}.
+     */
+    public static CompletableFuture<ArrayList<PlaylistModel>> getCachedPlaylists() {
+        return CompletableFuture.supplyAsync(() -> playlistCache.getCachedPlaylists(), AppExecutors.io());
+    }
 
+    /** Fetch every playlist from Spotify and write it to the DB and the playlist cache. */
+    private static CompletableFuture<ArrayList<PlaylistModel>> fetchAndCachePlaylists(SpotifyApi spotifyApi) {
         return ensureFreshToken(spotifyApi)
                 .thenCompose(ignored -> getAllPlaylists(spotifyApi, 0, new ArrayList<>()))
                 .thenApply(playlists -> {
                     synchronized (lock) {
                         playlistCache.cachePlaylists(playlists);
                     }
+                    // Remote totals just changed in the DB; reload them on next use.
+                    trackCountSnapshot = null;
                     return playlists;
-                })
-                .exceptionally(throwable -> {
-                    Log.e("PlaylistSetup", "Error getting playlists: " + throwable.getMessage());
-                    return new ArrayList<>();
                 });
     }
 
@@ -120,7 +129,7 @@ public class PlaylistSetup {
                 .thenCompose(playlistSimplifiedPaging -> {
                     try {
                         if (playlistSimplifiedPaging != null) {
-                            DatabaseHelper dbHelper = appContext != null ? new DatabaseHelper(appContext) : null;
+                            DatabaseHelper dbHelper = appContext != null ? DatabaseHelper.getInstance(appContext) : null;
                             for (PlaylistSimplified playlist : playlistSimplifiedPaging.getItems()) {
                                 if (playlist.getTracks().getTotal() > 0) {
                                     Image[] images = playlist.getImages();
@@ -142,12 +151,12 @@ public class PlaylistSetup {
                                                 null,
                                                 imageUrl,
                                                 playlist.getTracks().getTotal(),
-                                                owner
+                                                owner,
+                                                playlist.getSnapshotId()
                                         );
                                     }
                                 }
                             }
-                            if (dbHelper != null) dbHelper.close();
                             if (playlistSimplifiedPaging.getNext() != null) {
                                 return getAllPlaylists(spotifyApi, offset + MAX_BATCH_SIZE, accumulatedPlaylists);
                             }
@@ -162,22 +171,33 @@ public class PlaylistSetup {
     public static CompletableFuture<SongLoadResult> getPlaylistSongs(
             String playlistId, SpotifyApi spotifyApi, SongLoadProgressListener progressListener) {
 
-        return ensureFreshToken(spotifyApi).thenCompose(ignored -> CompletableFuture.supplyAsync(() -> {
+        // Read and emit the cache first; the token is only awaited once the network is needed.
+        // The io task returns the rest of the work as a future instead of joining on it, so a
+        // slow token refresh or network fetch never pins a thread of the shared io pool.
+        return CompletableFuture.supplyAsync(() -> {
             List<String> cachedSongIds = playlistCache.getCachedPlaylistSongIds(playlistId);
             if (cachedSongIds != null && !cachedSongIds.isEmpty()
                     && isCachedSongListComplete(playlistId, cachedSongIds.size())) {
                 Map<String, SongModel> cachedSongsMap = songCache.getCachedSongsMap(cachedSongIds);
 
-                ArrayList<SongModel> cachedSongs = new ArrayList<>();
                 List<String> missingSongIds = new ArrayList<>();
+                ArrayList<SongModel> cachedSongs = SongCache.orderedHits(cachedSongIds, cachedSongsMap, missingSongIds);
 
-                // Preserve order from cached song IDs
-                for (String songId : cachedSongIds) {
-                    SongModel song = cachedSongsMap.get(songId);
-                    if (song != null) {
-                        cachedSongs.add(song);
-                    } else {
-                        missingSongIds.add(songId);
+                // Cache misses (expired or never cached) usually still live in the songs table:
+                // read them in one batch before resorting to the network, and re-cache the hits.
+                if (!missingSongIds.isEmpty() && appContext != null) {
+                    try {
+                        Map<String, SongModel> dbSongs = DatabaseHelper.getInstance(appContext)
+                                .getFullSongs(missingSongIds);
+                        if (!dbSongs.isEmpty()) {
+                            songCache.cacheSongs(new ArrayList<>(dbSongs.values()));
+                            cachedSongsMap.putAll(dbSongs);
+                            missingSongIds.clear();
+                            cachedSongs = SongCache.orderedHits(cachedSongIds, cachedSongsMap, missingSongIds);
+                            Log.d("PlaylistSetup", "Recovered " + dbSongs.size() + " songs from DB");
+                        }
+                    } catch (Exception e) {
+                        Log.e("PlaylistSetup", "DB fallback for cache misses failed", e);
                     }
                 }
 
@@ -190,9 +210,8 @@ public class PlaylistSetup {
                 // Back-fill dateAddedToPlaylist from DB — the cached SongModel may carry
                 // a stale date from a different playlist's scan.
                 if (appContext != null) {
-                    DatabaseHelper dbHelper = new DatabaseHelper(appContext);
+                    DatabaseHelper dbHelper = DatabaseHelper.getInstance(appContext);
                     Map<String, java.util.Date> addedAtMap = dbHelper.getAddedAtMapForPlaylist(playlistId);
-                    dbHelper.close();
                     for (SongModel song : cachedSongs) {
                         java.util.Date addedAt = addedAtMap.get(song.getId());
                         if (addedAt != null) song.setDateAddedToPlaylist(addedAt);
@@ -203,38 +222,44 @@ public class PlaylistSetup {
                 if (missingSongIds.isEmpty()) {
                     Log.d("PlaylistSetup", "All " + cachedSongs.size() + " songs found in cache");
                     ensurePlaylistLinksInDb(cachedSongIds, playlistId);
-                    return new SongLoadResult(cachedSongs, false);
+                    return CompletableFuture.completedFuture(new SongLoadResult(cachedSongs, false));
                 }
 
                 // Fetch missing songs - needs caching
-                try {
-                    int expectedTotal = cachedSongs.size() + missingSongIds.size();
-                    ArrayList<SongModel> allSongs = fetchMissingSongs(missingSongIds, spotifyApi, cachedSongs,
-                            progressListener, cachedSongIds.size()).get();
-                    // A partial recovery must not be written back to the cache: doing so drops the
-                    // unrecovered IDs permanently and shrinks the playlist a little on every launch.
-                    boolean complete = allSongs.size() == expectedTotal;
-                    if (!complete) {
-                        Log.w("PlaylistSetup", "Recovered only " + allSongs.size() + " of " + expectedTotal
-                                + " songs for playlist " + playlistId + " — leaving cache untouched");
-                    }
-                    return new SongLoadResult(allSongs, complete);
-                } catch (Exception e) {
-                    Log.e("PlaylistSetup", "Error fetching missing songs", e);
-                    return new SongLoadResult(cachedSongs, false);
-                }
+                final ArrayList<SongModel> cachedResult = cachedSongs;
+                final int expectedTotal = cachedSongs.size() + missingSongIds.size();
+                final int totalExpected = cachedSongIds.size();
+                return ensureFreshToken(spotifyApi)
+                        .thenCompose(ignored -> fetchMissingSongs(missingSongIds, spotifyApi, cachedResult,
+                                progressListener, totalExpected))
+                        .handle((allSongs, e) -> {
+                            if (e != null) {
+                                Log.e("PlaylistSetup", "Error fetching missing songs", e);
+                                return new SongLoadResult(cachedResult, false);
+                            }
+                            // A partial recovery must not be written back to the cache: doing so drops the
+                            // unrecovered IDs permanently and shrinks the playlist a little on every launch.
+                            boolean complete = allSongs.size() == expectedTotal;
+                            if (!complete) {
+                                Log.w("PlaylistSetup", "Recovered only " + allSongs.size() + " of " + expectedTotal
+                                        + " songs for playlist " + playlistId + " — leaving cache untouched");
+                            }
+                            return new SongLoadResult(allSongs, complete);
+                        });
             }
 
             // Not in cache - fetch from API, needs caching
-            try {
-                ArrayList<SongModel> songs = getAllSongs(playlistId, spotifyApi, 0, new ArrayList<>(),
-                        progressListener, -1).get();
-                return new SongLoadResult(songs, true);
-            } catch (Exception e) {
-                Log.e("PlaylistSetup", "Error getting songs", e);
-                return new SongLoadResult(new ArrayList<>(), false);
-            }
-        }));
+            return ensureFreshToken(spotifyApi)
+                    .thenCompose(ignored -> getAllSongs(playlistId, spotifyApi, 0, new ArrayList<>(),
+                            progressListener, -1))
+                    .handle((songs, e) -> {
+                        if (e != null) {
+                            Log.e("PlaylistSetup", "Error getting songs", e);
+                            return new SongLoadResult(new ArrayList<>(), false);
+                        }
+                        return new SongLoadResult(songs, true);
+                    });
+        }, AppExecutors.io()).thenCompose(next -> next);
     }
 
     private static CompletableFuture<ArrayList<SongModel>> getAllSongs(
@@ -254,22 +279,27 @@ public class PlaylistSetup {
         return getPlaylistsItemsRequest.executeAsync()
                 .thenCompose(playlistTrackPaging -> {
                     try {
-                        DatabaseHelper dbHelper = appContext != null ? new DatabaseHelper(appContext) : null;
+                        DatabaseHelper dbHelper = appContext != null ? DatabaseHelper.getInstance(appContext) : null;
                         List<String> batchSongIds = new ArrayList<>();
 
-                        for (PlaylistTrack playlistTrack : playlistTrackPaging.getItems()) {
-                            if (playlistTrack.getTrack() instanceof Track) {
-                                SongModel songModel = getSongModel(playlistTrack);
-                                accumulatedSongs.add(songModel);
-                                batchSongIds.add(songModel.getId());
+                        Runnable processPage = () -> {
+                            for (PlaylistTrack playlistTrack : playlistTrackPaging.getItems()) {
+                                if (playlistTrack.getTrack() instanceof Track) {
+                                    SongModel songModel = getSongModel(playlistTrack);
+                                    accumulatedSongs.add(songModel);
+                                    batchSongIds.add(songModel.getId());
 
-                                if (dbHelper != null) {
-                                    upsertTrackToDb(dbHelper, (Track) playlistTrack.getTrack(), songModel);
-                                    String addedAtStr = formatDate(playlistTrack.getAddedAt());
-                                    dbHelper.upsertSongPlaylistLink(songModel.getId(), playlistId, addedAtStr);
+                                    if (dbHelper != null) {
+                                        upsertTrackToDb(dbHelper, (Track) playlistTrack.getTrack(), songModel);
+                                        String addedAtStr = formatDate(playlistTrack.getAddedAt());
+                                        dbHelper.upsertSongPlaylistLink(songModel.getId(), playlistId, addedAtStr);
+                                    }
                                 }
                             }
-                        }
+                        };
+                        // One transaction per page instead of one per statement.
+                        if (dbHelper != null) dbHelper.runInTransaction(processPage);
+                        else processPage.run();
 
                         // Reconcile removed songs once per batch (only on last page)
                         int total = totalCount == -1 ? playlistTrackPaging.getTotal() : totalCount;
@@ -302,6 +332,7 @@ public class PlaylistSetup {
 
     public static void cacheSongsInBackground(String playlistId, ArrayList<SongModel> songs) {
         Log.d("PlaylistSetup", "Starting background cache for " + songs.size() + " songs");
+        int remoteTotal = remoteTotalFor(playlistId);
 
         synchronized (lock) {
             // SongCache: Cache all songs
@@ -312,7 +343,7 @@ public class PlaylistSetup {
             for (SongModel song : songs) {
                 songIds.add(song.getId());
             }
-            playlistCache.updatePlaylistSongs(playlistId, songIds);
+            playlistCache.updatePlaylistSongs(playlistId, songIds, remoteTotal);
         }
 
         Log.d("PlaylistSetup", "Background cache completed for playlist " + playlistId);
@@ -326,7 +357,7 @@ public class PlaylistSetup {
             ArrayList<SongModel> allSongs = new ArrayList<>(existingSongs);
 
             try {
-                DatabaseHelper dbHelper = appContext != null ? new DatabaseHelper(appContext) : null;
+                DatabaseHelper dbHelper = appContext != null ? DatabaseHelper.getInstance(appContext) : null;
 
                 for (int i = 0; i < missingSongIds.size(); i += MAX_BATCH_SIZE) {
                     List<String> batchIds = missingSongIds.subList(i, Math.min(i + MAX_BATCH_SIZE, missingSongIds.size()));
@@ -406,7 +437,8 @@ public class PlaylistSetup {
         DatabaseHelper.PlaylistScanInfo info = counts.get(playlistId);
         if (info == null) return true;
         int remoteCount = info.remoteCount;
-        if (remoteCount > 0 && cachedCount != remoteCount) {
+        int cachedTotal = playlistCache.getCachedSongTotal(playlistId);
+        if (!PlaylistScanPolicy.isCacheComplete(cachedCount, cachedTotal, remoteCount)) {
             Log.w("PlaylistSetup", "Cached song list for playlist " + playlistId + " has " + cachedCount
                     + " of " + remoteCount + " tracks — refetching from Spotify");
             return false;
@@ -416,11 +448,19 @@ public class PlaylistSetup {
 
     /** Read every playlist's track counts and keep them for later cache checks. */
     private static Map<String, DatabaseHelper.PlaylistScanInfo> loadTrackCounts() {
-        DatabaseHelper dbHelper = new DatabaseHelper(appContext);
+        DatabaseHelper dbHelper = DatabaseHelper.getInstance(appContext);
         Map<String, DatabaseHelper.PlaylistScanInfo> counts = dbHelper.getPlaylistTrackCounts();
-        dbHelper.close();
         trackCountSnapshot = counts;
         return counts;
+    }
+
+    /** Spotify's latest track total for a playlist as stored in the DB, or -1 when unknown. */
+    private static int remoteTotalFor(String playlistId) {
+        if (appContext == null) return -1;
+        Map<String, DatabaseHelper.PlaylistScanInfo> counts = trackCountSnapshot;
+        if (counts == null) counts = loadTrackCounts();
+        DatabaseHelper.PlaylistScanInfo info = counts.get(playlistId);
+        return info != null && info.remoteCount > 0 ? info.remoteCount : -1;
     }
 
     /** Number of song IDs currently cached for a playlist; 0 when nothing is cached. */
@@ -431,11 +471,12 @@ public class PlaylistSetup {
 
     private static void ensurePlaylistLinksInDb(List<String> songIds, String playlistId) {
         if (appContext == null) return;
-        DatabaseHelper dbHelper = new DatabaseHelper(appContext);
-        for (String songId : songIds) {
-            dbHelper.upsertSongPlaylistLink(songId, playlistId, null);
-        }
-        dbHelper.close();
+        DatabaseHelper dbHelper = DatabaseHelper.getInstance(appContext);
+        dbHelper.runInTransaction(() -> {
+            for (String songId : songIds) {
+                dbHelper.upsertSongPlaylistLink(songId, playlistId, null);
+            }
+        });
     }
 
     private static void upsertTrackToDb(DatabaseHelper dbHelper, Track track, SongModel songModel) {
@@ -492,18 +533,16 @@ public class PlaylistSetup {
                 .format(date);
     }
 
+    /**
+     * Launch scan: refresh playlist metadata (DB and playlist cache), then rescan any playlist
+     * whose contents changed. Completes exceptionally when the metadata fetch or any playlist
+     * scan fails, so the caller does not record the run and retries on the next launch.
+     */
     public static CompletableFuture<Void> scanAllPlaylistSongs(SpotifyApi spotifyApi) {
         if (appContext == null || spotifyApi == null) return CompletableFuture.completedFuture(null);
 
-        // Fetch fresh remote track counts from Spotify before checking what needs scanning
-        return ensureFreshToken(spotifyApi)
-                .thenCompose(ignored -> getAllPlaylists(spotifyApi, 0, new ArrayList<>()))
-                .thenCompose(ignored -> runScan(spotifyApi))
-                .exceptionally(e -> {
-                    Log.e("PlaylistSetup", "Failed to fetch remote track counts before scan", e);
-                    // Fall back to scanning with whatever counts are already in the DB
-                    return null;
-                });
+        return fetchAndCachePlaylists(spotifyApi)
+                .thenCompose(ignored -> runScan(spotifyApi));
     }
 
     private static CompletableFuture<Void> runScan(SpotifyApi spotifyApi) {
@@ -512,40 +551,42 @@ public class PlaylistSetup {
             Log.d("PlaylistSetup", "Scan already in progress — skipping duplicate scan");
             return CompletableFuture.completedFuture(null);
         }
-        Map<String, DatabaseHelper.PlaylistScanInfo> trackCounts = loadTrackCounts();
 
         return CompletableFuture.runAsync(() -> {
+            int failures = 0;
             try {
+                Map<String, DatabaseHelper.PlaylistScanInfo> trackCounts = loadTrackCounts();
+                DatabaseHelper dbHelper = DatabaseHelper.getInstance(appContext);
                 for (Map.Entry<String, DatabaseHelper.PlaylistScanInfo> entry : trackCounts.entrySet()) {
                     String pid = entry.getKey();
                     DatabaseHelper.PlaylistScanInfo info = entry.getValue();
                     String label = info.name != null ? info.name : pid;
-                    // A truncated cache entry needs a rescan even when the DB link count is
-                    // correct — the two are written separately and can disagree.
                     int cachedCount = cachedSongIdCount(pid);
-                    boolean cacheTruncated = cachedCount > 0 && cachedCount != info.remoteCount;
-                    if (info.remoteCount > 0 && info.scannedCount == info.remoteCount && !cacheTruncated) {
+                    PlaylistScanPolicy.Decision decision = PlaylistScanPolicy.decide(
+                            info.remoteCount, info.scannedCount, info.snapshotId,
+                            info.scannedSnapshotId, cachedCount, playlistCache.getCachedSongTotal(pid));
+                    if (decision == PlaylistScanPolicy.Decision.ADOPT_SNAPSHOT) {
+                        dbHelper.adoptPlaylistSnapshot(pid, info.snapshotId);
+                        continue;
+                    }
+                    if (decision == PlaylistScanPolicy.Decision.SKIP) {
                         Log.v("PlaylistSetup", "Skipping scan for \"" + label + "\" (" + info.remoteCount + " tracks up to date)");
                         continue;
                     }
-                    if (cacheTruncated) {
-                        Log.w("PlaylistSetup", "Cached song list for \"" + label + "\" holds " + cachedCount
-                                + " of " + info.remoteCount + " tracks — repairing");
-                    }
                     try {
                         ArrayList<SongModel> songs = scanPlaylistSync(pid, spotifyApi);
-                        Log.d("PlaylistSetup", "Scanned \"" + label + "\": fetched " + songs.size() + " tracks (was scanned=" + info.scannedCount + ", spotify=" + info.remoteCount + ")");
+                        Log.d("PlaylistSetup", "Scanned \"" + label + "\": fetched " + songs.size() + " tracks (was scanned=" + info.scannedCount + ", spotify=" + info.remoteCount + ", cached=" + cachedCount + ")");
                         cacheSongsInBackground(pid, songs);
                         Thread.sleep(300);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
+                        failures++;
                         break;
                     } catch (se.michaelthelin.spotify.exceptions.detailed.NotFoundException e) {
                         Log.w("PlaylistSetup", "Playlist \"" + label + "\" not found on Spotify — removing from DB");
-                        DatabaseHelper deleteHelper = new DatabaseHelper(appContext);
-                        deleteHelper.deletePlaylist(pid);
-                        deleteHelper.close();
+                        dbHelper.deletePlaylist(pid);
                     } catch (Exception e) {
+                        failures++;
                         boolean isRateLimit = e.getMessage() != null && e.getMessage().contains("429");
                         Log.e("PlaylistSetup", "Scan failed for \"" + label + "\"" + (isRateLimit ? " (rate limited)" : ""), e);
                         if (isRateLimit) {
@@ -556,24 +597,27 @@ public class PlaylistSetup {
             } finally {
                 scanInProgress.set(false);
             }
-        });
+            if (failures > 0) {
+                throw new IllegalStateException(failures + " playlist scan(s) failed");
+            }
+        }, AppExecutors.io());
     }
 
     private static ArrayList<SongModel> scanPlaylistSync(String playlistId, SpotifyApi spotifyApi) throws Exception {
         ArrayList<SongModel> accumulated = new ArrayList<>();
         int offset = 0;
         int total = -1;
-        DatabaseHelper dbHelper = appContext != null ? new DatabaseHelper(appContext) : null;
-        try {
-            do {
-                se.michaelthelin.spotify.model_objects.specification.Paging<se.michaelthelin.spotify.model_objects.specification.PlaylistTrack> page =
-                        spotifyApi.getPlaylistsItems(playlistId)
-                                .setQueryParameter("market", "from_token")
-                                .offset(offset)
-                                .limit(MAX_BATCH_SIZE)
-                                .build()
-                                .execute();
-                if (total == -1) total = page.getTotal();
+        DatabaseHelper dbHelper = appContext != null ? DatabaseHelper.getInstance(appContext) : null;
+        do {
+            se.michaelthelin.spotify.model_objects.specification.Paging<se.michaelthelin.spotify.model_objects.specification.PlaylistTrack> page =
+                    spotifyApi.getPlaylistsItems(playlistId)
+                            .setQueryParameter("market", "from_token")
+                            .offset(offset)
+                            .limit(MAX_BATCH_SIZE)
+                            .build()
+                            .execute();
+            if (total == -1) total = page.getTotal();
+            Runnable processPage = () -> {
                 for (se.michaelthelin.spotify.model_objects.specification.PlaylistTrack pt : page.getItems()) {
                     if (pt.getTrack() instanceof se.michaelthelin.spotify.model_objects.specification.Track) {
                         SongModel song = getSongModel(pt);
@@ -584,37 +628,55 @@ public class PlaylistSetup {
                         }
                     }
                 }
-                offset += MAX_BATCH_SIZE;
-                if (page.getNext() == null) break;
-            } while (true);
+            };
+            // One transaction per page instead of one per statement.
+            if (dbHelper != null) dbHelper.runInTransaction(processPage);
+            else processPage.run();
+            offset += MAX_BATCH_SIZE;
+            if (page.getNext() == null) break;
+        } while (true);
 
-            if (dbHelper != null) {
-                List<String> allIds = new ArrayList<>();
-                for (SongModel s : accumulated) allIds.add(s.getId());
+        if (dbHelper != null) {
+            List<String> allIds = new ArrayList<>();
+            for (SongModel s : accumulated) allIds.add(s.getId());
+            int distinctCount = (int) allIds.stream().distinct().count();
+            dbHelper.runInTransaction(() -> {
                 dbHelper.reconcilePlaylistSongs(playlistId, allIds);
-                int distinctCount = (int) allIds.stream().distinct().count();
                 dbHelper.updatePlaylistTrackCount(playlistId, distinctCount);
+            });
 
-            }
-        } finally {
-            if (dbHelper != null) dbHelper.close();
         }
         return accumulated;
     }
 
-    public static CompletableFuture<ArrayList<PlaylistModel>> refreshPlaylists(SpotifyApi spotifyApi) {
-        return ensureFreshToken(spotifyApi)
-                .thenCompose(ignored -> getAllPlaylists(spotifyApi, 0, new ArrayList<>()))
-                .thenCompose(playlists -> {
-                    synchronized (lock) {
-                        playlistCache.cachePlaylists(playlists);
+    /**
+     * Fetch fresh playlist metadata and update the cache. Completes as soon as the list is known;
+     * changed playlists are rescanned in the background. Completes exceptionally on failure so
+     * callers can keep showing what they already have.
+     *
+     * @param forceRescan rescan changed playlists now (pull-to-refresh). Otherwise the rescan
+     *                    shares the launch scan's throttle, so merely opening the screen does not
+     *                    page through playlist contents on every visit.
+     */
+    public static CompletableFuture<ArrayList<PlaylistModel>> refreshPlaylists(
+            SpotifyApi spotifyApi, boolean forceRescan) {
+        return fetchAndCachePlaylists(spotifyApi)
+                .thenApply(playlists -> {
+                    Context context = appContext;
+                    boolean due = forceRescan || (context != null && AppExecutors.isJobDue(
+                            context, PREF_LAST_PLAYLIST_SCAN, PLAYLIST_SCAN_INTERVAL_MS));
+                    if (due) {
+                        // remote counts and snapshots are now fresh; rescan any changed playlists
+                        runScan(spotifyApi)
+                                .thenRun(() -> {
+                                    if (context != null) AppExecutors.markJobRun(context, PREF_LAST_PLAYLIST_SCAN);
+                                })
+                                .exceptionally(e -> {
+                                    Log.w("PlaylistSetup", "Background playlist rescan incomplete", e);
+                                    return null;
+                                });
                     }
-                    // remote_track_count is now fresh; run scan to pick up any changed playlists
-                    return runScan(spotifyApi).thenApply(v -> playlists);
-                })
-                .exceptionally(throwable -> {
-                    Log.e("PlaylistSetup", "Error refreshing playlists: " + throwable.getMessage());
-                    return new ArrayList<>();
+                    return playlists;
                 });
     }
 }

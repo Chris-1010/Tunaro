@@ -6,6 +6,8 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -13,14 +15,16 @@ import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
 import com.ca.tunaro.R;
+import com.ca.tunaro.utils.UiFeedback;
 import com.ca.tunaro.database.DatabaseHelper;
+import com.ca.tunaro.database.SqlUtils;
+import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.DeveloperHistory;
 import com.ca.tunaro.utils.DarkListDialog;
 
@@ -65,7 +69,7 @@ public class SqlQueryFragment extends Fragment {
     private void showHistory() {
         List<String> history = DeveloperHistory.getSqlQueries(requireContext());
         if (history.isEmpty()) {
-            Toast.makeText(requireContext(), "No query history yet", Toast.LENGTH_SHORT).show();
+            UiFeedback.show(requireActivity(), "No query history yet");
             return;
         }
 
@@ -79,6 +83,8 @@ public class SqlQueryFragment extends Fragment {
         });
     }
 
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+
     private void runQuery() {
         String sql = queryInput.getText().toString().trim();
         if (sql.isEmpty()) return;
@@ -89,19 +95,27 @@ public class SqlQueryFragment extends Fragment {
         rowCount.setText("Running…");
         resultsText.setText("");
 
+        String rejection = SqlUtils.consoleRejectionReason(sql);
+        if (rejection != null) {
+            resultsText.setText("Error: " + rejection);
+            rowCount.setText("");
+            runButton.setEnabled(true);
+            return;
+        }
+
         Context appContext = requireContext().getApplicationContext();
-        android.os.AsyncTask.THREAD_POOL_EXECUTOR.execute(() -> {
+        AppExecutors.io().execute(() -> {
             String resultText;
             String countText;
-            DatabaseHelper dbHelper = new DatabaseHelper(appContext);
+            DatabaseHelper dbHelper = DatabaseHelper.getInstance(appContext);
             SQLiteDatabase db = dbHelper.getWritableDatabase();
             try {
                 String upper = sql.toUpperCase();
                 if (upper.startsWith("SELECT") || upper.startsWith("PRAGMA") || upper.startsWith("EXPLAIN")) {
-                    Cursor cursor = db.rawQuery(sql, null);
-                    resultText = formatCursor(cursor);
-                    countText = cursor.getCount() + " rows";
-                    cursor.close();
+                    try (Cursor cursor = db.rawQuery(sql, null)) {
+                        resultText = formatCursor(cursor);
+                        countText = cursor.getCount() + " rows";
+                    }
                 } else {
                     db.execSQL(sql);
                     resultText = "OK";
@@ -110,15 +124,11 @@ public class SqlQueryFragment extends Fragment {
             } catch (Exception e) {
                 resultText = "Error: " + e.getMessage();
                 countText = "";
-            } finally {
-                db.close();
-                dbHelper.close();
             }
             String finalResult = resultText;
             String finalCount = countText;
-            if (getActivity() == null) return;
-            getActivity().runOnUiThread(() -> {
-                if (!isAdded()) return;
+            MAIN.post(() -> {
+                if (!isAdded() || getView() == null) return;
                 resultsText.setText(finalResult);
                 rowCount.setText(finalCount);
                 runButton.setEnabled(true);

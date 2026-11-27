@@ -1,6 +1,5 @@
 package com.ca.tunaro.activites;
 
-import android.app.ProgressDialog;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.Editable;
@@ -11,7 +10,6 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -23,8 +21,10 @@ import com.ca.tunaro.R;
 import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.services.AutomaticFetcher;
+import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.DeviceChooser;
 import com.ca.tunaro.utils.PlaylistCache;
+import com.ca.tunaro.utils.RunningJobGuard;
 import com.ca.tunaro.utils.SongCache;
 
 public class SettingsActivity extends BaseActivity {
@@ -36,6 +36,13 @@ public class SettingsActivity extends BaseActivity {
     private Button discoverDevicesButton;
     private TextView availableDevicesText;
     private SharedPreferences prefs;
+    private final AutomaticFetcher.FetchCompletionListener fetchListener = this::onFetchCompleted;
+    private Button importButton;
+    private Button exportButton;
+    private Button restoreBackupButton;
+    private View dataProgress;
+    private boolean dataJobRunning;
+    private RunningJobGuard jobGuard;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,6 +51,9 @@ public class SettingsActivity extends BaseActivity {
         if (checkForRecovery()) return;
 
         setContentView(R.layout.activity_settings);
+        jobGuard = new RunningJobGuard(this, "Data job in progress",
+                "The import or export keeps running if you leave, but its result won't be "
+                        + "shown. Leave anyway?");
 
         prefs = getSharedPreferences("TunaroPrefs", MODE_PRIVATE);
 
@@ -70,10 +80,11 @@ public class SettingsActivity extends BaseActivity {
     //#region Import/Export Option
 
     private void setupImportExportButtons() {
-        Button importButton = findViewById(R.id.import_button);
-        Button exportButton = findViewById(R.id.export_button);
+        importButton = findViewById(R.id.import_button);
+        exportButton = findViewById(R.id.export_button);
         Button clearCacheButton = findViewById(R.id.clear_cache_button);
-        Button restoreBackupButton = findViewById(R.id.restore_backup_button);
+        restoreBackupButton = findViewById(R.id.restore_backup_button);
+        dataProgress = findViewById(R.id.data_progress);
         clearCacheButton.setOnClickListener(v -> clearAllCaches());
 
         importButton.setOnClickListener(v -> importData());
@@ -90,29 +101,17 @@ public class SettingsActivity extends BaseActivity {
     private final ActivityResultLauncher<String[]> importLauncher = registerForActivityResult(
             new ActivityResultContracts.OpenDocument(),
             uri -> {
-                if (uri != null) {
-                    // Show progress dialog to keep user on screen
-                    ProgressDialog progressDialog = new ProgressDialog(this);
-                    progressDialog.setMessage("Importing data...");
-                    progressDialog.setCancelable(false);
-                    progressDialog.show();
-
-                    // Run import on background thread to avoid freezing UI
-                    new Thread(() -> {
-                        try {
-                            DatabaseHelper.ImportStats stats = DatabaseHelper.importFromUri(this, uri);
-                            runOnUiThread(() -> {
-                                progressDialog.dismiss();
-                                showToast(stats.getSummary());
-                            });
-                        } catch (Exception e) {
-                            runOnUiThread(() -> {
-                                progressDialog.dismiss();
-                                showToast("Import failed: " + e.getMessage());
-                            });
-                        }
-                    }).start();
-                }
+                if (uri == null) return;
+                android.content.Context appContext = getApplicationContext();
+                runDataJob(importButton, "Importing\u2026", () -> {
+                    try {
+                        DatabaseHelper.ImportStats stats = DatabaseHelper.importFromUri(appContext, uri);
+                        return stats.getSummary();
+                    } catch (Exception e) {
+                        Log.e(TAG, "Import failed", e);
+                        return "Import failed. Check that the file is a Tunaro backup.";
+                    }
+                });
             }
     );
 
@@ -127,31 +126,60 @@ public class SettingsActivity extends BaseActivity {
     private final ActivityResultLauncher<String> exportLauncher = registerForActivityResult(
             new ActivityResultContracts.CreateDocument("application/json"),
             uri -> {
-                if (uri != null) {
-                    // Show progress dialog to keep user on screen
-                    ProgressDialog progressDialog = new ProgressDialog(this);
-                    progressDialog.setMessage("Exporting data...");
-                    progressDialog.setCancelable(false);
-                    progressDialog.show();
-
-                    // Run export on background thread to avoid freezing UI
-                    new Thread(() -> {
-                        try {
-                            DatabaseHelper.writeExportToUri(this, uri);
-                            runOnUiThread(() -> {
-                                progressDialog.dismiss();
-                                showToast("Data exported successfully!");
-                            });
-                        } catch (Exception e) {
-                            runOnUiThread(() -> {
-                                progressDialog.dismiss();
-                                showToast("Export failed: " + e.getMessage());
-                            });
-                        }
-                    }).start();
-                }
+                if (uri == null) return;
+                android.content.Context appContext = getApplicationContext();
+                runDataJob(exportButton, "Exporting\u2026", () -> {
+                    try {
+                        DatabaseHelper.writeExportToUri(appContext, uri);
+                        return "Data exported";
+                    } catch (Exception e) {
+                        Log.e(TAG, "Export failed", e);
+                        return "Export failed. Try again or pick another location.";
+                    }
+                });
             }
     );
+
+    /**
+     * Runs an import/export on the I/O pool with inline progress: the data buttons are disabled,
+     * {@code busyButton} shows {@code busyLabel}, and the job's result message is shown when done.
+     */
+    private void runDataJob(Button busyButton, String busyLabel,
+                            java.util.concurrent.Callable<String> job) {
+        if (dataJobRunning) return;
+        dataJobRunning = true;
+        jobGuard.start();
+        CharSequence idleLabel = busyButton.getText();
+        setDataButtonsEnabled(false);
+        busyButton.setText(busyLabel);
+        dataProgress.setVisibility(View.VISIBLE);
+
+        AppExecutors.io().execute(() -> {
+            String message;
+            try {
+                message = job.call();
+            } catch (Exception e) {
+                Log.e(TAG, "Data job failed", e);
+                message = "Something went wrong. Try again.";
+            }
+            String result = message;
+            runOnUiThread(() -> {
+                dataJobRunning = false;
+                if (isDestroyed()) return;
+                jobGuard.stop();
+                busyButton.setText(idleLabel);
+                setDataButtonsEnabled(true);
+                dataProgress.setVisibility(View.GONE);
+                showMessage(result);
+            });
+        });
+    }
+
+    private void setDataButtonsEnabled(boolean enabled) {
+        importButton.setEnabled(enabled);
+        exportButton.setEnabled(enabled);
+        restoreBackupButton.setEnabled(enabled);
+    }
 
     //#endregion
 
@@ -266,11 +294,11 @@ public class SettingsActivity extends BaseActivity {
     private void discoverAvailableDevices() {
         MainActivity mainActivity = MainActivity.getInstance();
         if (mainActivity == null) {
-            showToast("MainActivity not available");
+            showMessage("Not connected to Spotify yet");
             return;
         }
         if (mainActivity.getSpotifyApi() == null) {
-            showToast("Spotify API not available");
+            showMessage("Not connected to Spotify yet");
             return;
         }
 
@@ -290,9 +318,9 @@ public class SettingsActivity extends BaseActivity {
                     });
                 })
                 .exceptionally(throwable -> {
-                    runOnUiThread(() -> {
-                        showToast("Error getting devices: " + throwable.getMessage());
-                    });
+                    Log.e(TAG, "Failed to list devices", throwable);
+                    runOnUiThread(() -> showMessage("Couldn't load devices",
+                            R.string.retry, this::discoverAvailableDevices));
                     return null;
                 });
     }
@@ -325,7 +353,7 @@ public class SettingsActivity extends BaseActivity {
         if (isRegistered && AutomaticFetcher.isFetchInProgress()) {
             showFetchProgress(true);
             // Register to be notified when fetch completes
-            AutomaticFetcher.setFetchCompletionListener(this::onFetchCompleted);
+            AutomaticFetcher.setFetchCompletionListener(fetchListener);
         }
 
         // Setup registration button
@@ -338,7 +366,7 @@ public class SettingsActivity extends BaseActivity {
 
                 @Override
                 public void onError(String error) {
-                    // Toast is shown by AutomaticFetcher
+                    // Message is shown by AutomaticFetcher
                 }
             });
         });
@@ -352,11 +380,8 @@ public class SettingsActivity extends BaseActivity {
             automaticFetcher.setEnabled(isChecked);
 
             if (isChecked) {
-                showToast("Automatic fetching enabled");
                 // Perform immediate fetch
                 performFetch();
-            } else {
-                showToast("Automatic fetching disabled");
             }
         });
 
@@ -374,7 +399,7 @@ public class SettingsActivity extends BaseActivity {
 
                             @Override
                             public void onError(String error) {
-                                // Toast is shown by AutomaticFetcher
+                                // Message is shown by AutomaticFetcher
                             }
                         });
                     })
@@ -422,7 +447,7 @@ public class SettingsActivity extends BaseActivity {
             public void onSuccess(int importedCount) {
                 runOnUiThread(() -> {
                     showFetchProgress(false);
-                    // Toast is shown by AutomaticFetcher
+                    // Message is shown by AutomaticFetcher
                     // Update statistics display
                     TextView statisticsText = findViewById(R.id.fetcher_statistics);
                     statisticsText.setText(automaticFetcher.getStatisticsDisplay());
@@ -431,8 +456,11 @@ public class SettingsActivity extends BaseActivity {
 
             @Override
             public void onError(String error) {
-                runOnUiThread(() -> showFetchProgress(false));
-                // Toast is shown by AutomaticFetcher
+                runOnUiThread(() -> {
+                    showFetchProgress(false);
+                    showMessage("Couldn't sync listening history",
+                            R.string.retry, SettingsActivity.this::performFetch);
+                });
             }
         });
     }
@@ -444,16 +472,15 @@ public class SettingsActivity extends BaseActivity {
         }
     }
 
+    // Delivered on the main thread by AutomaticFetcher.
     private void onFetchCompleted(int importedCount) {
-        runOnUiThread(() -> {
-            showFetchProgress(false);
-            // Toast is shown by AutomaticFetcher
-            // Update statistics display
-            TextView statisticsText = findViewById(R.id.fetcher_statistics);
-            if (statisticsText != null && automaticFetcher != null) {
-                statisticsText.setText(automaticFetcher.getStatisticsDisplay());
-            }
-        });
+        if (isDestroyed()) return;
+        showFetchProgress(false);
+        // Message is shown by AutomaticFetcher
+        TextView statisticsText = findViewById(R.id.fetcher_statistics);
+        if (statisticsText != null && automaticFetcher != null) {
+            statisticsText.setText(automaticFetcher.getStatisticsDisplay());
+        }
     }
 
     //#endregion
@@ -471,15 +498,16 @@ public class SettingsActivity extends BaseActivity {
                 .setTitle("Clear Cache")
                 .setMessage("This will clear all cached playlists and songs. Are you sure?")
                 .setPositiveButton("Clear", (dialog, which) -> {
-                    // Clear playlist cache
-                    PlaylistCache playlistCache = new PlaylistCache(this);
-                    playlistCache.clearCache();
-
-                    // Clear song cache
-                    SongCache songCache = new SongCache(this);
-                    songCache.clearCache();
-
-                    Toast.makeText(this, "Cache cleared successfully", Toast.LENGTH_SHORT).show();
+                    // SongCache.clearCache waits on the cache's locks, which an in-flight flush
+                    // or load can hold for hundreds of ms: keep that off the main thread.
+                    android.content.Context appContext = getApplicationContext();
+                    AppExecutors.io().execute(() -> {
+                        new PlaylistCache(appContext).clearCache();
+                        SongCache.getInstance(appContext).clearCache();
+                        runOnUiThread(() -> {
+                            if (!isDestroyed()) showMessage("Cache cleared");
+                        });
+                    });
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
@@ -495,18 +523,16 @@ public class SettingsActivity extends BaseActivity {
 
     @Override
     public boolean onSupportNavigateUp() {
-        finish();
+        if (jobGuard != null) jobGuard.navigateUp();
+        else finish();
         return true;
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // No cleanup needed for automatic fetcher
+        // The fetcher holds the listener statically: drop it so this screen is not leaked.
+        AutomaticFetcher.clearFetchCompletionListener(fetchListener);
     }
 
-    private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "showed Toast: " + message);
-    }
 }

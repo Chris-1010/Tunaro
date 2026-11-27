@@ -1,15 +1,13 @@
 package com.ca.tunaro.activites;
 
 import android.app.ProgressDialog;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.util.Log;
 import android.view.View;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.splashscreen.SplashScreen;
@@ -18,8 +16,11 @@ import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.managers.PlaybackManager;
 import com.ca.tunaro.services.AutomaticFetcher;
 import com.ca.tunaro.services.SongRefreshService;
+import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.DeviceChecker;
 import com.ca.tunaro.utils.SecurePrefs;
+import com.ca.tunaro.utils.UiFeedback;
+import com.ca.tunaro.utils.LaunchRouting;
 import com.ca.tunaro.utils.PlaylistSetup;
 import com.ca.tunaro.utils.PoolingSpotifyHttpManager;
 import com.ca.tunaro.R;
@@ -59,8 +60,11 @@ public class MainActivity extends AppCompatActivity {
     // forces the consent flow instead of silently restoring the cached session.
     public static final String EXTRA_FORCE_REAUTH = "force_reauth";
 
-    // Minimum time the spinner splash stays visible on the fast (already-logged-in) path.
-    private static final long SPLASH_MIN_DISPLAY_MS = 1200;
+    // Heavy launch jobs wait this long so Home's first loads get the network and disk first.
+    private static final long HEAVY_LAUNCH_JOB_DELAY_MS = 4000;
+    // The playlist scan and stale-song refresh run at most once per this interval.
+    private static final long HEAVY_LAUNCH_JOB_INTERVAL_MS = 6L * 60L * 60L * 1000L;
+    private static final String PREF_LAST_SONG_REFRESH = "last_launch_song_refresh_ms";
 
     // Singleton instance
     private static MainActivity instance;
@@ -89,6 +93,16 @@ public class MainActivity extends AppCompatActivity {
         // swaps to postSplashScreenTheme (Theme.Tunaro) once the app is ready.
         SplashScreen.installSplashScreen(this);
         super.onCreate(savedInstanceState);
+
+        // Launcher icon or media notification fired on top of a live task: step
+        // aside so the task resumes on the user's screen instead of re-routing (#120).
+        if (shouldResumeInPlace()) {
+            Log.d(TAG, "onCreate: live task found, resuming in place");
+            finish();
+            overridePendingTransition(0, 0);
+            return;
+        }
+
         setContentView(R.layout.activity_main_splash);
         applyRandomSplashGradient();
 
@@ -125,32 +139,19 @@ public class MainActivity extends AppCompatActivity {
 
             // Proactively refresh the access token since the saved one may have expired
             refreshAccessToken()
-                    .thenRun(() -> {
-                        Log.d(TAG, "Token refreshed after session restore");
-                        performInitialDeviceCheck();
-                        performAutomaticFetch();
-                        performBackgroundRefresh();
-                        performPlaylistSongScan();
-                        performOrphanedListenFetch();
-                    })
-                    .exceptionally(e -> {
-                        Log.e(TAG, "Token refresh failed after session restore", e);
-                        // Still perform these even if refresh fails
-                        performInitialDeviceCheck();
-                        performAutomaticFetch();
-                        performBackgroundRefresh();
-                        performPlaylistSongScan();
-                        performOrphanedListenFetch();
-                        return null;
+                    .whenComplete((token, e) -> {
+                        if (e != null) {
+                            // Still run the launch jobs with the existing token.
+                            Log.e(TAG, "Token refresh failed after session restore", e);
+                        } else {
+                            Log.d(TAG, "Token refreshed after session restore");
+                        }
+                        startLaunchJobs();
                     });
 
-            // Keep the spinner splash visible briefly so it doesn't flash past on
-            // the fast (already-logged-in) path, then navigate to Home.
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                if (isFinishing() || isDestroyed()) return;
-                Intent intent = new Intent(MainActivity.this, HomeActivity.class);
-                startActivity(intent);
-            }, SPLASH_MIN_DISPLAY_MS);
+            // Session is ready: go straight to Home.
+            startActivity(new Intent(MainActivity.this, HomeActivity.class));
+            overridePendingTransition(R.anim.fade_in, R.anim.fade_out);
             return;
         }
 
@@ -175,12 +176,31 @@ public class MainActivity extends AppCompatActivity {
                         if (loadingDialog != null && loadingDialog.isShowing()) {
                             loadingDialog.dismiss();
                         }
-                        showToast("Error: " + throwable.getMessage());
+                        Log.e(TAG, "Sign-in failed", throwable);
+                        // Finish first so UiFeedback falls back to a Toast, which outlives
+                        // this window; a Snackbar would be destroyed along with it.
                         finish(); // Close app if authentication fails
+                        showMessage(isCancellation(throwable)
+                                ? "Spotify sign-in was cancelled"
+                                : "Couldn't sign in to Spotify. Please try again.");
                     });
                     return null;
                 });
 
+    }
+
+    private boolean shouldResumeInPlace() {
+        Intent intent = getIntent();
+        if (intent == null) return false;
+        boolean isLauncherIntent = Intent.ACTION_MAIN.equals(intent.getAction())
+                && intent.hasCategory(Intent.CATEGORY_LAUNCHER);
+        boolean fromNotification = intent.getBooleanExtra(LaunchRouting.EXTRA_FROM_NOTIFICATION, false);
+        boolean forceReauth = intent.getBooleanExtra(EXTRA_FORCE_REAUTH, false);
+        MainActivity live = instance;
+        boolean liveSession = live != null && live != this && !live.isFinishing()
+                && live.getSpotifyApi() != null && live.getUserID() != null;
+        return LaunchRouting.shouldResumeInPlace(
+                isTaskRoot(), isLauncherIntent, fromNotification, forceReauth, liveSession);
     }
 
     // Curated cool-toned gradient pairs (bottom-left -> top-right) that stay
@@ -228,7 +248,11 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         // Clear singleton reference first
         Log.d(TAG, "MainActivity onDestroy");
-        instance = null;
+        // Only the live router owns the singleton; a resume-in-place instance or a
+        // replaced one must not clear the session held by its successor.
+        if (instance == this) {
+            instance = null;
+        }
 
         // Disconnect Spotify
         if (mSpotifyAppRemote != null) {
@@ -263,11 +287,32 @@ public class MainActivity extends AppCompatActivity {
         // Return a new CompletableFuture that chains the authentication and user profile fetch
         return authFuture.thenCompose(aVoid -> getCurrentUsersProfile_Async()).thenRunAsync(() -> runOnUiThread(() -> {
             connectSpotifyAppRemote();
+            startLaunchJobs();
+        }), executor);
+    }
+
+    // Runs the launch-time sync jobs on the shared I/O pool. The light ones start now; the heavy
+    // ones (playlist scan, stale-song refresh, orphaned listen fetch) wait until Home has had time
+    // to load, and the scan / refresh are throttled so they do not run on every launch.
+    private void startLaunchJobs() {
+        Context appContext = getApplicationContext();
+        AppExecutors.io().execute(() -> {
             performInitialDeviceCheck();
             performAutomaticFetch();
-            performBackgroundRefresh();
-            performPlaylistSongScan();
-        }), executor);
+        });
+        AppExecutors.ioDelayed(() -> {
+            if (AppExecutors.isJobDue(appContext, PlaylistSetup.PREF_LAST_PLAYLIST_SCAN, PlaylistSetup.PLAYLIST_SCAN_INTERVAL_MS)) {
+                performPlaylistSongScan();
+            } else {
+                Log.d(TAG, "Playlist scan ran recently; skipping");
+            }
+            if (AppExecutors.isJobDue(appContext, PREF_LAST_SONG_REFRESH, HEAVY_LAUNCH_JOB_INTERVAL_MS)) {
+                performBackgroundRefresh();
+            } else {
+                Log.d(TAG, "Stale-song refresh ran recently; skipping");
+            }
+            performOrphanedListenFetch();
+        }, HEAVY_LAUNCH_JOB_DELAY_MS);
     }
 
     private boolean tryRestoreSession() {
@@ -347,7 +392,7 @@ public class MainActivity extends AppCompatActivity {
                         throw new RuntimeException("Account mismatch");
                     }
 
-                    runOnUiThread(() -> showToast("Logged in as " + userDisplayName));
+                    Log.d(TAG, "Logged in as " + userDisplayName);
                 })
                 .exceptionally(throwable -> {
                     String message = throwable.getMessage();
@@ -355,7 +400,7 @@ public class MainActivity extends AppCompatActivity {
                     if (message != null && message.contains("Account mismatch")) {
                         return null;
                     }
-                    runOnUiThread(() -> showToast("Failed to load profile: " + message));
+                    // The sign-in chain reports the failure to the user.
                     throw new RuntimeException("Failed to load profile", throwable);
                 });
     }
@@ -389,14 +434,13 @@ public class MainActivity extends AppCompatActivity {
                 case ERROR:
                     // Authentication failed
                     String errorMessage = response.getError();
-                    showToast("Authorization failed: " + errorMessage);
+                    Log.e(TAG, "Authorization failed: " + errorMessage);
                     // Complete the future exceptionally to signal authentication failure
                     if (authenticationFuture != null) {
                         authenticationFuture.completeExceptionally(new Exception(errorMessage));
                     }
                     break;
                 default:
-                    showToast("Spotify login was cancelled");
                     // Complete the future exceptionally to signal authentication cancellation
                     if (authenticationFuture != null) {
                         authenticationFuture.completeExceptionally(new Exception("Authentication cancelled"));
@@ -493,7 +537,6 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) {
                 Log.e(TAG, "Error exchanging code for tokens", e);
                 runOnUiThread(() -> {
-                    showToast("Failed to obtain tokens: " + e.getMessage());
                     if (authenticationFuture != null) {
                         authenticationFuture.completeExceptionally(e);
                     }
@@ -505,7 +548,7 @@ public class MainActivity extends AppCompatActivity {
     private void performInitialDeviceCheck() {
         DeviceChecker.checkPlaybackDevice(this, buildFreshSpotifyApi(), (isCorrectDevice, message) -> runOnUiThread(() -> {
             if (!isCorrectDevice && PlaybackManager.getInstance().isPlaying() && DeviceChecker.isDeviceCheckEnabled(this)) {
-                showToast(message);
+                showMessage(message);
             }
         }));
     }
@@ -529,7 +572,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void performPlaylistSongScan() {
         if (spotifyApi == null) return;
+        Context appContext = getApplicationContext();
         PlaylistSetup.scanAllPlaylistSongs(buildFreshSpotifyApi())
+                .thenRun(() -> AppExecutors.markJobRun(appContext, PlaylistSetup.PREF_LAST_PLAYLIST_SCAN))
                 .exceptionally(e -> {
                     Log.e(TAG, "Playlist song scan failed", e);
                     return null;
@@ -541,9 +586,8 @@ public class MainActivity extends AppCompatActivity {
         SpotifyApi api = buildFreshSpotifyApi();
         CompletableFuture.runAsync(() -> {
             try {
-                DatabaseHelper db = new DatabaseHelper(getApplicationContext());
+                DatabaseHelper db = DatabaseHelper.getInstance(getApplicationContext());
                 List<String> orphanedUris = db.getOrphanedListenUris();
-                db.close();
 
                 if (orphanedUris.isEmpty()) return;
                 Log.d(TAG, "Found " + orphanedUris.size() + " orphaned listen URIs");
@@ -571,49 +615,51 @@ public class MainActivity extends AppCompatActivity {
                                 api.getSeveralTracks(String.join(",", trackIds))
                                         .build().execute();
 
-                        DatabaseHelper dbWrite = new DatabaseHelper(getApplicationContext());
-                        for (int j = 0; j < tracks.length; j++) {
-                            se.michaelthelin.spotify.model_objects.specification.Track track = tracks[j];
-                            if (track == null) continue;
+                        DatabaseHelper dbWrite = DatabaseHelper.getInstance(getApplicationContext());
+                        dbWrite.runInTransaction(() -> {
+                            for (int j = 0; j < tracks.length; j++) {
+                                se.michaelthelin.spotify.model_objects.specification.Track track = tracks[j];
+                                if (track == null) continue;
 
-                            se.michaelthelin.spotify.model_objects.specification.AlbumSimplified album = track.getAlbum();
-                            se.michaelthelin.spotify.model_objects.specification.Image[] images = album != null ? album.getImages() : null;
-                            String imageUrl = images != null && images.length > 0 ? images[0].getUrl() : null;
+                                se.michaelthelin.spotify.model_objects.specification.AlbumSimplified album = track.getAlbum();
+                                se.michaelthelin.spotify.model_objects.specification.Image[] images = album != null ? album.getImages() : null;
+                                String imageUrl = images != null && images.length > 0 ? images[0].getUrl() : null;
 
-                            com.ca.tunaro.models.SongModel.Album songAlbum = album != null ? new com.ca.tunaro.models.SongModel.Album(
-                                    album.getId(), album.getName(),
-                                    album.getAlbumType() != null ? album.getAlbumType().getType() : null,
-                                    album.getReleaseDate(), imageUrl) : null;
+                                com.ca.tunaro.models.SongModel.Album songAlbum = album != null ? new com.ca.tunaro.models.SongModel.Album(
+                                        album.getId(), album.getName(),
+                                        album.getAlbumType() != null ? album.getAlbumType().getType() : null,
+                                        album.getReleaseDate(), imageUrl) : null;
 
-                            String isrc = null;
-                            if (track.getExternalIds() != null && track.getExternalIds().getExternalIds() != null) {
-                                isrc = track.getExternalIds().getExternalIds().get("isrc");
+                                String isrc = null;
+                                if (track.getExternalIds() != null && track.getExternalIds().getExternalIds() != null) {
+                                    isrc = track.getExternalIds().getExternalIds().get("isrc");
+                                }
+
+                                Boolean playable = track.getIsPlayable();
+                                dbWrite.upsertFullTrack(track, new com.ca.tunaro.models.SongModel(
+                                        track.getUri(), track.getName(), track.getArtists(),
+                                        track.getDurationMs(), track.getUri(), track.getPopularity(),
+                                        songAlbum, isrc, null, playable == null || playable));
                             }
-
-                            Boolean playable = track.getIsPlayable();
-                            dbWrite.upsertFullTrack(track, new com.ca.tunaro.models.SongModel(
-                                    track.getUri(), track.getName(), track.getArtists(),
-                                    track.getDurationMs(), track.getUri(), track.getPopularity(),
-                                    songAlbum, isrc, null, playable == null || playable));
-                        }
-                        dbWrite.close();
+                        });
                     } catch (Exception e) {
                         Log.w(TAG, "Orphaned listen fetch batch failed at offset " + i, e);
                     }
                 }
-                DatabaseHelper dbCleanup = new DatabaseHelper(getApplicationContext());
+                DatabaseHelper dbCleanup = DatabaseHelper.getInstance(getApplicationContext());
                 dbCleanup.deleteOrphanedListens();
-                dbCleanup.close();
                 Log.d(TAG, "Orphaned listen fetch complete");
             } catch (Exception e) {
                 Log.e(TAG, "Orphaned listen fetch failed", e);
             }
-        });
+        }, AppExecutors.io());
     }
 
     private void performBackgroundRefresh() {
         if (spotifyApi == null) return;
+        Context appContext = getApplicationContext();
         new SongRefreshService(this, buildFreshSpotifyApi()).refreshStaleSongs()
+                .thenRun(() -> AppExecutors.markJobRun(appContext, PREF_LAST_SONG_REFRESH))
                 .exceptionally(e -> {
                     Log.e(TAG, "Background song refresh failed", e);
                     return null;
@@ -713,20 +759,19 @@ public class MainActivity extends AppCompatActivity {
         }, executor);
     }
 
+    /**
+     * A token that is valid now. Never blocks: a still-valid token completes immediately, and an
+     * expired one is handed straight to {@link #refreshAccessToken()}. Waiting on the refresh
+     * from inside a task on {@link #executor} would deadlock, because the refresh is queued on
+     * that same single thread behind the waiting task.
+     */
     public CompletableFuture<String> getValidAccessToken() {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                String currentToken = spotifyApi != null ? spotifyApi.getAccessToken() : null;
-                // Refresh if there's no token, or if the stored deadline has (nearly) passed.
-                if (currentToken == null || isAccessTokenExpired()) {
-                    return refreshAccessToken().get();
-                }
-                return currentToken;
-            } catch (Exception e) {
-                Log.e(TAG, "Error getting valid access token", e);
-                throw new RuntimeException(e);
-            }
-        }, executor);
+        String currentToken = spotifyApi != null ? spotifyApi.getAccessToken() : null;
+        // Refresh if there's no token, or if the stored deadline has (nearly) passed.
+        if (currentToken == null || isAccessTokenExpired()) {
+            return refreshAccessToken();
+        }
+        return CompletableFuture.completedFuture(currentToken);
     }
 
     /**
@@ -838,8 +883,14 @@ public class MainActivity extends AppCompatActivity {
         return userID;
     }
 
-    private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "showed Toast: " + message);
+    private void showMessage(String message) {
+        UiFeedback.show(this, message);
+    }
+
+    private static boolean isCancellation(Throwable throwable) {
+        for (Throwable t = throwable; t != null; t = t.getCause()) {
+            if ("Authentication cancelled".equals(t.getMessage())) return true;
+        }
+        return false;
     }
 }

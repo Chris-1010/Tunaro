@@ -8,6 +8,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
@@ -17,6 +18,7 @@ import com.ca.tunaro.models.SongModel;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.ca.tunaro.utils.ImageLoads;
 
 public class LibrarySongAdapter extends RecyclerView.Adapter<LibrarySongAdapter.ViewHolder> {
     private final Context context;
@@ -44,21 +46,11 @@ public class LibrarySongAdapter extends RecyclerView.Adapter<LibrarySongAdapter.
         // Load album cover using Glide
         Glide.with(context)
                 .load(model.getAlbumCoverUrl())
+                .apply(ImageLoads.thumbnail(context, 56))
                 .into(holder.albumCoverImage);
 
         // Show note indicator
         holder.hasNotesIcon.setVisibility(View.VISIBLE);
-    }
-
-    public void addSong(SongModel song) {
-        this.songs.add(song);
-        notifyItemInserted(songs.size() - 1);
-    }
-
-    public void clearSongs() {
-        int size = songs.size();
-        songs.clear();
-        notifyItemRangeRemoved(0, size);
     }
 
     @Override
@@ -66,9 +58,21 @@ public class LibrarySongAdapter extends RecyclerView.Adapter<LibrarySongAdapter.
         return songs.size();
     }
 
+    /**
+     * Replaces the list via a URI-keyed diff so unchanged rows are not rebound.
+     * The list is copied, so later changes to the caller's list never alias the adapter's.
+     */
     public void updateSongs(List<SongModel> newSongs) {
-        this.songs = newSongs;
-        notifyDataSetChanged();
+        List<SongModel> next = new ArrayList<>(newSongs);
+        List<SongModel> previous = this.songs;
+        this.songs = next;
+        if (!SongListDiff.shouldDiff(previous.size(), next.size())) {
+            notifyDataSetChanged();
+            return;
+        }
+        DiffUtil.calculateDiff(new SongListDiff(previous, next),
+                        SongListDiff.shouldDetectMoves(previous.size(), next.size()))
+                .dispatchUpdatesTo(this);
     }
 
     public List<SongModel> getSongs() {

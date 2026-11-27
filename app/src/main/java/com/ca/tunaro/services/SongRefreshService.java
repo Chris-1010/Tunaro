@@ -34,7 +34,7 @@ public class SongRefreshService {
                 // would otherwise throw UnauthorizedException with no retry.
                 ensureFreshToken();
 
-                DatabaseHelper dbHelper = new DatabaseHelper(context);
+                DatabaseHelper dbHelper = DatabaseHelper.getInstance(context);
                 Map<String, String> songsToRefresh = dbHelper.getSongsNeedingRefresh();
 
                 if (songsToRefresh.isEmpty()) {
@@ -82,16 +82,21 @@ public class SongRefreshService {
                                 .build()
                                 .execute();
 
-                        for (int j = 0; j < tracks.length; j++) {
-                            Track track = tracks[j];
-                            if (track == null) continue;
+                        int[] batchRefreshed = {0};
+                        // One transaction per API batch instead of one per song.
+                        dbHelper.runInTransaction(() -> {
+                            for (int j = 0; j < tracks.length; j++) {
+                                Track track = tracks[j];
+                                if (track == null) continue;
 
-                            String songId = batchSongIds.get(validIndices.get(j));
-                            Boolean isPlayable = track.getIsPlayable();
-                            dbHelper.refreshSong(songId, track.getPopularity(),
-                                    isPlayable == null || isPlayable);
-                            refreshed++;
-                        }
+                                String songId = batchSongIds.get(validIndices.get(j));
+                                Boolean isPlayable = track.getIsPlayable();
+                                dbHelper.refreshSong(songId, track.getPopularity(),
+                                        isPlayable == null || isPlayable);
+                                batchRefreshed[0]++;
+                            }
+                        });
+                        refreshed += batchRefreshed[0];
                     } catch (Exception e) {
                         Log.e(TAG, "Batch refresh failed for batch starting at " + i, e);
                     }

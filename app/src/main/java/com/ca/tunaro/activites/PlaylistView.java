@@ -3,7 +3,6 @@ package com.ca.tunaro.activites;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -16,11 +15,9 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.Spinner;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.widget.Toolbar;
-import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -31,12 +28,16 @@ import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.ca.tunaro.BaseActivity;
 import com.ca.tunaro.database.DatabaseHelper;
+import com.ca.tunaro.models.SongRankInfo;
+import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.models.PlaylistModel;
 import com.ca.tunaro.utils.ColorExtractor;
+import com.ca.tunaro.utils.GradientBackground;
 import com.ca.tunaro.utils.PlaylistSetup;
 import com.ca.tunaro.R;
 import com.ca.tunaro.utils.SelectedPlaylistHolder;
 import com.ca.tunaro.utils.SelectedSongHolder;
+import com.ca.tunaro.utils.StateMessage;
 import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.adapters.QueueLineDecoration;
 import com.ca.tunaro.adapters.Song_RecyclerViewAdapter;
@@ -83,6 +84,10 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     // Index of the "Rank" option in the sort spinner (appended, so earlier
     // indices the prefs rely on don't shift).
     private static final int SORT_RANK = 8;
+    // Bumped on every sort/filter request so a slow background sort can't
+    // overwrite the result of a newer one.
+    private int sortGeneration = 0;
+    private boolean firstResume = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -103,7 +108,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
         if (selectedPlaylist == null) {
             // Handle error - playlist not found
-            showToast("Error: No playlist selected");
+            showMessage("Couldn't open that playlist");
             finish();
             return;
         }
@@ -114,6 +119,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         // Set up RecyclerView
         recyclerView = findViewById(R.id.song_recycler_view);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        recyclerView.setHasFixedSize(true);
+        recyclerView.setItemViewCacheSize(8);
 
         // Initialize adapter, empty for now
         adapter = new Song_RecyclerViewAdapter(this, this, new ArrayList<>());
@@ -123,20 +130,24 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
         // Swipe an album cover right to add/remove the song from the queue.
         adapter.setOnQueueChangeListener((position, added) -> {
-            showToast(added ? "Added to queue" : "Removed from queue");
+            showMessage(added ? "Added to queue" : "Removed from queue");
             recyclerView.invalidateItemDecorations();
         });
 
+        loadSongs();
+    }
+
+    /** Load the playlist's songs (cache first, then Spotify), streaming rows in as they arrive. */
+    private void loadSongs() {
+        StateMessage.hide(findViewById(R.id.empty_label));
         // Show loading state while fetching songs
         showShimmerLoading(true);
 
         // Get SpotifyApi instance from MainActivity
-        SpotifyApi spotifyApi;
-        try {
-            spotifyApi = MainActivity.getInstance().getSpotifyApi();
-            if (spotifyApi == null) throw new Exception("SpotifyApi not available");
-        } catch (Exception e) {
-            finish();
+        MainActivity main = MainActivity.getInstance();
+        SpotifyApi spotifyApi = main != null ? main.getSpotifyApi() : null;
+        if (spotifyApi == null) {
+            showLoadError();
             return;
         }
 
@@ -181,8 +192,16 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 })
                 .exceptionally(throwable -> {
                     runOnUiThread(() -> {
-                        showShimmerLoading(false);
-                        showToast("Error loading songs: " + throwable.getMessage());
+                        Log.e(TAG, "Failed to load playlist songs", throwable);
+                        if (isDestroyed()) return;
+                        if (allSongs == null || allSongs.isEmpty()) {
+                            showLoadError();
+                        } else {
+                            // Some rows streamed in: keep them and offer a quiet retry.
+                            showShimmerLoading(false);
+                            showMessage("Couldn't load every song", R.string.retry,
+                                    this::loadSongs);
+                        }
                     });
                     return null;
                 });
@@ -214,20 +233,18 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         imageView.setOnClickListener(v -> {
             ArrayList<SongModel> currentList = adapter.getSongs();
             if (currentList == null || currentList.isEmpty()) {
-                showToast("No songs loaded yet");
+                showMessage("No songs loaded yet");
                 return;
             }
             if (!playbackManager.isConnected()) {
-                showToast("Connecting to Spotify...");
+                showMessage("Connecting to Spotify…");
                 playbackManager.connectSpotify(this, () -> {
                     playbackManager.playQueue(currentList, 0);
                     onQueueCreated();
-                    showToast("Playing from " + currentList.get(0).getName());
                 });
             } else {
                 playbackManager.playQueue(currentList, 0);
                 onQueueCreated();
-                showToast("Playing from " + currentList.get(0).getName());
             }
         });
 
@@ -269,28 +286,24 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         });
 
         // Extract colors from the playlist image and apply dynamic background
+        boolean animate = !ColorExtractor.isCached(playlistImage);
         ColorExtractor.extractColors(this, playlistImage, new ColorExtractor.ColorExtractionCallback() {
             @Override
             public void onColorExtracted(int dominantColor, int vibrantColor) {
-                applyGradientBackground(ColorExtractor.pickBackgroundColor(dominantColor, vibrantColor));
+                if (isDestroyed() || isFinishing()) return;
+                applyGradientBackground(ColorExtractor.pickBackgroundColor(dominantColor, vibrantColor), animate);
             }
 
             @Override
             public void onError() {
-                applyGradientBackground(Color.parseColor("#424242"));
+                if (isDestroyed() || isFinishing()) return;
+                applyGradientBackground(Color.parseColor("#424242"), animate);
             }
         });
     }
 
-    private void applyGradientBackground(int dominantColor) {
-        CoordinatorLayout mainLayout = findViewById(R.id.main);
-
-        if (mainLayout != null) {
-            GradientDrawable gradient = new GradientDrawable(GradientDrawable.Orientation.TR_BL, // Top-right to bottom-left
-                    new int[]{dominantColor, Color.BLACK});
-
-            mainLayout.setBackground(gradient);
-        }
+    private void applyGradientBackground(int dominantColor, boolean animate) {
+        GradientBackground.apply(findViewById(R.id.main), dominantColor, animate);
     }
 
     private void setupSearch() {
@@ -347,7 +360,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         if (query == null || query.isEmpty()) {
             // Re-apply current sort when clearing search
             showNoMatches(false);
-            sortSongs(sortSpinner.getSelectedItemPosition());
+            sortSongs(currentSortOption());
             return;
         }
 
@@ -363,30 +376,66 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         }
 
         // Apply current sort to filtered results
-        int currentSortOption = sortSpinner.getSelectedItemPosition();
-        applySortToList(filteredList, currentSortOption);
-        adapter.updateSongs(filteredList);
-        queueLineDecoration.setQueueMatchesDisplay(false);
+        displaySorted(filteredList, currentSortOption(), true);
+    }
 
-        adapter.updateSortContext(currentSortOption);
-        pushContextualMapsToAdapter(filteredList, currentSortOption);
-
-        showNoMatches(filteredList.isEmpty());
+    // The spinner has no adapter until the async rank lookup finishes; fall back to the saved
+    // sort (excluding Rank, which may not be offered) so search works in that window.
+    private int currentSortOption() {
+        if (sortSpinner != null && sortSpinner.getAdapter() != null) {
+            return sortSpinner.getSelectedItemPosition();
+        }
+        int saved = prefs != null ? prefs.getInt(SORT_PREF_KEY, 0) : 0;
+        return saved < 8 ? saved : 0;
     }
 
     private void showNoMatches(boolean show) {
         View emptyLabel = findViewById(R.id.empty_label);
-        if (emptyLabel != null) emptyLabel.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (show) {
+            StateMessage.showEmpty(emptyLabel, R.drawable.ic_search,
+                    R.string.library_no_matches, R.string.library_no_matches_hint);
+        } else {
+            StateMessage.hide(emptyLabel);
+        }
     }
 
+    // Full-screen error in place of the list when nothing could be loaded.
+    private void showLoadError() {
+        showShimmerLoading(false);
+        StateMessage.showError(findViewById(R.id.empty_label),
+                R.string.playlist_error_title, R.string.connection_error_hint, this::loadSongs);
+    }
+
+    // Whether to offer "Rank" needs a DB lookup, so resolve it off the main
+    // thread before building the sort controls.
     private void setupSorting() {
+        // Bind the sort views and saved prefs synchronously: search listeners are already live
+        // and read them before the rank lookup below returns.
         sortDirectionIcon = findViewById(R.id.sort_direction_icon);
         sortIcon = findViewById(R.id.sort_icon);
         sortSpinner = findViewById(R.id.sort_spinner);
-
-        // Initialize SharedPreferences
         prefs = getSharedPreferences("PlaylistPrefs", MODE_PRIVATE);
+        isAscending = prefs.getBoolean(SORT_DIRECTION_KEY, false);
 
+        final List<String> ids = new ArrayList<>();
+        for (SongModel song : allSongs) ids.add(song.getId());
+        AppExecutors.io().execute(() -> {
+            boolean ranked;
+            try {
+                ranked = hasAnyRankedSong(ids);
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Rank lookup failed", e);
+                ranked = false;
+            }
+            final boolean offerRank = ranked;
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                setupSorting(offerRank);
+            });
+        });
+    }
+
+    private void setupSorting(boolean offerRank) {
         // Set up spinner adapter with custom view. "Title" (index 2) is intentionally kept in the
         // array so existing sort/pref indices don't shift, but it is hidden from the dropdown
         // (search covers title lookup); see getDropDownView.
@@ -394,7 +443,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         // so a playlist the user has never ranked doesn't dangle a dead sort option.
         List<String> optionList = new ArrayList<>(Arrays.asList(
                 "Date Added", "Last Listened", "Title", "Length", "Artist", "Popularity", "Listen Count", "Release Date"));
-        if (hasAnyRankedSong()) {
+        if (offerRank) {
             optionList.add("Rank");
         }
         String[] sortOptions = optionList.toArray(new String[0]);
@@ -489,12 +538,10 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         });
     }
 
-    // True if any song currently loaded in this playlist has an Elo rating.
-    private boolean hasAnyRankedSong() {
-        if (allSongs == null || allSongs.isEmpty()) return false;
-        List<String> ids = new ArrayList<>();
-        for (SongModel song : allSongs) ids.add(song.getId());
-        return !new DatabaseHelper(this).getRankInfoBatch(ids).isEmpty();
+    // True if any of the given songs has an Elo rating. Blocking DB call.
+    private boolean hasAnyRankedSong(List<String> ids) {
+        if (ids.isEmpty()) return false;
+        return !DatabaseHelper.getInstance(this).getRankInfoBatch(ids).isEmpty();
     }
 
     private void updateSortDirectionIcon() {
@@ -503,11 +550,80 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 R.drawable.ic_arrow_downward);
     }
 
-    private void applySortToList(ArrayList<SongModel> songs, int sortOption) {
+    // DB-backed values a sort option orders by and the rows' contextual line shows.
+    private static final class SortData {
+        Map<String, String> lastListened;
+        Map<String, Integer> popularity;
+        Map<String, Integer> listenCounts;
+        Map<String, SongRankInfo> rankInfo;
+    }
+
+    private static boolean sortNeedsDb(int sortOption) {
+        return sortOption == 1 || sortOption == 5 || sortOption == 6 || sortOption == SORT_RANK;
+    }
+
+    // Blocking: run on the I/O executor whenever sortNeedsDb(sortOption).
+    private SortData loadSortData(List<SongModel> songs, int sortOption) {
+        SortData data = new SortData();
+        if (!sortNeedsDb(sortOption)) return data;
+        List<String> ids = new ArrayList<>();
+        for (SongModel song : songs) ids.add(song.getId());
+        DatabaseHelper db = DatabaseHelper.getInstance(this);
+        if (sortOption == 1) data.lastListened = db.getVariantMostRecentListenTimestampsBatch(ids);
+        else if (sortOption == 5) data.popularity = db.getVariantPopularityBatch(ids);
+        else if (sortOption == 6) data.listenCounts = db.getVariantListenCountsBatch(ids);
+        else data.rankInfo = computeLocalRankInfo(ids);
+        return data;
+    }
+
+    /**
+     * Sorts {@code songs} and shows them. Options backed by listen history,
+     * popularity or rank load their data and sort on the I/O executor; the rest
+     * sort in place immediately. Stale results from superseded requests are dropped.
+     */
+    private void displaySorted(ArrayList<SongModel> songs, int sortOption, boolean isSearchResult) {
+        final int generation = ++sortGeneration;
+        final boolean ascending = isAscending;
+        if (!sortNeedsDb(sortOption)) {
+            applySortToList(songs, sortOption, new SortData(), ascending);
+            showSorted(songs, sortOption, new SortData(), isSearchResult);
+            return;
+        }
+        AppExecutors.io().execute(() -> {
+            SortData data;
+            try {
+                data = loadSortData(songs, sortOption);
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Sort data load failed", e);
+                data = new SortData();
+            }
+            applySortToList(songs, sortOption, data, ascending);
+            final SortData loaded = data;
+            runOnUiThread(() -> {
+                if (generation != sortGeneration || isDestroyed()) return;
+                showSorted(songs, sortOption, loaded, isSearchResult);
+            });
+        });
+    }
+
+    private void showSorted(ArrayList<SongModel> songs, int sortOption, SortData data, boolean isSearchResult) {
+        // Maps first, so rows never flash an empty contextual line.
+        if (data.lastListened != null) adapter.updateLastListenedMap(data.lastListened);
+        if (data.popularity != null) adapter.updatePopularityMap(data.popularity);
+        if (data.listenCounts != null) adapter.updateListenCounts(data.listenCounts);
+        if (data.rankInfo != null) adapter.updateRankInfoMap(data.rankInfo);
+        adapter.updateSortContext(sortOption);
+        adapter.updateSongs(songs);
+        queueLineDecoration.setQueueMatchesDisplay(false);
+        if (isSearchResult) showNoMatches(songs.isEmpty());
+    }
+
+    // Pure ordering over preloaded data; safe to call off the main thread.
+    private void applySortToList(ArrayList<SongModel> songs, int sortOption, SortData data, boolean ascending) {
         // Rank sorts by Elo rating, but unranked songs must always trail the ranked
         // ones regardless of direction, so it can't use the generic reversal below.
         if (sortOption == SORT_RANK) {
-            sortByRank(songs);
+            sortByRank(songs, data.rankInfo != null ? data.rankInfo : new java.util.HashMap<>(), ascending);
             return;
         }
 
@@ -518,14 +634,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 comparator = Comparator.comparing(SongModel::getDateAddedToPlaylist, Comparator.nullsLast(Comparator.naturalOrder()));
                 break;
             case 1: // Last Listened
-                DatabaseHelper dbHelper = new DatabaseHelper(this);
-                List<String> songIds = new ArrayList<>();
-                for (SongModel song : songs) {
-                    songIds.add(song.getId());
-                }
-
-                Map<String, String> timestampMap = dbHelper.getVariantMostRecentListenTimestampsBatch(songIds);
-                dbHelper.close();
+                Map<String, String> timestampMap = data.lastListened != null
+                        ? data.lastListened : new java.util.HashMap<>();
 
                 // Support both timestamp formats (milliseconds included for Tunaro records, not for Spotify)
                 java.text.SimpleDateFormat formatWithMillis = new java.text.SimpleDateFormat(
@@ -586,26 +696,15 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
                 comparator = Comparator.comparing(SongModel::getArtist, String.CASE_INSENSITIVE_ORDER);
                 break;
             case 5: // Popularity (variant-aware: uses max across ISRC siblings)
-                DatabaseHelper popularityDbHelper = new DatabaseHelper(this);
-                List<String> popularitySongIds = new ArrayList<>();
-                for (SongModel song : songs) {
-                    popularitySongIds.add(song.getId());
-                }
-                Map<String, Integer> popularityMap = popularityDbHelper.getVariantPopularityBatch(popularitySongIds);
-                popularityDbHelper.close();
+                Map<String, Integer> popularityMap = data.popularity != null
+                        ? data.popularity : new java.util.HashMap<>();
                 comparator = (song1, song2) -> Integer.compare(
                         popularityMap.getOrDefault(song1.getId(), song1.getPopularity()),
                         popularityMap.getOrDefault(song2.getId(), song2.getPopularity()));
                 break;
             case 6: // Listen Count (variant-aware: sums across ISRC siblings)
-                DatabaseHelper listenCountDbHelper = new DatabaseHelper(this);
-                List<String> listenCountSongIds = new ArrayList<>();
-                for (SongModel song : songs) {
-                    listenCountSongIds.add(song.getId());
-                }
-
-                Map<String, Integer> listenCountMap = listenCountDbHelper.getVariantListenCountsBatch(listenCountSongIds);
-                listenCountDbHelper.close();
+                Map<String, Integer> listenCountMap = data.listenCounts != null
+                        ? data.listenCounts : new java.util.HashMap<>();
 
                 comparator = (song1, song2) -> {
                     int count1 = listenCountMap.getOrDefault(song1.getId(), 0);
@@ -632,7 +731,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         }
 
         if (comparator != null) {
-            if (!isAscending) {
+            if (!ascending) {
                 comparator = comparator.reversed();
             }
             songs.sort(comparator);
@@ -641,18 +740,14 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
 
     // Sort by Elo rank: ranked songs first (highest rating first by default, or
     // lowest first when ascending), then all unranked songs in their existing order.
-    private void sortByRank(ArrayList<SongModel> songs) {
-        List<String> ids = new ArrayList<>();
-        for (SongModel song : songs) ids.add(song.getId());
-
-        Map<String, com.ca.tunaro.models.SongRankInfo> rankInfo = computeLocalRankInfo(ids);
-
+    private static void sortByRank(ArrayList<SongModel> songs, Map<String, SongRankInfo> rankInfo,
+                                   boolean ascending) {
         songs.sort((s1, s2) -> {
             com.ca.tunaro.models.SongRankInfo i1 = rankInfo.get(s1.getId());
             com.ca.tunaro.models.SongRankInfo i2 = rankInfo.get(s2.getId());
             if (i1 != null && i2 != null) {
                 int cmp = Double.compare(i1.rating, i2.rating);  // ascending by rating
-                return isAscending ? cmp : -cmp;
+                return ascending ? cmp : -cmp;
             }
             if (i1 != null) return -1;  // ranked always before unranked
             if (i2 != null) return 1;
@@ -663,35 +758,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     private void sortSongs(int sortOption) {
         if (adapter == null || selectedPlaylist == null) return;
 
-        ArrayList<SongModel> songs = new ArrayList<>(allSongs);
-
-        applySortToList(songs, sortOption);
-        adapter.updateSongs(songs);
-        queueLineDecoration.setQueueMatchesDisplay(false);
-
-        adapter.updateSortContext(sortOption);
-        pushContextualMapsToAdapter(songs, sortOption);
-    }
-
-    private void pushContextualMapsToAdapter(List<SongModel> songs, int sortOption) {
-        List<String> ids = new ArrayList<>();
-        for (SongModel song : songs) ids.add(song.getId());
-
-        if (sortOption == 1) {
-            DatabaseHelper db = new DatabaseHelper(this);
-            adapter.updateLastListenedMap(db.getVariantMostRecentListenTimestampsBatch(ids));
-            db.close();
-        } else if (sortOption == 5) {
-            DatabaseHelper db = new DatabaseHelper(this);
-            adapter.updatePopularityMap(db.getVariantPopularityBatch(ids));
-            db.close();
-        } else if (sortOption == 6) {
-            DatabaseHelper db = new DatabaseHelper(this);
-            adapter.updateListenCounts(db.getVariantListenCountsBatch(ids));
-            db.close();
-        } else if (sortOption == SORT_RANK) {
-            adapter.updateRankInfoMap(computeLocalRankInfo(ids));
-        }
+        displaySorted(new ArrayList<>(allSongs), sortOption, false);
     }
 
     // Rank shown next to a song is computed on the fly relative to THIS playlist's
@@ -700,9 +767,8 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     // so a playlist missing some globally-higher songs still starts at #1. The raw
     // rating is carried through for display. Unrated songs are simply absent.
     private Map<String, com.ca.tunaro.models.SongRankInfo> computeLocalRankInfo(List<String> ids) {
-        DatabaseHelper db = new DatabaseHelper(this);
+        DatabaseHelper db = DatabaseHelper.getInstance(this);
         Map<String, com.ca.tunaro.models.SongRankInfo> global = db.getRankInfoBatch(ids);
-        db.close();
 
         // Distinct ratings, highest first → dense rank number.
         java.util.TreeSet<Long> distinct = new java.util.TreeSet<>(java.util.Collections.reverseOrder());
@@ -729,19 +795,18 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     }
 
     private void showShimmerLoading(boolean isLoading) {
-        View shimmerView = findViewById(R.id.shimmer_view_container);
+        StateMessage.setShimmer(findViewById(R.id.shimmer_view_container), isLoading);
         RecyclerView recyclerView = findViewById(R.id.song_recycler_view);
-
-        if (shimmerView != null) {
-            shimmerView.setVisibility(isLoading ? View.VISIBLE : View.GONE);
-            if (isLoading) {
-                ((com.facebook.shimmer.ShimmerFrameLayout) shimmerView).startShimmer();
-            } else {
-                ((com.facebook.shimmer.ShimmerFrameLayout) shimmerView).stopShimmer();
-            }
-        }
-
         recyclerView.setVisibility(isLoading ? View.GONE : View.VISIBLE);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // A note or snippet may have changed in SongView; refresh the row icons.
+        // The adapter already loaded them on creation, so skip the first resume.
+        if (firstResume) firstResume = false;
+        else if (adapter != null) adapter.refreshAnnotationFlags();
     }
 
     @Override
@@ -766,20 +831,13 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         Intent intent = new Intent(this, SongView.class);
         intent.putExtra("playlist_name", selectedPlaylist.getPlaylistName());
         startActivity(intent);
-        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
-    }
-
-    @Override
-    public void finish() {
-        super.finish();
-        overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
     }
 
     // A queue was just created from this screen: queued rows need their lime
     // edge, so refresh the whole list once and reset the highlight tracker.
     private void onQueueCreated() {
         queueLineDecoration.setQueueMatchesDisplay(true);
-        if (adapter != null) adapter.notifyDataSetChanged();
+        if (adapter != null) adapter.refreshPlaybackState();
         SongModel current = playbackManager.getCurrentSong();
         highlightedUri = current != null ? current.getUri() : null;
     }
@@ -796,9 +854,9 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
             // The now-playing highlight moved, but the queue membership of rows
             // shifts too: the song that just started playing is no longer
             // "upcoming", so its lime queued edge must clear. Rebind the whole
-            // list so every row re-evaluates its queued state, and refresh the
-            // connecting line decoration to match.
-            adapter.notifyDataSetChanged();
+            // list's playback indicators so every row re-evaluates its queued
+            // state, and refresh the connecting line decoration to match.
+            adapter.refreshPlaybackState();
             recyclerView.invalidateItemDecorations();
             highlightedUri = newUri;
         }
@@ -809,7 +867,7 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
     public void onAlbumCoverClick(int position) {
         ArrayList<SongModel> currentList = adapter.getSongs();
         if (!playbackManager.isConnected()) {
-            showToast("Connecting to Spotify...");
+            showMessage("Connecting to Spotify…");
             playbackManager.connectSpotify(this, () -> {
                 playbackManager.playQueue(currentList, position);
                 onQueueCreated();
@@ -826,19 +884,13 @@ public class PlaylistView extends BaseActivity implements Song_RecyclerViewInter
         SongModel clickedSong = adapter.getSongs().get(position);
 
         if (!playbackManager.isConnected()) {
-            showToast("Connecting to Spotify...");
+            showMessage("Connecting to Spotify…");
             playbackManager.connectSpotify(this, () -> {
                 playbackManager.playSong(clickedSong);
-                showToast("Playing " + clickedSong.getName());
             });
         } else {
             playbackManager.playSong(clickedSong);
-            showToast("Playing " + clickedSong.getName());
         }
     }
 
-    private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "showed Toast: " + message);
-    }
 }

@@ -5,7 +5,6 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.ImageView;
-import android.widget.Toast;
 
 import androidx.cardview.widget.CardView;
 
@@ -64,36 +63,29 @@ public class HomeActivity extends BaseActivity {
         libraryButton.setOnClickListener(view -> {
             Intent intent = new Intent(HomeActivity.this, LibraryActivity.class);
             startActivity(intent);
-            overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out);
         });
 
-        thisSeasonButton.setOnClickListener(view -> showToast("This Season feature coming soon"));
-
-        similarButton.setOnClickListener(view -> showToast("Similar Songs feature coming soon"));
+        // Not built yet: shown disabled with a "Soon" badge rather than toasting on tap.
+        markComingSoon(thisSeasonButton,
+                findViewById(R.id.this_season_title), findViewById(R.id.this_season_caption));
+        markComingSoon(similarButton,
+                findViewById(R.id.similar_title), findViewById(R.id.similar_caption));
+        markComingSoon(playEarliestButton);
 
         playlistsButton.setOnClickListener(view -> {
             Intent intent = new Intent(HomeActivity.this, PlaylistsActivity.class);
             startActivity(intent);
-            overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out);
         });
 
         rankingsButton.setOnClickListener(view -> {
             Intent intent = new Intent(HomeActivity.this, RankingsActivity.class);
             startActivity(intent);
-            overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out);
         });
 
         findViewById(R.id.developer_button).setOnClickListener(view -> {
             Intent intent = new Intent(HomeActivity.this, DeveloperActivity.class);
             startActivity(intent);
-            overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out);
         });
-
-        playEarliestButton.setOnClickListener(view -> showToast("Play from Earliest feature coming soon"));
     }
 
-    private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "showed Toast: " + message);
-    }
 }

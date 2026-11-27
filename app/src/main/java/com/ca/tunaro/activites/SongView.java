@@ -11,7 +11,6 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -29,6 +28,7 @@ import com.ca.tunaro.database.DatabaseHelper;
 import com.ca.tunaro.fragments.ManagePlaylistsSheet;
 import com.ca.tunaro.models.PlaylistModel;
 import com.ca.tunaro.models.SongModel;
+import com.ca.tunaro.utils.AppExecutors;
 import com.ca.tunaro.utils.ColorExtractor;
 import com.ca.tunaro.utils.SnippetTheme;
 import com.ca.tunaro.utils.SelectedPlaylistHolder;
@@ -58,6 +58,7 @@ public class SongView extends BaseActivity {
 
     private boolean playlistPanelVisible = false;
     private static final int PANEL_WIDTH_DP = 56;
+    private int playlistPanelGeneration = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -97,36 +98,79 @@ public class SongView extends BaseActivity {
             return;
         }
 
-        // Upgrade to full model so Details tab has complete metadata.
-        // Rows can be partial stubs: PlaybackManager writes name/duration only on
-        // track change, and older writers stored album_id without the album row or
-        // artist links. Treat any of those as missing to force a refetch from the API.
-        DatabaseHelper db = new DatabaseHelper(this);
-        SongModel fullSong = db.getFullSong(selectedSong.getId());
-        boolean loadingFromApi = fullSong == null
-                || fullSong.getAlbumId() == null
-                || fullSong.getAlbumName() == null
-                || fullSong.getArtist().isEmpty();
-        if (!loadingFromApi) {
-            selectedSong = fullSong;
-            allVariantUris.add(selectedSong.getId());
-            allVariantUris.addAll(db.getIsrcLinkedUris(selectedSong.getId()));
-        } else {
-            allVariantUris.add(selectedSong.getId());
-        }
-        db.close();
+        allVariantUris.add(selectedSong.getId());
 
+        // Render the lean song from the holder straight away; the full model, ISRC
+        // variants and counts load off the main thread and bind the tabs and panel.
         setupBackButton();
         setupBasicSongInfo();
-        if (loadingFromApi) {
-            startHeaderShimmer();
-            showNewSongPill();
-            fetchAndPopulateFromApi(selectedSong.getId());
-        }
         setupAlbumCover();
         setupPlaylistPanel();
+        setupTabs();
+        // After setupTabs: cached colours arrive synchronously and theme the tabs.
         setupDynamicBackground();
-        setupTabs(loadingFromApi);
+        loadSongDetails(selectedSong.getId());
+    }
+
+    /**
+     * Upgrades the lean song to the full DB model so the Details tab has complete metadata.
+     * Rows can be partial stubs: PlaybackManager writes name/duration only on track change,
+     * and older writers stored album_id without the album row or artist links. Any of those
+     * counts as missing and forces a refetch from the API.
+     */
+    private void loadSongDetails(String songId) {
+        DatabaseHelper db = DatabaseHelper.getInstance(getApplicationContext());
+        AppExecutors.io().execute(() -> {
+            SongModel fullSong = db.getFullSong(songId);
+            boolean loadingFromApi = fullSong == null
+                    || fullSong.getAlbumId() == null
+                    || fullSong.getAlbumName() == null
+                    || fullSong.getArtist().isEmpty();
+            List<String> variants = new ArrayList<>();
+            variants.add(songId);
+            if (!loadingFromApi) variants.addAll(db.getIsrcLinkedUris(songId));
+            int noteCount = db.countNotesForUris(variants);
+            int snippetCount = db.countSnippetsForUris(variants);
+
+            postIfAlive(() -> {
+                allVariantUris = variants;
+                if (!loadingFromApi) {
+                    applyLoadedSong(fullSong);
+                } else {
+                    startHeaderShimmer();
+                    showNewSongPill();
+                    fetchAndPopulateFromApi(songId);
+                }
+                updateTabBadge(1, noteCount);
+                updateTabBadge(2, snippetCount);
+                bindTabAdapter(loadingFromApi);
+                populatePlaylistPanel();
+            });
+        });
+    }
+
+    /** Swaps in the full model, refreshing the header only where it differs from the lean one. */
+    private void applyLoadedSong(SongModel fullSong) {
+        String oldCover = selectedSong.getAlbumCoverUrl();
+        selectedSong = fullSong;
+        if (oldCover == null ? fullSong.getAlbumCoverUrl() != null
+                : !oldCover.equals(fullSong.getAlbumCoverUrl())) {
+            setupBasicSongInfo();
+            setupDynamicBackground();
+        } else {
+            TextView nameView = findViewById(R.id.SongView_SongName);
+            TextView artistView = findViewById(R.id.SongView_ArtistName);
+            nameView.setText(fullSong.getName());
+            artistView.setText(fullSong.getArtist());
+        }
+    }
+
+    /** Runs {@code action} on the main thread unless the activity has gone away meanwhile. */
+    private void postIfAlive(Runnable action) {
+        runOnUiThread(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            action.run();
+        });
     }
 
     private void startHeaderShimmer() {
@@ -201,7 +245,7 @@ public class SongView extends BaseActivity {
         mainActivity.executeWithTokenRefresh(() -> mainActivity.getSpotifyApi().getTrack(trackId).build())
                 .thenAccept(track -> {
                     if (track == null) {
-                        runOnUiThread(this::stopHeaderShimmer);
+                        postIfAlive(this::stopHeaderShimmer);
                         return;
                     }
 
@@ -237,11 +281,13 @@ public class SongView extends BaseActivity {
                             playable == null || playable
                     );
 
-                    DatabaseHelper dbHelper = new DatabaseHelper(getApplicationContext());
+                    DatabaseHelper dbHelper = DatabaseHelper.getInstance(getApplicationContext());
                     dbHelper.upsertFullTrack(track, fullSong);
-                    dbHelper.close();
+                    List<String> variants = new ArrayList<>();
+                    variants.add(fullSong.getId());
+                    variants.addAll(dbHelper.getIsrcLinkedUris(fullSong.getId()));
 
-                    runOnUiThread(() -> {
+                    postIfAlive(() -> {
                         selectedSong = fullSong;
                         stopHeaderShimmer();
                         TextView nameView = findViewById(R.id.SongView_SongName);
@@ -253,20 +299,14 @@ public class SongView extends BaseActivity {
                         if (artistChips != null) artistChips.animate().alpha(1f).setDuration(300).start();
                         setupDynamicBackground();
                         // Recreate the adapter so the Details tab picks up the full metadata
-                        allVariantUris.clear();
-                        allVariantUris.add(fullSong.getId());
-                        DatabaseHelper dbHelper2 = new DatabaseHelper(getApplicationContext());
-                        allVariantUris.addAll(dbHelper2.getIsrcLinkedUris(fullSong.getId()));
-                        dbHelper2.close();
-                        int currentTab = viewPager.getCurrentItem();
-                        tabAdapter = new SongTabAdapter(SongView.this, fullSong, false, allVariantUris);
-                        viewPager.setAdapter(tabAdapter);
-                        viewPager.setCurrentItem(currentTab, false);
+                        allVariantUris = variants;
+                        bindTabAdapter(false);
+                        populatePlaylistPanel();
                     });
                 })
                 .exceptionally(throwable -> {
                     Log.e(TAG, "Failed to fetch track metadata", throwable);
-                    runOnUiThread(this::stopHeaderShimmer);
+                    postIfAlive(this::stopHeaderShimmer);
                     return null;
                 });
     }
@@ -314,12 +354,11 @@ public class SongView extends BaseActivity {
     private void setupArtistChips() {
         if (selectedSong == null) return;
         final String songId = selectedSong.getId();
-        new Thread(() -> {
-            DatabaseHelper db = new DatabaseHelper(getApplicationContext());
+        DatabaseHelper db = DatabaseHelper.getInstance(getApplicationContext());
+        AppExecutors.io().execute(() -> {
             List<com.ca.tunaro.models.Artist> artists = db.getSongArtists(songId);
-            db.close();
-            runOnUiThread(() -> renderArtistChips(artists));
-        }).start();
+            postIfAlive(() -> renderArtistChips(artists));
+        });
     }
 
     private void renderArtistChips(List<com.ca.tunaro.models.Artist> artists) {
@@ -369,7 +408,6 @@ public class SongView extends BaseActivity {
                 intent.putExtra("artist_id", artist.getArtistId());
                 intent.putExtra("artist_name", artist.getName());
                 startActivity(intent);
-                overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
             });
         }
         return chip;
@@ -456,7 +494,6 @@ public class SongView extends BaseActivity {
     private void setupPlaylistPanel() {
         ImageView manageButton = findViewById(R.id.playlist_panel_manage);
         manageButton.setOnClickListener(v -> openManagePlaylistsSheet());
-        populatePlaylistPanel();
     }
 
     private void openManagePlaylistsSheet() {
@@ -466,16 +503,28 @@ public class SongView extends BaseActivity {
     }
 
     private void populatePlaylistPanel() {
+        final int generation = ++playlistPanelGeneration;
+        final List<String> uris = new ArrayList<>(allVariantUris);
+        final String songId = selectedSong.getId();
+        DatabaseHelper dbHelper = DatabaseHelper.getInstance(getApplicationContext());
+        AppExecutors.io().execute(() -> {
+            List<DatabaseHelper.PlaylistLink> playlists = uris.size() > 1
+                    ? dbHelper.getPlaylistsForUris(uris)
+                    : dbHelper.getPlaylistsForSong(songId);
+            postIfAlive(() -> {
+                // A newer refresh superseded this one; drop the stale result.
+                if (generation != playlistPanelGeneration) return;
+                renderPlaylistPanel(playlists);
+            });
+        });
+    }
+
+    private void renderPlaylistPanel(List<DatabaseHelper.PlaylistLink> playlists) {
         LinearLayout iconsContainer = findViewById(R.id.playlist_panel_icons);
         TextView emptyLabel = findViewById(R.id.playlist_panel_empty);
         View scrollView = findViewById(R.id.playlist_panel_scroll);
 
         iconsContainer.removeAllViews();
-
-        DatabaseHelper dbHelper = new DatabaseHelper(this);
-        List<DatabaseHelper.PlaylistLink> playlists = allVariantUris.size() > 1
-                ? dbHelper.getPlaylistsForUris(allVariantUris)
-                : dbHelper.getPlaylistsForSong(selectedSong.getId());
 
         if (playlists.isEmpty()) {
             emptyLabel.setVisibility(View.VISIBLE);
@@ -506,14 +555,7 @@ public class SongView extends BaseActivity {
                         .transition(DrawableTransitionOptions.withCrossFade())
                         .into(icon);
 
-                icon.setOnClickListener(v -> {
-                    PlaylistModel playlist =
-                            new DatabaseHelper(this).getPlaylistById(link.playlistId);
-                    if (playlist == null) return;
-                    SelectedPlaylistHolder.getInstance()
-                            .setSelectedPlaylist(playlist, MainActivity.getInstance());
-                    startActivity(new android.content.Intent(this, PlaylistView.class));
-                });
+                icon.setOnClickListener(v -> openPlaylist(link.playlistId));
 
                 // Hold → show tooltip with playlist name (and removal date if removed)
                 icon.setOnLongClickListener(v -> {
@@ -521,13 +563,26 @@ public class SongView extends BaseActivity {
                     if (!link.isActive() && link.removedAt != null) {
                         tooltip += "\nRemoved " + formatRemovedAt(link.removedAt);
                     }
-                    showToast(tooltip);
+                    showMessage(tooltip);
                     return true;
                 });
 
                 iconsContainer.addView(icon);
             }
         }
+    }
+
+    private void openPlaylist(String playlistId) {
+        DatabaseHelper db = DatabaseHelper.getInstance(getApplicationContext());
+        AppExecutors.io().execute(() -> {
+            PlaylistModel playlist = db.getPlaylistById(playlistId);
+            if (playlist == null) return;
+            postIfAlive(() -> {
+                SelectedPlaylistHolder.getInstance()
+                        .setSelectedPlaylist(playlist, MainActivity.getInstance());
+                startActivity(new android.content.Intent(this, PlaylistView.class));
+            });
+        });
     }
 
     private void togglePlaylistPanel() {
@@ -608,6 +663,7 @@ public class SongView extends BaseActivity {
         ColorExtractor.extractColors(this, selectedSong.getAlbumCoverUrl(), new ColorExtractor.ColorExtractionCallback() {
             @Override
             public void onColorExtracted(int dominantColor, int vibrantColor) {
+                if (isDestroyed() || isFinishing()) return;
                 styleNewSongPill(vibrantColor, dominantColor);
                 applyGradientBackground(ColorExtractor.pickBackgroundColor(dominantColor, vibrantColor));
                 applyTabTheme(SnippetTheme.from(vibrantColor, dominantColor));
@@ -615,6 +671,7 @@ public class SongView extends BaseActivity {
 
             @Override
             public void onError() {
+                if (isDestroyed() || isFinishing()) return;
                 applyGradientBackground(Color.parseColor("#424242"));
                 applyTabTheme(SnippetTheme.fallback());
             }
@@ -668,7 +725,7 @@ public class SongView extends BaseActivity {
         return d;
     }
 
-    private void setupTabs(boolean isLoading) {
+    private void setupTabs() {
         tabLayout = findViewById(R.id.tab_layout);
         viewPager = findViewById(R.id.view_pager);
 
@@ -677,9 +734,6 @@ public class SongView extends BaseActivity {
         tabLayout.setBackgroundColor(Color.TRANSPARENT);
         tabLayout.setTabRippleColor(null);
         tabLayout.setPadding(16, 8, 16, 8);
-
-        tabAdapter = new SongTabAdapter(this, selectedSong, isLoading, allVariantUris);
-        viewPager.setAdapter(tabAdapter);
 
         String[] tabTitles = {"Details", "Notes", "Snippets"};
         for (int i = 0; i < tabTitles.length; i++) {
@@ -700,21 +754,8 @@ public class SongView extends BaseActivity {
                         padH, customView.getPaddingBottom());
             }
 
-            if (i > 0) {
-                DatabaseHelper dbHelper = new DatabaseHelper(this);
-                int count = i == 1
-                        ? dbHelper.getSongNotes(selectedSong.getId()).size()
-                        : dbHelper.getSongSnippets(selectedSong.getId()).size();
-
-                if (count > 0) {
-                    tabBadgeView.setVisibility(View.VISIBLE);
-                    tabBadgeView.setText(String.valueOf(count));
-                } else {
-                    tabBadgeView.setVisibility(View.GONE);
-                }
-            } else {
-                tabBadgeView.setVisibility(View.GONE);
-            }
+            // Counts arrive with the background song load.
+            tabBadgeView.setVisibility(View.GONE);
 
             tab.setCustomView(customView);
             tabLayout.addTab(tab);
@@ -761,10 +802,18 @@ public class SongView extends BaseActivity {
             }
         });
 
-        viewPager.setCurrentItem(0);
+    }
+
+    /** (Re)attaches the tab pages for the current song and variants, keeping the selected tab. */
+    private void bindTabAdapter(boolean isLoading) {
+        int currentTab = tabAdapter != null ? viewPager.getCurrentItem() : 0;
+        tabAdapter = new SongTabAdapter(this, selectedSong, isLoading, allVariantUris);
+        viewPager.setAdapter(tabAdapter);
+        viewPager.setCurrentItem(currentTab, false);
     }
 
     public void updateTabBadge(int tabIndex, int count) {
+        if (tabLayout == null) return;
         TabLayout.Tab tab = tabLayout.getTabAt(tabIndex);
         if (tab == null || tab.getCustomView() == null) return;
 
@@ -779,16 +828,14 @@ public class SongView extends BaseActivity {
 
     private void playSong() {
         if (!playbackManager.isConnected()) {
-            showToast("Connecting to Spotify...");
+            showMessage("Connecting to Spotify…");
             playbackManager.connectSpotify(this, () -> {
                 if (selectedSong != null) {
                     playbackManager.playSong(selectedSong);
-                    showToast("Playing " + selectedSong.getName());
                 }
             });
         } else if (selectedSong != null) {
             playbackManager.playSong(selectedSong);
-            showToast("Playing " + selectedSong.getName());
         }
     }
 
@@ -817,15 +864,10 @@ public class SongView extends BaseActivity {
     @Override
     public void finish() {
         super.finish();
+        // Opened as a sheet from the playback bar: slide back down instead of the shared back slide.
         if (openedFromPlaybackBar) {
             overridePendingTransition(R.anim.no_animation, R.anim.slide_down_out);
-        } else {
-            overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
         }
     }
 
-    private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "showed Toast: " + message);
-    }
 }

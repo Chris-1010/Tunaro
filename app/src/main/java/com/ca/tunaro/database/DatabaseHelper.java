@@ -9,6 +9,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 import android.net.Uri;
 import android.util.Log;
 
+import com.ca.tunaro.models.AlbumModel;
 import com.ca.tunaro.models.Artist;
 import com.ca.tunaro.models.ListenHistoryEntry;
 import com.ca.tunaro.models.PlaylistModel;
@@ -17,15 +18,18 @@ import com.ca.tunaro.models.SongModel;
 import com.ca.tunaro.models.SongRankInfo;
 import com.ca.tunaro.models.SongNote;
 import com.ca.tunaro.models.SongSnippet;
+import com.ca.tunaro.utils.PlaylistDiff;
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
+import com.google.gson.stream.JsonWriter;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -45,7 +49,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     private static final String TAG = "DatabaseHelper";
     private static final String DATABASE_NAME = "TunaroDB";
-    private static final int DATABASE_VERSION = 16;
+    private static final int DATABASE_VERSION = 18;
 
     // Table names
     private static final String TABLE_ARTISTS = "artists";
@@ -104,6 +108,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String COLUMN_TRACK_COUNT = "track_count";
     private static final String COLUMN_REMOTE_TRACK_COUNT = "remote_track_count";
     private static final String COLUMN_OWNER = "owner";
+    // Spotify snapshot_id: latest seen on Spotify, and the one the stored song links were scanned at.
+    private static final String COLUMN_SNAPSHOT_ID = "snapshot_id";
+    private static final String COLUMN_SCANNED_SNAPSHOT_ID = "scanned_snapshot_id";
     private static final String COLUMN_IS_FAVOURITE = "is_favourite";
     private static final String COLUMN_IS_ARCHIVED = "is_archived";
 
@@ -212,6 +219,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     + COLUMN_TRACK_COUNT + " INTEGER DEFAULT 0,"
                     + COLUMN_REMOTE_TRACK_COUNT + " INTEGER DEFAULT 0,"
                     + COLUMN_OWNER + " TEXT,"
+                    + COLUMN_SNAPSHOT_ID + " TEXT,"
+                    + COLUMN_SCANNED_SNAPSHOT_ID + " TEXT,"
                     + COLUMN_IS_FAVOURITE + " INTEGER DEFAULT 0,"
                     + COLUMN_IS_ARCHIVED + " INTEGER DEFAULT 0"
                     + ")";
@@ -278,10 +287,73 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     + COLUMN_COMPLETED_AT + " TEXT"
                     + ")";
 
+    // Secondary indexes for the hot per-song and per-playlist lookups. Composite
+    // primary keys already cover lookups on their leading column, so only the
+    // non-leading or non-key columns need one. IF NOT EXISTS keeps these safe to
+    // re-run from both onCreate and onUpgrade.
+    private static final String[] CREATE_INDEXES = {
+            "CREATE INDEX IF NOT EXISTS idx_listen_history_uri ON " + TABLE_LISTEN_HISTORY + "(" + COLUMN_SPOTIFY_URI + ")",
+            "CREATE INDEX IF NOT EXISTS idx_song_notes_uri ON " + TABLE_SONG_NOTES + "(" + COLUMN_SPOTIFY_URI + ")",
+            "CREATE INDEX IF NOT EXISTS idx_song_snippets_uri ON " + TABLE_SONG_SNIPPETS + "(" + COLUMN_SPOTIFY_URI + ")",
+            "CREATE INDEX IF NOT EXISTS idx_song_playlists_playlist ON " + TABLE_SONG_PLAYLISTS + "(" + COLUMN_PLAYLIST_ID + ")",
+            "CREATE INDEX IF NOT EXISTS idx_songs_album ON " + TABLE_SONGS + "(" + COLUMN_ALBUM_ID + ")",
+            "CREATE INDEX IF NOT EXISTS idx_song_artists_artist ON " + TABLE_SONG_ARTISTS + "(" + COLUMN_ARTIST_ID + ")",
+            "CREATE INDEX IF NOT EXISTS idx_song_isrc_links_uri ON " + TABLE_SONG_ISRC_LINKS + "(" + COLUMN_SPOTIFY_URI + ")"
+    };
+
     //#endregion
 
-    public DatabaseHelper(Context context) {
+    private static volatile DatabaseHelper instance;
+
+    /**
+     * Returns the process-wide helper bound to the application context. A single
+     * connection is shared by every caller, so callers must not close it.
+     */
+    public static DatabaseHelper getInstance(Context context) {
+        DatabaseHelper local = instance;
+        if (local == null) {
+            synchronized (DatabaseHelper.class) {
+                local = instance;
+                if (local == null) {
+                    local = new DatabaseHelper(context.getApplicationContext());
+                    instance = local;
+                }
+            }
+        }
+        return local;
+    }
+
+    /**
+     * Closes the shared connection and drops the singleton. Only for flows that
+     * delete or replace the database file; the next getInstance() reopens it.
+     */
+    public static void closeSharedInstance() {
+        synchronized (DatabaseHelper.class) {
+            if (instance != null) {
+                instance.closeConnection();
+                instance = null;
+            }
+        }
+    }
+
+    private DatabaseHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
+    }
+
+    @Override
+    public void onConfigure(SQLiteDatabase db) {
+        super.onConfigure(db);
+        // WAL lets readers proceed while a background job writes.
+        db.enableWriteAheadLogging();
+    }
+
+    /** No-op: the connection is shared for the life of the process. */
+    @Override
+    public synchronized void close() {
+    }
+
+    private synchronized void closeConnection() {
+        super.close();
     }
 
     @Override
@@ -298,6 +370,26 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.execSQL(CREATE_TABLE_LISTEN_HISTORY);
         db.execSQL(CREATE_TABLE_SONG_RATINGS);
         db.execSQL(CREATE_TABLE_RANKING_GAMES);
+        createIndexes(db);
+    }
+
+    private static void createIndexes(SQLiteDatabase db) {
+        for (String sql : CREATE_INDEXES) db.execSQL(sql);
+    }
+
+    /**
+     * Add a column only when the table lacks it. Upgrade steps re-create tables from the
+     * current CREATE statements, so a later "ADD COLUMN" step can meet a column that
+     * already exists; adding it twice would abort the whole upgrade.
+     */
+    private static void addColumnIfMissing(SQLiteDatabase db, String table, String column, String type) {
+        try (Cursor c = db.rawQuery("PRAGMA table_info(" + table + ")", null)) {
+            int nameIdx = c.getColumnIndexOrThrow("name");
+            while (c.moveToNext()) {
+                if (column.equalsIgnoreCase(c.getString(nameIdx))) return;
+            }
+        }
+        db.execSQL("ALTER TABLE " + table + " ADD COLUMN " + column + " " + type);
     }
 
     @Override
@@ -446,7 +538,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         }
 
         if (oldVersion == 12) {
-            db.execSQL("ALTER TABLE " + TABLE_PLAYLISTS + " ADD COLUMN " + COLUMN_REMOTE_TRACK_COUNT + " INTEGER DEFAULT 0");
+            addColumnIfMissing(db, TABLE_PLAYLISTS, COLUMN_REMOTE_TRACK_COUNT, "INTEGER DEFAULT 0");
             Log.i(TAG, "DB v13 migration complete");
             oldVersion = 13;
         }
@@ -455,11 +547,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             // v13→v14: cache ArtistView header stats on the artists table so a revisit can render
             // instantly while a fresh getArtist call refreshes in the background. fetched_at marks
             // when the stats were last written so first-ever visits can be told apart (NULL) and shimmer.
-            db.execSQL("ALTER TABLE " + TABLE_ARTISTS + " ADD COLUMN " + COLUMN_ARTIST_IMAGE_URL + " TEXT");
-            db.execSQL("ALTER TABLE " + TABLE_ARTISTS + " ADD COLUMN " + COLUMN_ARTIST_FOLLOWERS + " INTEGER");
-            db.execSQL("ALTER TABLE " + TABLE_ARTISTS + " ADD COLUMN " + COLUMN_ARTIST_POPULARITY + " INTEGER");
-            db.execSQL("ALTER TABLE " + TABLE_ARTISTS + " ADD COLUMN " + COLUMN_ARTIST_GENRES + " TEXT");
-            db.execSQL("ALTER TABLE " + TABLE_ARTISTS + " ADD COLUMN " + COLUMN_ARTIST_FETCHED_AT + " TEXT");
+            addColumnIfMissing(db, TABLE_ARTISTS, COLUMN_ARTIST_IMAGE_URL, "TEXT");
+            addColumnIfMissing(db, TABLE_ARTISTS, COLUMN_ARTIST_FOLLOWERS, "INTEGER");
+            addColumnIfMissing(db, TABLE_ARTISTS, COLUMN_ARTIST_POPULARITY, "INTEGER");
+            addColumnIfMissing(db, TABLE_ARTISTS, COLUMN_ARTIST_GENRES, "TEXT");
+            addColumnIfMissing(db, TABLE_ARTISTS, COLUMN_ARTIST_FETCHED_AT, "TEXT");
             Log.i(TAG, "DB v14 migration complete");
             oldVersion = 14;
         }
@@ -478,9 +570,25 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             // v15→v16: remember which playlists a ranking game drew its entrants
             // from. Additive, so existing saved games keep their data (playlist_ids
             // simply stays null for them).
-            db.execSQL("ALTER TABLE " + TABLE_RANKING_GAMES + " ADD COLUMN " + COLUMN_PLAYLIST_IDS + " TEXT");
+            addColumnIfMissing(db, TABLE_RANKING_GAMES, COLUMN_PLAYLIST_IDS, "TEXT");
             Log.i(TAG, "DB v16 migration complete");
             oldVersion = 16;
+        }
+
+        if (oldVersion == 16) {
+            // v16→v17: secondary indexes on hot lookup columns. Additive only.
+            createIndexes(db);
+            Log.i(TAG, "DB v17 migration complete");
+            oldVersion = 17;
+        }
+
+        if (oldVersion == 17) {
+            // v17→v18: playlist snapshot ids, so content changes with an unchanged track
+            // count still trigger a rescan. Additive only.
+            addColumnIfMissing(db, TABLE_PLAYLISTS, COLUMN_SNAPSHOT_ID, "TEXT");
+            addColumnIfMissing(db, TABLE_PLAYLISTS, COLUMN_SCANNED_SNAPSHOT_ID, "TEXT");
+            Log.i(TAG, "DB v18 migration complete");
+            oldVersion = 18;
         }
 
         if (oldVersion < newVersion) {
@@ -506,6 +614,26 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     //#endregion
 
+    //#region ======== TRANSACTIONS ========
+
+    /**
+     * Runs a group of writes as one transaction: a single fsync instead of one
+     * per statement, and all-or-nothing if the work throws. Nests safely, so
+     * helpers that already use a transaction can be called from inside one.
+     */
+    public void runInTransaction(Runnable work) {
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransactionNonExclusive();
+        try {
+            work.run();
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    //#endregion
+
     //#region ======== ARTISTS ========
 
     public void upsertArtist(String artistId, String name) {
@@ -521,7 +649,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             update.put(COLUMN_ARTIST_NAME, name);
             db.update(TABLE_ARTISTS, update, COLUMN_ARTIST_ID + " = ?", new String[]{artistId});
         }
-        db.close();
     }
 
     /** Cached ArtistView header stats. {@code fetchedAt} is null only on a first-ever visit. */
@@ -563,7 +690,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         if (result == -1) {
             db.update(TABLE_ARTISTS, values, COLUMN_ARTIST_ID + " = ?", new String[]{artistId});
         }
-        db.close();
     }
 
     // Returns cached header stats, or null if the artist row doesn't exist yet.
@@ -594,7 +720,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     cursor.getString(6));
         }
         cursor.close();
-        db.close();
         return stats;
     }
 
@@ -627,7 +752,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { songs.add(leanSongFromCursor(cursor)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return songs;
     }
 
@@ -659,7 +783,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { songs.add(leanSongFromCursor(cursor)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return songs;
     }
 
@@ -680,7 +803,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { uris.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return uris;
     }
 
@@ -697,7 +819,92 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_RELEASE_DATE, releaseDate);
         values.put(COLUMN_COVER_IMAGE_URL, coverImageUrl);
         db.insertWithOnConflict(TABLE_ALBUMS, null, values, SQLiteDatabase.CONFLICT_REPLACE);
-        db.close();
+    }
+
+    /** The cached album row, or null when the album has never been recorded locally. */
+    public AlbumModel getAlbum(String albumId) {
+        if (albumId == null) return null;
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT " + COLUMN_ALBUM_ID + ", " + COLUMN_ALBUM_NAME + ", " + COLUMN_ALBUM_TYPE +
+                        ", " + COLUMN_RELEASE_DATE + ", " + COLUMN_COVER_IMAGE_URL +
+                        " FROM " + TABLE_ALBUMS + " WHERE " + COLUMN_ALBUM_ID + " = ?",
+                new String[]{albumId});
+        AlbumModel album = null;
+        if (cursor.moveToFirst()) {
+            album = new AlbumModel(cursor.getString(0), cursor.getString(1), cursor.getString(2),
+                    cursor.getString(3), cursor.getString(4));
+        }
+        cursor.close();
+        return album;
+    }
+
+    /** Lean rows for every locally-known song on the album, ordered by name (the local DB has no
+     *  track numbers). Backs the AlbumView first paint before the Spotify track list arrives. */
+    public List<SongModel> getAlbumLocalSongs(String albumId) {
+        List<SongModel> songs = new ArrayList<>();
+        if (albumId == null) return songs;
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT s." + COLUMN_SPOTIFY_URI + ", s." + COLUMN_SONG_NAME +
+                        ", s." + COLUMN_DURATION_MS + ", s." + COLUMN_SPOTIFY_URI +
+                        ", s." + COLUMN_POPULARITY + ", a." + COLUMN_COVER_IMAGE_URL +
+                        ", a." + COLUMN_ALBUM_NAME + ", a." + COLUMN_RELEASE_DATE +
+                        ", ar." + COLUMN_ARTIST_NAME +
+                        " FROM " + TABLE_SONGS + " s" +
+                        " LEFT JOIN " + TABLE_ALBUMS + " a ON s." + COLUMN_ALBUM_ID + " = a." + COLUMN_ALBUM_ID +
+                        " LEFT JOIN " + TABLE_SONG_ARTISTS + " sa ON s." + COLUMN_SPOTIFY_URI + " = sa." + COLUMN_SPOTIFY_URI + " AND sa." + COLUMN_POSITION + " = 0" +
+                        " LEFT JOIN " + TABLE_ARTISTS + " ar ON sa." + COLUMN_ARTIST_ID + " = ar." + COLUMN_ARTIST_ID +
+                        " WHERE s." + COLUMN_ALBUM_ID + " = ?" +
+                        " ORDER BY s." + COLUMN_SONG_NAME + " COLLATE NOCASE ASC",
+                new String[]{albumId});
+        if (cursor.moveToFirst()) {
+            do { songs.add(leanSongFromCursor(cursor)); } while (cursor.moveToNext());
+        }
+        cursor.close();
+        return songs;
+    }
+
+    /** Primary artists of the album's locally-known songs, most frequent first. Lets the album
+     *  header show tappable artist names before the Spotify album arrives. */
+    public List<Artist> getAlbumLocalArtists(String albumId) {
+        List<Artist> artists = new ArrayList<>();
+        if (albumId == null) return artists;
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT ar." + COLUMN_ARTIST_ID + ", ar." + COLUMN_ARTIST_NAME + ", COUNT(*) AS n" +
+                        " FROM " + TABLE_SONGS + " s" +
+                        " JOIN " + TABLE_SONG_ARTISTS + " sa ON s." + COLUMN_SPOTIFY_URI + " = sa." + COLUMN_SPOTIFY_URI + " AND sa." + COLUMN_POSITION + " = 0" +
+                        " JOIN " + TABLE_ARTISTS + " ar ON sa." + COLUMN_ARTIST_ID + " = ar." + COLUMN_ARTIST_ID +
+                        " WHERE s." + COLUMN_ALBUM_ID + " = ?" +
+                        " GROUP BY ar." + COLUMN_ARTIST_ID +
+                        " ORDER BY n DESC, ar." + COLUMN_ARTIST_NAME + " ASC",
+                new String[]{albumId});
+        if (cursor.moveToFirst()) {
+            do { artists.add(new Artist(cursor.getString(0), cursor.getString(1))); } while (cursor.moveToNext());
+        }
+        cursor.close();
+        return artists;
+    }
+
+    /** URIs of the album's songs that are actively in at least one of the user's playlists, so the
+     *  album track list can mark them with the "added" tick (as the ArtistView Songs tab does). */
+    public java.util.Set<String> getAlbumAddedSongUris(String albumId) {
+        java.util.Set<String> uris = new java.util.HashSet<>();
+        if (albumId == null) return uris;
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT DISTINCT s." + COLUMN_SPOTIFY_URI +
+                        " FROM " + TABLE_SONGS + " s" +
+                        " JOIN " + TABLE_SONG_PLAYLISTS + " sp ON sp." + COLUMN_SPOTIFY_URI + " = s." + COLUMN_SPOTIFY_URI +
+                        " AND sp." + COLUMN_REMOVED_AT + " IS NULL" +
+                        " WHERE s." + COLUMN_ALBUM_ID + " = ?",
+                new String[]{albumId});
+        if (cursor.moveToFirst()) {
+            do { uris.add(cursor.getString(0)); } while (cursor.moveToNext());
+        }
+        cursor.close();
+        return uris;
     }
 
     //#endregion
@@ -726,7 +933,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             db.update(TABLE_SONGS, update, COLUMN_SPOTIFY_URI + " = ?", new String[]{song.getId()});
         }
 
-        db.close();
 
         // Upsert ISRC link if present
         if (song.getIsrc() != null && !song.getIsrc().isEmpty()) {
@@ -739,6 +945,10 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     // upsertSong only stores the album_id column, and SongView relies on the album
     // join and artist links being present to tell complete songs from stubs.
     public void upsertFullTrack(Track track, SongModel songModel) {
+        runInTransaction(() -> upsertFullTrackInternal(track, songModel));
+    }
+
+    private void upsertFullTrackInternal(Track track, SongModel songModel) {
         AlbumSimplified trackAlbum = track.getAlbum();
         if (trackAlbum != null && trackAlbum.getId() != null) {
             Image[] images = trackAlbum.getImages();
@@ -770,7 +980,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_ARTIST_ID, artistId);
         values.put(COLUMN_POSITION, position);
         db.insertWithOnConflict(TABLE_SONG_ARTISTS, null, values, SQLiteDatabase.CONFLICT_REPLACE);
-        db.close();
     }
 
     public void upsertIsrcLink(String isrc, String spotifyUri) {
@@ -779,7 +988,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_ISRC, isrc);
         values.put(COLUMN_SPOTIFY_URI, spotifyUri);
         db.insertWithOnConflict(TABLE_SONG_ISRC_LINKS, null, values, SQLiteDatabase.CONFLICT_IGNORE);
-        db.close();
     }
 
     public void updateSongPopularity(String spotifyUri, int popularity) {
@@ -788,7 +996,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_POPULARITY, popularity);
         values.put(COLUMN_LAST_REFRESHED_AT, utcNow());
         db.update(TABLE_SONGS, values, COLUMN_SPOTIFY_URI + " = ?", new String[]{spotifyUri});
-        db.close();
     }
 
     public void updateSongIsPlayable(String spotifyUri, boolean isPlayable) {
@@ -797,7 +1004,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_IS_PLAYABLE, isPlayable ? 1 : 0);
         values.put(COLUMN_LAST_REFRESHED_AT, utcNow());
         db.update(TABLE_SONGS, values, COLUMN_SPOTIFY_URI + " = ?", new String[]{spotifyUri});
-        db.close();
     }
 
     public void refreshSong(String spotifyUri, int popularity, boolean isPlayable) {
@@ -807,7 +1013,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_IS_PLAYABLE, isPlayable ? 1 : 0);
         values.put(COLUMN_LAST_REFRESHED_AT, utcNow());
         db.update(TABLE_SONGS, values, COLUMN_SPOTIFY_URI + " = ?", new String[]{spotifyUri});
-        db.close();
     }
 
     // Returns spotifyUri → spotifyUri for songs not refreshed in the last 7 days
@@ -828,7 +1033,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return result;
     }
 
@@ -853,8 +1057,47 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             song = leanSongFromCursor(cursor);
         }
         cursor.close();
-        db.close();
         return song;
+    }
+
+    /**
+     * Batched {@link #getLeanSong}: one query per chunk of URIs instead of one per song.
+     * Results follow the order of {@code spotifyUris}; URIs with no songs row are omitted.
+     */
+    public List<SongModel> getLeanSongs(List<String> spotifyUris) {
+        List<SongModel> result = new ArrayList<>();
+        if (spotifyUris == null || spotifyUris.isEmpty()) return result;
+        Map<String, SongModel> byUri = new HashMap<>();
+        SQLiteDatabase db = this.getReadableDatabase();
+        final int chunkSize = 900; // stay under SQLite's 999 bound-parameter limit
+        for (int start = 0; start < spotifyUris.size(); start += chunkSize) {
+            List<String> chunk = spotifyUris.subList(start, Math.min(start + chunkSize, spotifyUris.size()));
+            String[] args = chunk.toArray(new String[0]);
+            StringBuilder placeholders = new StringBuilder();
+            for (int i = 0; i < args.length; i++) placeholders.append(i == 0 ? "?" : ",?");
+            try (Cursor cursor = db.rawQuery(
+                    "SELECT s." + COLUMN_SPOTIFY_URI + ", s." + COLUMN_SONG_NAME +
+                            ", s." + COLUMN_DURATION_MS + ", s." + COLUMN_SPOTIFY_URI +
+                            ", s." + COLUMN_POPULARITY + ", a." + COLUMN_COVER_IMAGE_URL +
+                            ", a." + COLUMN_ALBUM_NAME + ", a." + COLUMN_RELEASE_DATE +
+                            ", ar." + COLUMN_ARTIST_NAME +
+                            " FROM " + TABLE_SONGS + " s" +
+                            " LEFT JOIN " + TABLE_ALBUMS + " a ON s." + COLUMN_ALBUM_ID + " = a." + COLUMN_ALBUM_ID +
+                            " LEFT JOIN " + TABLE_SONG_ARTISTS + " sa ON s." + COLUMN_SPOTIFY_URI + " = sa." + COLUMN_SPOTIFY_URI + " AND sa." + COLUMN_POSITION + " = 0" +
+                            " LEFT JOIN " + TABLE_ARTISTS + " ar ON sa." + COLUMN_ARTIST_ID + " = ar." + COLUMN_ARTIST_ID +
+                            " WHERE s." + COLUMN_SPOTIFY_URI + " IN (" + placeholders + ")",
+                    args)) {
+                while (cursor.moveToNext()) {
+                    SongModel song = leanSongFromCursor(cursor);
+                    if (!byUri.containsKey(song.getId())) byUri.put(song.getId(), song);
+                }
+            }
+        }
+        for (String uri : spotifyUris) {
+            SongModel song = byUri.remove(uri); // remove() also drops duplicate input URIs
+            if (song != null) result.add(song);
+        }
+        return result;
     }
 
     // Full SongModel — for SongView
@@ -892,9 +1135,77 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     popularity, albumId, albumName, albumType, releaseDate, isrc, isPlayable, createdAt);
         }
         cursor.close();
-        db.close();
 
         return song;
+    }
+
+    /**
+     * Batched {@link #getFullSong} for many URIs: one songs+albums query and one artists query per
+     * chunk instead of two queries per song. Songs with no linked artists are skipped, since the
+     * row is too incomplete to stand in for an API fetch.
+     */
+    public Map<String, SongModel> getFullSongs(List<String> spotifyUris) {
+        Map<String, SongModel> result = new HashMap<>();
+        if (spotifyUris == null || spotifyUris.isEmpty()) return result;
+        SQLiteDatabase db = this.getReadableDatabase();
+        final int chunkSize = 500; // stay under SQLite's bound-parameter limit
+        for (int start = 0; start < spotifyUris.size(); start += chunkSize) {
+            List<String> chunk = spotifyUris.subList(start, Math.min(start + chunkSize, spotifyUris.size()));
+            String[] args = chunk.toArray(new String[0]);
+            StringBuilder placeholders = new StringBuilder();
+            for (int i = 0; i < args.length; i++) placeholders.append(i == 0 ? "?" : ",?");
+
+            Map<String, List<String>> artistsByUri = new HashMap<>();
+            try (Cursor ac = db.rawQuery(
+                    "SELECT sa." + COLUMN_SPOTIFY_URI + ", ar." + COLUMN_ARTIST_NAME +
+                            " FROM " + TABLE_SONG_ARTISTS + " sa" +
+                            " JOIN " + TABLE_ARTISTS + " ar ON sa." + COLUMN_ARTIST_ID + " = ar." + COLUMN_ARTIST_ID +
+                            " WHERE sa." + COLUMN_SPOTIFY_URI + " IN (" + placeholders + ")" +
+                            " ORDER BY sa." + COLUMN_SPOTIFY_URI + ", sa." + COLUMN_POSITION + " ASC",
+                    args)) {
+                while (ac.moveToNext()) {
+                    List<String> names = artistsByUri.get(ac.getString(0));
+                    if (names == null) {
+                        names = new ArrayList<>();
+                        artistsByUri.put(ac.getString(0), names);
+                    }
+                    names.add(ac.getString(1));
+                }
+            }
+
+            try (Cursor cursor = db.rawQuery(
+                    "SELECT s.*, a." + COLUMN_ALBUM_NAME + " AS album_name, a." + COLUMN_ALBUM_TYPE +
+                            ", a." + COLUMN_RELEASE_DATE + ", a." + COLUMN_COVER_IMAGE_URL + " AS album_cover" +
+                            " FROM " + TABLE_SONGS + " s" +
+                            " LEFT JOIN " + TABLE_ALBUMS + " a ON s." + COLUMN_ALBUM_ID + " = a." + COLUMN_ALBUM_ID +
+                            " WHERE s." + COLUMN_SPOTIFY_URI + " IN (" + placeholders + ")",
+                    args)) {
+                int iUri = cursor.getColumnIndexOrThrow(COLUMN_SPOTIFY_URI);
+                int iName = cursor.getColumnIndexOrThrow(COLUMN_SONG_NAME);
+                int iDuration = cursor.getColumnIndexOrThrow(COLUMN_DURATION_MS);
+                int iIsrc = cursor.getColumnIndexOrThrow(COLUMN_ISRC);
+                int iPopularity = cursor.getColumnIndexOrThrow(COLUMN_POPULARITY);
+                int iPlayable = cursor.getColumnIndexOrThrow(COLUMN_IS_PLAYABLE);
+                int iAlbumId = cursor.getColumnIndexOrThrow(COLUMN_ALBUM_ID);
+                int iCreatedAt = cursor.getColumnIndexOrThrow(COLUMN_CREATED_AT);
+                int iAlbumName = cursor.getColumnIndexOrThrow("album_name");
+                int iAlbumType = cursor.getColumnIndexOrThrow(COLUMN_ALBUM_TYPE);
+                int iRelease = cursor.getColumnIndexOrThrow(COLUMN_RELEASE_DATE);
+                int iCover = cursor.getColumnIndexOrThrow("album_cover");
+                while (cursor.moveToNext()) {
+                    String uri = cursor.getString(iUri);
+                    List<String> names = artistsByUri.get(uri);
+                    if (names == null || names.isEmpty()) continue;
+                    String[] artistNames = names.toArray(new String[0]);
+                    result.put(uri, new SongModel(uri, cursor.getString(iName), artistNames[0], artistNames,
+                            cursor.getInt(iDuration), uri, cursor.getString(iCover), cursor.getInt(iPopularity),
+                            cursor.getString(iAlbumId), cursor.getString(iAlbumName), cursor.getString(iAlbumType),
+                            cursor.getString(iRelease), cursor.getString(iIsrc), cursor.getInt(iPlayable) == 1,
+                            cursor.getString(iCreatedAt)));
+                }
+            }
+        }
+        return result;
     }
 
     public boolean songExists(String spotifyUri) {
@@ -904,7 +1215,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new String[]{spotifyUri});
         boolean exists = cursor.moveToFirst();
         cursor.close();
-        db.close();
         return exists;
     }
 
@@ -942,7 +1252,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return artists;
     }
 
@@ -964,14 +1273,13 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { uris.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return uris;
     }
 
     // Returns the max popularity across all variant URIs (used to show the best known value)
     public int getMaxPopularityForUris(List<String> uris) {
         if (uris == null || uris.isEmpty()) return 0;
-        String placeholders = makePlaceholders(uris.size());
+        String placeholders = SqlUtils.placeholders(uris.size());
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
                 "SELECT MAX(" + COLUMN_POPULARITY + ") FROM " + TABLE_SONGS +
@@ -980,14 +1288,13 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         int max = 0;
         if (cursor.moveToFirst()) max = cursor.getInt(0);
         cursor.close();
-        db.close();
         return max;
     }
 
     public List<String> getListenHistoryForUris(List<String> uris) {
         List<String> timestamps = new ArrayList<>();
         if (uris == null || uris.isEmpty()) return timestamps;
-        String placeholders = makePlaceholders(uris.size());
+        String placeholders = SqlUtils.placeholders(uris.size());
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
                 "SELECT " + COLUMN_LISTEN_TIMESTAMP + " FROM " + TABLE_LISTEN_HISTORY +
@@ -998,14 +1305,13 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { timestamps.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return timestamps;
     }
 
     public List<SongNote> getSongNotesForUris(List<String> uris) {
         List<SongNote> notes = new ArrayList<>();
         if (uris == null || uris.isEmpty()) return notes;
-        String placeholders = makePlaceholders(uris.size());
+        String placeholders = SqlUtils.placeholders(uris.size());
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
                 "SELECT * FROM " + TABLE_SONG_NOTES +
@@ -1016,14 +1322,13 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { notes.add(noteFromCursor(cursor)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return notes;
     }
 
     public List<SongSnippet> getSongSnippetsForUris(List<String> uris) {
         List<SongSnippet> snippets = new ArrayList<>();
         if (uris == null || uris.isEmpty()) return snippets;
-        String placeholders = makePlaceholders(uris.size());
+        String placeholders = SqlUtils.placeholders(uris.size());
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
                 "SELECT * FROM " + TABLE_SONG_SNIPPETS +
@@ -1034,14 +1339,35 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { snippets.add(snippetFromCursor(cursor)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return snippets;
+    }
+
+    /** Number of notes across all {@code uris}, without loading the rows. */
+    public int countNotesForUris(List<String> uris) {
+        return countRowsForUris(TABLE_SONG_NOTES, uris);
+    }
+
+    /** Number of snippets across all {@code uris}, without loading the rows. */
+    public int countSnippetsForUris(List<String> uris) {
+        return countRowsForUris(TABLE_SONG_SNIPPETS, uris);
+    }
+
+    private int countRowsForUris(String table, List<String> uris) {
+        if (uris == null || uris.isEmpty()) return 0;
+        String placeholders = SqlUtils.placeholders(uris.size());
+        SQLiteDatabase db = this.getReadableDatabase();
+        try (Cursor cursor = db.rawQuery(
+                "SELECT COUNT(*) FROM " + table +
+                        " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + placeholders + ")",
+                uris.toArray(new String[0]))) {
+            return cursor.moveToFirst() ? cursor.getInt(0) : 0;
+        }
     }
 
     public List<PlaylistLink> getPlaylistsForUris(List<String> uris) {
         List<PlaylistLink> result = new ArrayList<>();
         if (uris == null || uris.isEmpty()) return result;
-        String placeholders = makePlaceholders(uris.size());
+        String placeholders = SqlUtils.placeholders(uris.size());
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
                 "SELECT DISTINCT sp." + COLUMN_PLAYLIST_ID + ", p." + COLUMN_PLAYLIST_NAME +
@@ -1059,17 +1385,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return result;
-    }
-
-    private static String makePlaceholders(int count) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < count; i++) {
-            if (i > 0) sb.append(',');
-            sb.append('?');
-        }
-        return sb.toString();
     }
 
     //#endregion
@@ -1077,7 +1393,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     //#region ======== PLAYLISTS ========
 
     public void upsertPlaylist(String playlistId, String name, String description,
-                               String imageUrl, int trackCount, String owner) {
+                               String imageUrl, int trackCount, String owner, String snapshotId) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
         values.put(COLUMN_PLAYLIST_ID, playlistId);
@@ -1087,6 +1403,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_TRACK_COUNT, trackCount);
         values.put(COLUMN_REMOTE_TRACK_COUNT, trackCount);
         values.put(COLUMN_OWNER, owner);
+        values.put(COLUMN_SNAPSHOT_ID, snapshotId);
         // track_count is managed by updatePlaylistTrackCount after scanning; remote_track_count always reflects latest Spotify total
         long result = db.insertWithOnConflict(TABLE_PLAYLISTS, null, values, SQLiteDatabase.CONFLICT_IGNORE);
         if (result == -1) {
@@ -1096,9 +1413,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             update.put(COLUMN_IMAGE_URL, imageUrl);
             update.put(COLUMN_REMOTE_TRACK_COUNT, trackCount);
             update.put(COLUMN_OWNER, owner);
+            if (snapshotId != null) update.put(COLUMN_SNAPSHOT_ID, snapshotId);
             db.update(TABLE_PLAYLISTS, update, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
         }
-        db.close();
     }
 
     public void updatePlaylistTrackCount(String playlistId, int trackCount) {
@@ -1106,17 +1423,22 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         // Read the current remote_track_count to stamp track_count to match it.
         // This way the skip check (track_count == remote_track_count) will pass on the next
         // launch even when the playlist has duplicates (remote=1143, distinct=1128).
+        // The latest snapshot_id is stamped the same way, marking the stored links as current.
         int remoteCount = trackCount;
+        String snapshotId = null;
         Cursor c = db.rawQuery(
-                "SELECT " + COLUMN_REMOTE_TRACK_COUNT + " FROM " + TABLE_PLAYLISTS +
+                "SELECT " + COLUMN_REMOTE_TRACK_COUNT + ", " + COLUMN_SNAPSHOT_ID + " FROM " + TABLE_PLAYLISTS +
                 " WHERE " + COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
-        if (c.moveToFirst()) remoteCount = c.getInt(0);
+        if (c.moveToFirst()) {
+            remoteCount = c.getInt(0);
+            snapshotId = c.getString(1);
+        }
         c.close();
 
         ContentValues values = new ContentValues();
         values.put(COLUMN_TRACK_COUNT, remoteCount);
+        values.put(COLUMN_SCANNED_SNAPSHOT_ID, snapshotId);
         db.update(TABLE_PLAYLISTS, values, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
-        db.close();
     }
 
     public void upsertPlaylistStub(String playlistId, boolean isArchived, boolean isFavourite) {
@@ -1136,7 +1458,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 db.update(TABLE_PLAYLISTS, update, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
             }
         }
-        db.close();
     }
 
     public PlaylistModel getPlaylistById(String playlistId) {
@@ -1158,7 +1479,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             result.setFavourite(isFavourite);
         }
         cursor.close();
-        db.close();
         return result;
     }
 
@@ -1178,12 +1498,16 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         setPlaylistFlag(playlistId, COLUMN_IS_ARCHIVED, 0);
     }
 
+    private static String requirePlaylistFlagColumn(String column) {
+        return SqlUtils.requireAllowedColumn(column, COLUMN_IS_FAVOURITE, COLUMN_IS_ARCHIVED);
+    }
+
     private void setPlaylistFlag(String playlistId, String column, int value) {
+        requirePlaylistFlagColumn(column);
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
         values.put(column, value);
         db.update(TABLE_PLAYLISTS, values, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
-        db.close();
     }
 
     public boolean isPlaylistFavourited(String playlistId) {
@@ -1195,6 +1519,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     private boolean getPlaylistFlag(String playlistId, String column) {
+        requirePlaylistFlagColumn(column);
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
                 "SELECT " + column + " FROM " + TABLE_PLAYLISTS +
@@ -1202,7 +1527,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new String[]{playlistId});
         boolean flag = cursor.moveToFirst() && cursor.getInt(0) == 1;
         cursor.close();
-        db.close();
         return flag;
     }
 
@@ -1215,6 +1539,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     private List<String> getPlaylistIdsByFlag(String column) {
+        requirePlaylistFlagColumn(column);
         List<String> ids = new ArrayList<>();
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
@@ -1225,7 +1550,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { ids.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return ids;
     }
 
@@ -1233,7 +1557,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         SQLiteDatabase db = this.getWritableDatabase();
         db.delete(TABLE_SONG_PLAYLISTS, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
         db.delete(TABLE_PLAYLISTS, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
-        db.close();
     }
 
     //#endregion
@@ -1248,7 +1571,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { ids.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return ids;
     }
 
@@ -1256,10 +1578,15 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         public final int remoteCount;   // latest Spotify tracks.total
         public final int scannedCount;  // remote total at the time of last scan (== remoteCount when up to date)
         public final String name;
-        public PlaylistScanInfo(int remoteCount, int scannedCount, String name) {
+        public final String snapshotId;         // latest Spotify snapshot_id (null if never seen)
+        public final String scannedSnapshotId;  // snapshot_id at the time of last scan
+        public PlaylistScanInfo(int remoteCount, int scannedCount, String name,
+                                String snapshotId, String scannedSnapshotId) {
             this.remoteCount = remoteCount;
             this.scannedCount = scannedCount;
             this.name = name;
+            this.snapshotId = snapshotId;
+            this.scannedSnapshotId = scannedSnapshotId;
         }
     }
 
@@ -1270,17 +1597,26 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 "SELECT p." + COLUMN_PLAYLIST_ID + ", p." + COLUMN_REMOTE_TRACK_COUNT +
                 ", p." + COLUMN_TRACK_COUNT +
                 ", p." + COLUMN_PLAYLIST_NAME +
+                ", p." + COLUMN_SNAPSHOT_ID +
+                ", p." + COLUMN_SCANNED_SNAPSHOT_ID +
                 " FROM " + TABLE_PLAYLISTS + " p",
                 null);
         if (cursor.moveToFirst()) {
             do {
                 result.put(cursor.getString(0),
-                        new PlaylistScanInfo(cursor.getInt(1), cursor.getInt(2), cursor.getString(3)));
+                        new PlaylistScanInfo(cursor.getInt(1), cursor.getInt(2), cursor.getString(3),
+                                cursor.getString(4), cursor.getString(5)));
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return result;
+    }
+
+    /** Mark a playlist's stored links as current for {@code snapshotId} without rescanning. */
+    public void adoptPlaylistSnapshot(String playlistId, String snapshotId) {
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_SCANNED_SNAPSHOT_ID, snapshotId);
+        getWritableDatabase().update(TABLE_PLAYLISTS, values, COLUMN_PLAYLIST_ID + " = ?", new String[]{playlistId});
     }
 
     public void upsertSongPlaylistLink(String spotifyUri, String playlistId, String addedAt) {
@@ -1299,7 +1635,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     COLUMN_SPOTIFY_URI + " = ? AND " + COLUMN_PLAYLIST_ID + " = ?",
                     new String[]{spotifyUri, playlistId});
         }
-        db.close();
     }
 
     public Map<String, Date> getAddedAtMapForPlaylist(String playlistId) {
@@ -1326,7 +1661,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return result;
     }
 
@@ -1337,7 +1671,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.update(TABLE_SONG_PLAYLISTS, values,
                 COLUMN_SPOTIFY_URI + " = ? AND " + COLUMN_PLAYLIST_ID + " = ? AND " + COLUMN_REMOVED_AT + " IS NULL",
                 new String[]{spotifyUri, playlistId});
-        db.close();
     }
 
     public List<String> getPlaylistIdsForSong(String spotifyUri) {
@@ -1351,7 +1684,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { ids.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return ids;
     }
 
@@ -1366,8 +1698,34 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { ids.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return ids;
+    }
+
+    /**
+     * Active playlist ids for each of {@code spotifyUris} in one query, keyed by uri.
+     * Songs in no active playlist are absent from the map.
+     */
+    public Map<String, List<String>> getActivePlaylistIdsForSongs(List<String> spotifyUris) {
+        Map<String, List<String>> byUri = new HashMap<>();
+        if (spotifyUris == null || spotifyUris.isEmpty()) return byUri;
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT " + COLUMN_SPOTIFY_URI + ", " + COLUMN_PLAYLIST_ID + " FROM " + TABLE_SONG_PLAYLISTS +
+                        " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + SqlUtils.placeholders(spotifyUris.size()) + ")" +
+                        " AND " + COLUMN_REMOVED_AT + " IS NULL",
+                spotifyUris.toArray(new String[0]));
+        if (cursor.moveToFirst()) {
+            do {
+                List<String> ids = byUri.get(cursor.getString(0));
+                if (ids == null) {
+                    ids = new ArrayList<>();
+                    byUri.put(cursor.getString(0), ids);
+                }
+                ids.add(cursor.getString(1));
+            } while (cursor.moveToNext());
+        }
+        cursor.close();
+        return byUri;
     }
 
     public List<String> getActiveSongUrisForPlaylist(String playlistId) {
@@ -1381,17 +1739,16 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { uris.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return uris;
     }
 
     public void reconcilePlaylistSongs(String playlistId, List<String> currentSongUris) {
-        List<String> storedActive = getActiveSongUrisForPlaylist(playlistId);
-        for (String storedUri : storedActive) {
-            if (!currentSongUris.contains(storedUri)) {
-                markSongRemovedFromPlaylist(storedUri, playlistId);
-            }
-        }
+        List<String> removed = PlaylistDiff.removedUris(
+                getActiveSongUrisForPlaylist(playlistId), currentSongUris);
+        if (removed.isEmpty()) return;
+        runInTransaction(() -> {
+            for (String uri : removed) markSongRemovedFromPlaylist(uri, playlistId);
+        });
     }
 
     public static class PlaylistLink {
@@ -1438,7 +1795,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     public List<ManagablePlaylist> getManagablePlaylists(List<String> variantUris, boolean includeArchived) {
         List<ManagablePlaylist> result = new ArrayList<>();
         if (variantUris == null || variantUris.isEmpty()) return result;
-        String placeholders = makePlaceholders(variantUris.size());
+        String placeholders = SqlUtils.placeholders(variantUris.size());
 
         String containsCase =
                 "MAX(CASE WHEN sp." + COLUMN_SPOTIFY_URI + " IN (" + placeholders + ")" +
@@ -1477,7 +1834,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return result;
     }
 
@@ -1488,7 +1844,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     public List<String> getActiveVariantsInPlaylist(List<String> variantUris, String playlistId) {
         List<String> result = new ArrayList<>();
         if (variantUris == null || variantUris.isEmpty()) return result;
-        String placeholders = makePlaceholders(variantUris.size());
+        String placeholders = SqlUtils.placeholders(variantUris.size());
         String[] args = new String[variantUris.size() + 1];
         for (int i = 0; i < variantUris.size(); i++) args[i] = variantUris.get(i);
         args[variantUris.size()] = playlistId;
@@ -1502,7 +1858,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { result.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return result;
     }
 
@@ -1525,7 +1880,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return result;
     }
 
@@ -1533,16 +1887,12 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     //#region ======== SONG NOTES ========
 
-    private List<SongNote> getAllNotes() {
-        List<SongNote> allNotes = new ArrayList<>();
+    /** Streams every note to {@code sink} row by row, without materialising the full list. */
+    private void forEachNote(RowSink<SongNote> sink) throws IOException {
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery("SELECT * FROM " + TABLE_SONG_NOTES + " ORDER BY " + COLUMN_TIMESTAMP + " ASC", null);
-        if (cursor.moveToFirst()) {
-            do { allNotes.add(noteFromCursor(cursor)); } while (cursor.moveToNext());
+        try (Cursor cursor = db.rawQuery("SELECT * FROM " + TABLE_SONG_NOTES + " ORDER BY " + COLUMN_TIMESTAMP + " ASC", null)) {
+            while (cursor.moveToNext()) sink.accept(noteFromCursor(cursor));
         }
-        cursor.close();
-        db.close();
-        return allNotes;
     }
 
     public List<SongNote> getSongNotes(String spotifyUri) {
@@ -1557,14 +1907,12 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { notes.add(noteFromCursor(cursor)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return notes;
     }
 
     public long addNote(SongNote note) {
         SQLiteDatabase db = this.getWritableDatabase();
         if (note.getUuid() != null && dataExistsByUUID(db, TABLE_SONG_NOTES, note.getUuid())) {
-            db.close();
             return -1;
         }
         ContentValues values = new ContentValues();
@@ -1574,7 +1922,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_CONTENT, note.getContent());
         long id = db.insert(TABLE_SONG_NOTES, null, values);
         note.setId(id);
-        db.close();
         return id;
     }
 
@@ -1587,13 +1934,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_NOTE_TYPE, note.getNoteType());
         values.put(COLUMN_CONTENT, note.getContent());
         db.update(TABLE_SONG_NOTES, values, COLUMN_ID + " = ?", new String[]{String.valueOf(note.getId())});
-        db.close();
     }
 
     public void deleteNote(long noteId) {
         SQLiteDatabase db = this.getWritableDatabase();
         db.delete(TABLE_SONG_NOTES, COLUMN_ID + " = ?", new String[]{String.valueOf(noteId)});
-        db.close();
     }
 
     public boolean hasSongNotes(String spotifyUri) {
@@ -1602,7 +1947,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 COLUMN_SPOTIFY_URI + " = ?", new String[]{spotifyUri}, null, null, null, "1");
         boolean has = cursor.moveToFirst();
         cursor.close();
-        db.close();
         return has;
     }
 
@@ -1616,7 +1960,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { ids.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return ids;
     }
 
@@ -1638,7 +1981,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext() && noteTypes.size() < 5);
         }
         cursor.close();
-        db.close();
         return noteTypes;
     }
 
@@ -1656,16 +1998,12 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     //#region ======== SONG SNIPPETS ========
 
-    private List<SongSnippet> getAllSnippets() {
-        List<SongSnippet> all = new ArrayList<>();
+    /** Streams every snippet to {@code sink} row by row, without materialising the full list. */
+    private void forEachSnippet(RowSink<SongSnippet> sink) throws IOException {
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery("SELECT * FROM " + TABLE_SONG_SNIPPETS + " ORDER BY " + COLUMN_ID + " ASC", null);
-        if (cursor.moveToFirst()) {
-            do { all.add(snippetFromCursor(cursor)); } while (cursor.moveToNext());
+        try (Cursor cursor = db.rawQuery("SELECT * FROM " + TABLE_SONG_SNIPPETS + " ORDER BY " + COLUMN_ID + " ASC", null)) {
+            while (cursor.moveToNext()) sink.accept(snippetFromCursor(cursor));
         }
-        cursor.close();
-        db.close();
-        return all;
     }
 
     public List<SongSnippet> getSongSnippets(String spotifyUri) {
@@ -1680,14 +2018,12 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { snippets.add(snippetFromCursor(cursor)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return snippets;
     }
 
     public long addSnippet(SongSnippet snippet) {
         SQLiteDatabase db = this.getWritableDatabase();
         if (snippet.getUuid() != null && dataExistsByUUID(db, TABLE_SONG_SNIPPETS, snippet.getUuid())) {
-            db.close();
             return -1;
         }
         ContentValues values = new ContentValues();
@@ -1700,7 +2036,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_INCLUDE_IN_RANKINGS, snippet.getIncludeInRankings() ? 1 : 0);
         long id = db.insert(TABLE_SONG_SNIPPETS, null, values);
         snippet.setId(id);
-        db.close();
         return id;
     }
 
@@ -1713,13 +2048,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_END_TIME, snippet.getEndTime());
         values.put(COLUMN_INCLUDE_IN_RANKINGS, snippet.getIncludeInRankings() ? 1 : 0);
         db.update(TABLE_SONG_SNIPPETS, values, COLUMN_ID + " = ?", new String[]{String.valueOf(snippet.getId())});
-        db.close();
     }
 
     public void deleteSnippet(long snippetId) {
         SQLiteDatabase db = this.getWritableDatabase();
         db.delete(TABLE_SONG_SNIPPETS, COLUMN_ID + " = ?", new String[]{String.valueOf(snippetId)});
-        db.close();
     }
 
     public boolean hasSongSnippets(String spotifyUri) {
@@ -1728,7 +2061,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 COLUMN_SPOTIFY_URI + " = ?", new String[]{spotifyUri}, null, null, null, "1");
         boolean has = cursor.moveToFirst();
         cursor.close();
-        db.close();
         return has;
     }
 
@@ -1742,7 +2074,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { ids.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return ids;
     }
 
@@ -1762,22 +2093,22 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     //#region ======== LISTEN HISTORY ========
 
-    private List<ListenHistoryEntry> getAllListenHistory() {
-        List<ListenHistoryEntry> all = new ArrayList<>();
+    /** Streams every listen record to {@code sink} row by row; history can run to tens of thousands of rows. */
+    private void forEachListen(RowSink<ListenHistoryEntry> sink) throws IOException {
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery("SELECT * FROM " + TABLE_LISTEN_HISTORY + " ORDER BY " + COLUMN_LISTEN_TIMESTAMP + " ASC", null);
-        if (cursor.moveToFirst()) {
-            do {
-                all.add(new ListenHistoryEntry(
-                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_UUID)),
-                        cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_ID)),
-                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SPOTIFY_URI)),
-                        cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_LISTEN_TIMESTAMP))));
-            } while (cursor.moveToNext());
+        try (Cursor cursor = db.rawQuery("SELECT * FROM " + TABLE_LISTEN_HISTORY + " ORDER BY " + COLUMN_LISTEN_TIMESTAMP + " ASC", null)) {
+            int uuidIdx = cursor.getColumnIndexOrThrow(COLUMN_UUID);
+            int idIdx = cursor.getColumnIndexOrThrow(COLUMN_ID);
+            int uriIdx = cursor.getColumnIndexOrThrow(COLUMN_SPOTIFY_URI);
+            int tsIdx = cursor.getColumnIndexOrThrow(COLUMN_LISTEN_TIMESTAMP);
+            while (cursor.moveToNext()) {
+                sink.accept(new ListenHistoryEntry(
+                        cursor.getString(uuidIdx),
+                        cursor.getLong(idIdx),
+                        cursor.getString(uriIdx),
+                        cursor.getString(tsIdx)));
+            }
         }
-        cursor.close();
-        db.close();
-        return all;
     }
 
     public void addListenRecord(String spotifyUri) {
@@ -1787,7 +2118,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_SPOTIFY_URI, spotifyUri);
         values.put(COLUMN_LISTEN_TIMESTAMP, utcNow());
         db.insert(TABLE_LISTEN_HISTORY, null, values);
-        db.close();
     }
 
     public void addListenRecordWithTimestamp(String spotifyUri, String utcTimestamp) {
@@ -1797,7 +2127,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_SPOTIFY_URI, spotifyUri);
         values.put(COLUMN_LISTEN_TIMESTAMP, utcTimestamp);
         db.insert(TABLE_LISTEN_HISTORY, null, values);
-        db.close();
     }
 
     public List<String> getListenHistory(String spotifyUri) {
@@ -1811,7 +2140,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { timestamps.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return timestamps;
     }
 
@@ -1829,7 +2157,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { uris.add(cursor.getString(0)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return uris;
     }
 
@@ -1838,7 +2165,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         int deleted = db.delete(TABLE_LISTEN_HISTORY,
                 COLUMN_SPOTIFY_URI + " NOT IN (SELECT " + COLUMN_SPOTIFY_URI + " FROM " + TABLE_SONGS + ")",
                 null);
-        db.close();
         if (deleted > 0) Log.d("DatabaseHelper", "Deleted " + deleted + " unresolvable orphaned listen entries");
     }
 
@@ -1850,14 +2176,13 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new String[]{spotifyUri});
         String timestamp = cursor.moveToFirst() ? cursor.getString(0) : null;
         cursor.close();
-        db.close();
         return timestamp;
     }
 
     public Map<String, String> getMostRecentListenTimestampsBatch(List<String> spotifyUris) {
         Map<String, String> results = new HashMap<>();
         if (spotifyUris == null || spotifyUris.isEmpty()) return results;
-        String placeholders = buildPlaceholders(spotifyUris.size());
+        String placeholders = SqlUtils.placeholders(spotifyUris.size());
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
                 "SELECT " + COLUMN_SPOTIFY_URI + ", MAX(" + COLUMN_LISTEN_TIMESTAMP + ") as latest" +
@@ -1871,14 +2196,13 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return results;
     }
 
     public Map<String, Integer> getListenCountsBatch(List<String> spotifyUris) {
         Map<String, Integer> results = new HashMap<>();
         if (spotifyUris == null || spotifyUris.isEmpty()) return results;
-        String placeholders = buildPlaceholders(spotifyUris.size());
+        String placeholders = SqlUtils.placeholders(spotifyUris.size());
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor cursor = db.rawQuery(
                 "SELECT " + COLUMN_SPOTIFY_URI + ", COUNT(*) as count" +
@@ -1892,7 +2216,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return results;
     }
 
@@ -1907,7 +2230,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         SQLiteDatabase db = this.getReadableDatabase();
 
         // Step 1: resolve each requested URI to its ISRC and collect all sibling URIs
-        String placeholders = buildPlaceholders(spotifyUris.size());
+        String placeholders = SqlUtils.placeholders(spotifyUris.size());
         Cursor isrcCursor = db.rawQuery(
                 "SELECT sil_req.spotify_uri, sil_sib.spotify_uri" +
                         " FROM " + TABLE_SONG_ISRC_LINKS + " sil_req" +
@@ -1940,7 +2263,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         Map<String, Integer> siblingCounts = new HashMap<>();
         if (!allSiblings.isEmpty()) {
             List<String> siblingList = new ArrayList<>(allSiblings);
-            String sibPlaceholders = buildPlaceholders(siblingList.size());
+            String sibPlaceholders = SqlUtils.placeholders(siblingList.size());
             Cursor lhCursor = db.rawQuery(
                     "SELECT " + COLUMN_SPOTIFY_URI + ", COUNT(*) FROM " + TABLE_LISTEN_HISTORY +
                             " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + sibPlaceholders + ")" +
@@ -1954,7 +2277,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             lhCursor.close();
         }
 
-        db.close();
 
         // Step 3: aggregate per requested URI
         for (String uri : spotifyUris) {
@@ -1976,7 +2298,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
         SQLiteDatabase db = this.getReadableDatabase();
 
-        String placeholders = buildPlaceholders(spotifyUris.size());
+        String placeholders = SqlUtils.placeholders(spotifyUris.size());
         Cursor isrcCursor = db.rawQuery(
                 "SELECT sil_req.spotify_uri, sil_sib.spotify_uri" +
                         " FROM " + TABLE_SONG_ISRC_LINKS + " sil_req" +
@@ -2006,7 +2328,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         Map<String, String> siblingLatest = new HashMap<>();
         if (!allSiblings.isEmpty()) {
             List<String> siblingList = new ArrayList<>(allSiblings);
-            String sibPlaceholders = buildPlaceholders(siblingList.size());
+            String sibPlaceholders = SqlUtils.placeholders(siblingList.size());
             Cursor lhCursor = db.rawQuery(
                     "SELECT " + COLUMN_SPOTIFY_URI + ", MAX(" + COLUMN_LISTEN_TIMESTAMP + ")" +
                             " FROM " + TABLE_LISTEN_HISTORY +
@@ -2021,7 +2343,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             lhCursor.close();
         }
 
-        db.close();
 
         for (String uri : spotifyUris) {
             String best = null;
@@ -2044,7 +2365,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
         SQLiteDatabase db = this.getReadableDatabase();
 
-        String placeholders = buildPlaceholders(spotifyUris.size());
+        String placeholders = SqlUtils.placeholders(spotifyUris.size());
         Cursor isrcCursor = db.rawQuery(
                 "SELECT sil_req.spotify_uri, sil_sib.spotify_uri" +
                         " FROM " + TABLE_SONG_ISRC_LINKS + " sil_req" +
@@ -2074,7 +2395,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         Map<String, Integer> siblingPop = new HashMap<>();
         if (!allSiblings.isEmpty()) {
             List<String> siblingList = new ArrayList<>(allSiblings);
-            String sibPlaceholders = buildPlaceholders(siblingList.size());
+            String sibPlaceholders = SqlUtils.placeholders(siblingList.size());
             Cursor popCursor = db.rawQuery(
                     "SELECT " + COLUMN_SPOTIFY_URI + ", " + COLUMN_POPULARITY +
                             " FROM " + TABLE_SONGS +
@@ -2088,7 +2409,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             popCursor.close();
         }
 
-        db.close();
 
         for (String uri : spotifyUris) {
             int max = 0;
@@ -2112,7 +2432,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new String[]{spotifyUri, windowStartStr, windowEndStr});
         boolean has = cursor.moveToFirst() && cursor.getInt(0) > 0;
         cursor.close();
-        db.close();
         return has;
     }
 
@@ -2124,16 +2443,28 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new String[]{spotifyUri, utcTimestamp});
         boolean exists = cursor.moveToFirst() && cursor.getInt(0) > 0;
         cursor.close();
-        db.close();
         return exists;
     }
 
-    public static class ListenImportBatch {
+    /**
+     * Buffers listen rows for a bulk import. Use with try-with-resources: {@link #close()}
+     * flushes whatever is still buffered, so an early exit cannot silently drop rows or leave
+     * the buffer holding memory.
+     */
+    public static class ListenImportBatch implements AutoCloseable {
         final SQLiteDatabase db;
         final List<ContentValues> pending = new ArrayList<>();
+        private boolean closed;
 
         ListenImportBatch(SQLiteDatabase db) {
             this.db = db;
+        }
+
+        @Override
+        public void close() {
+            if (closed) return;
+            closed = true;
+            flushPending(this);
         }
     }
 
@@ -2160,6 +2491,10 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     public void flushListenBatch(ListenImportBatch batch) {
+        flushPending(batch);
+    }
+
+    private static void flushPending(ListenImportBatch batch) {
         if (batch.pending.isEmpty()) return;
         batch.db.beginTransaction();
         try {
@@ -2209,26 +2544,42 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         }
     }
 
-    public static String generateExportJson(Context context) {
-        DatabaseHelper dbHelper = new DatabaseHelper(context);
-        ExportData exportData = new ExportData();
-        exportData.notes = dbHelper.getAllNotes();
-        exportData.snippets = dbHelper.getAllSnippets();
-        exportData.listenHistory = dbHelper.getAllListenHistory();
-        exportData.lastSyncCursor = dbHelper.getLastSyncCursor(context);
-        return new GsonBuilder().setPrettyPrinting().create().toJson(exportData);
+    /** Row callback used to stream table contents without building whole lists in memory. */
+    private interface RowSink<T> {
+        void accept(T row) throws IOException;
     }
 
+    /**
+     * Writes a backup with the same shape as {@link ExportData}, streaming each table straight
+     * from its cursor into the output so large listen histories never sit fully in memory.
+     */
     public static void writeExportToUri(Context context, Uri uri) throws IOException {
-        DatabaseHelper dbHelper = new DatabaseHelper(context);
+        DatabaseHelper dbHelper = getInstance(context);
+        Gson gson = new Gson();
+        ExportData header = new ExportData();
         try (OutputStream outputStream = context.getContentResolver().openOutputStream(uri);
-             OutputStreamWriter writer = new OutputStreamWriter(Objects.requireNonNull(outputStream))) {
-            ExportData exportData = new ExportData();
-            exportData.notes = dbHelper.getAllNotes();
-            exportData.snippets = dbHelper.getAllSnippets();
-            exportData.listenHistory = dbHelper.getAllListenHistory();
-            exportData.lastSyncCursor = dbHelper.getLastSyncCursor(context);
-            new GsonBuilder().setPrettyPrinting().create().toJson(exportData, writer);
+             JsonWriter json = new JsonWriter(new BufferedWriter(
+                     new OutputStreamWriter(Objects.requireNonNull(outputStream), StandardCharsets.UTF_8)))) {
+            json.setIndent("  ");
+            json.beginObject();
+
+            json.name("notes").beginArray();
+            dbHelper.forEachNote(note -> gson.toJson(note, SongNote.class, json));
+            json.endArray();
+
+            json.name("snippets").beginArray();
+            dbHelper.forEachSnippet(snippet -> gson.toJson(snippet, SongSnippet.class, json));
+            json.endArray();
+
+            json.name("listenHistory").beginArray();
+            dbHelper.forEachListen(entry -> gson.toJson(entry, ListenHistoryEntry.class, json));
+            json.endArray();
+
+            String cursor = dbHelper.getLastSyncCursor(context);
+            if (cursor != null) json.name("lastSyncCursor").value(cursor);
+            json.name("exportDate").value(header.exportDate);
+            json.name("databaseVersion").value(header.databaseVersion);
+            json.endObject();
         }
     }
 
@@ -2238,7 +2589,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         ExportData importData = gson.fromJson(jsonData, ExportData.class);
         if (importData == null) throw new IllegalArgumentException("Invalid or corrupted backup file");
 
-        DatabaseHelper dbHelper = new DatabaseHelper(context);
+        DatabaseHelper dbHelper = getInstance(context);
         ImportStats stats = new ImportStats();
 
         if (importData.notes != null) {
@@ -2260,18 +2611,14 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
         if (importData.listenHistory != null) {
             SQLiteDatabase db = dbHelper.getWritableDatabase();
-            try {
-                for (ListenHistoryEntry entry : importData.listenHistory) {
-                    if (!dbHelper.dataExistsByUUID(db, TABLE_LISTEN_HISTORY, entry.getUuid())) {
-                        ContentValues values = new ContentValues();
-                        values.put(COLUMN_UUID, entry.getUuid());
-                        values.put(COLUMN_SPOTIFY_URI, entry.getSongId());
-                        values.put(COLUMN_LISTEN_TIMESTAMP, entry.getListenTimestamp());
-                        if (db.insert(TABLE_LISTEN_HISTORY, null, values) != -1) stats.listenHistoryAdded++;
-                    }
+            for (ListenHistoryEntry entry : importData.listenHistory) {
+                if (!dbHelper.dataExistsByUUID(db, TABLE_LISTEN_HISTORY, entry.getUuid())) {
+                    ContentValues values = new ContentValues();
+                    values.put(COLUMN_UUID, entry.getUuid());
+                    values.put(COLUMN_SPOTIFY_URI, entry.getSongId());
+                    values.put(COLUMN_LISTEN_TIMESTAMP, entry.getListenTimestamp());
+                    if (db.insert(TABLE_LISTEN_HISTORY, null, values) != -1) stats.listenHistoryAdded++;
                 }
-            } finally {
-                db.close();
             }
         }
 
@@ -2324,18 +2671,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     private static java.text.SimpleDateFormat utcDateFormat() {
-        java.text.SimpleDateFormat fmt = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault());
-        fmt.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
-        return fmt;
-    }
-
-    private static String buildPlaceholders(int count) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < count; i++) {
-            if (i > 0) sb.append(',');
-            sb.append('?');
-        }
-        return sb.toString();
+        return SqlUtils.utcDateFormat();
     }
 
     public static String getRelativeTimeDescription(java.util.Date date) {
@@ -2400,7 +2736,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return playlists;
     }
 
@@ -2429,7 +2764,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();
-            db.close();
         }
     }
 
@@ -2476,7 +2810,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();
-            db.close();
         }
     }
 
@@ -2490,13 +2823,12 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         Cursor cursor = db.rawQuery(
                 "SELECT " + COLUMN_SPOTIFY_URI + ", " + COLUMN_RATING +
                         " FROM " + TABLE_SONG_RATINGS +
-                        " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + buildPlaceholders(uris.size()) + ")",
+                        " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + SqlUtils.placeholders(uris.size()) + ")",
                 uris.toArray(new String[0]));
         if (cursor.moveToFirst()) {
             do { result.put(cursor.getString(0), cursor.getDouble(1)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return result;
     }
 
@@ -2515,13 +2847,12 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         Cursor cursor = db.rawQuery(
                 "SELECT " + COLUMN_SPOTIFY_URI + ", " + COLUMN_MATCHES_PLAYED +
                         " FROM " + TABLE_SONG_RATINGS +
-                        " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + buildPlaceholders(uris.size()) + ")",
+                        " WHERE " + COLUMN_SPOTIFY_URI + " IN (" + SqlUtils.placeholders(uris.size()) + ")",
                 uris.toArray(new String[0]));
         if (cursor.moveToFirst()) {
             do { result.put(cursor.getString(0), cursor.getInt(1)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return result;
     }
 
@@ -2540,7 +2871,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();
-            db.close();
         }
     }
 
@@ -2616,7 +2946,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();
-            db.close();
         }
     }
 
@@ -2647,7 +2976,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         rankCursor.close();
 
         // Map each requested uri to its ISRC siblings (including itself).
-        String placeholders = buildPlaceholders(uris.size());
+        String placeholders = SqlUtils.placeholders(uris.size());
         Cursor isrcCursor = db.rawQuery(
                 "SELECT sil_req." + COLUMN_SPOTIFY_URI + ", sil_sib." + COLUMN_SPOTIFY_URI +
                         " FROM " + TABLE_SONG_ISRC_LINKS + " sil_req" +
@@ -2662,7 +2991,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } while (isrcCursor.moveToNext());
         }
         isrcCursor.close();
-        db.close();
 
         for (String uri : uris) {
             List<String> siblings = variantMap.getOrDefault(uri, java.util.Collections.singletonList(uri));
@@ -2689,7 +3017,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new String[]{GAME_IN_PROGRESS});
         RankingGame game = cursor.moveToFirst() ? gameFromCursor(cursor) : null;
         cursor.close();
-        db.close();
         return game;
     }
 
@@ -2700,7 +3027,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new String[]{String.valueOf(id)});
         RankingGame game = cursor.moveToFirst() ? gameFromCursor(cursor) : null;
         cursor.close();
-        db.close();
         return game;
     }
 
@@ -2716,7 +3042,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             do { games.add(gameFromCursor(cursor)); } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return games;
     }
 
@@ -2736,7 +3061,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_CREATED_AT, nowUtc());
         values.put(COLUMN_UPDATED_AT, nowUtc());
         long id = db.insert(TABLE_RANKING_GAMES, null, values);
-        db.close();
         return id;
     }
 
@@ -2747,7 +3071,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_DECISIONS, joinUris(decisions));
         values.put(COLUMN_UPDATED_AT, nowUtc());
         db.update(TABLE_RANKING_GAMES, values, COLUMN_ID + " = ?", new String[]{String.valueOf(id)});
-        db.close();
     }
 
     /** Mark a game completed and store its final 1..N ranking. */
@@ -2760,13 +3083,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_UPDATED_AT, nowUtc());
         values.put(COLUMN_COMPLETED_AT, nowUtc());
         db.update(TABLE_RANKING_GAMES, values, COLUMN_ID + " = ?", new String[]{String.valueOf(id)});
-        db.close();
     }
 
     public void deleteGame(long id) {
         SQLiteDatabase db = this.getWritableDatabase();
         db.delete(TABLE_RANKING_GAMES, COLUMN_ID + " = ?", new String[]{String.valueOf(id)});
-        db.close();
     }
 
     private RankingGame gameFromCursor(Cursor cursor) {

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared empty / error state block: icon, title, one-line hint and an optional action.
+     Include with an id and drive it through utils.StateMessage. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/space_xl"
+    android:paddingTop="@dimen/space_xl"
+    android:paddingEnd="@dimen/space_xl"
+    android:paddingBottom="@dimen/space_md"
+    android:visibility="gone"
+    tools:visibility="visible">
+
+    <ImageView
+        android:id="@+id/state_icon"
+        android:layout_width="@dimen/state_icon_size"
+        android:layout_height="@dimen/state_icon_size"
+        android:importantForAccessibility="no"
+        app:tint="@color/text_tertiary"
+        tools:src="@drawable/ic_state_playlist" />
+
+    <TextView
+        android:id="@+id/state_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_md"
+        android:gravity="center"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_title"
+        tools:text="Nothing here yet" />
+
+    <TextView
+        android:id="@+id/state_hint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_sm"
+        android:gravity="center"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_body_small"
+        tools:text="A one-line hint about what to do next." />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/state_action"
+        style="@style/Widget.MaterialComponents.Button.TextButton"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_marginTop="@dimen/space_sm"
+        android:textAllCaps="false"
+        android:textColor="@color/accent"
+        android:textSize="@dimen/text_body"
+        android:visibility="gone"
+        app:rippleColor="@color/accent_muted"
+        tools:text="Retry"
+        tools:visibility="visible" />
+</LinearLayout>

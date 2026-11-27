@@ -11,7 +11,6 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.ProgressBar;
-import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
 
@@ -47,7 +46,7 @@ public class SongWebInfoActivity extends BaseActivity {
         selectedSong = SelectedSongHolder.getInstance().getSelectedSong();
 
         if (selectedSong == null) {
-            showToast("Error: No song selected");
+            showMessage("Couldn't open that song");
             finish();
             return;
         }
@@ -114,7 +113,7 @@ public class SongWebInfoActivity extends BaseActivity {
                         String googleUrl = "https://www.google.com/search?q=" + encodedQuery;
                         view.loadUrl(googleUrl);
 
-                        showToast("Song not found on Songstats. Searching Google...");
+                        showMessage("Not on Songstats. Showing web results instead.");
                     } catch (UnsupportedEncodingException e) {
                         Log.e(TAG, "Error encoding search query", e);
                     }
@@ -133,7 +132,13 @@ public class SongWebInfoActivity extends BaseActivity {
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 super.onReceivedError(view, request, error);
-                showToast("Error loading page: " + error.getDescription());
+                Log.w(TAG, "Page load error: " + error.getDescription() + " (" + request.getUrl() + ")");
+                // Sub-resource failures (images, scripts) are common and not worth surfacing.
+                if (request.isForMainFrame()) {
+                    progressBar.setVisibility(View.GONE);
+                    showMessage("Couldn't load the page. Check your connection.",
+                            R.string.retry, view::reload);
+                }
             }
         });
         //#endregion
@@ -155,7 +160,7 @@ public class SongWebInfoActivity extends BaseActivity {
         String isrc = selectedSong.getIsrc();
 
         if (isrc == null || isrc.isEmpty()) {
-            showToast("ISRC not available for this song");
+            showMessage("ISRC not available for this song");
             finish();
             return;
         }
@@ -172,7 +177,7 @@ public class SongWebInfoActivity extends BaseActivity {
 
         } catch (UnsupportedEncodingException e) {
             Log.e(TAG, "Error encoding search query", e);
-            showToast("Error creating search URL");
+            showMessage("Couldn't look up this song");
             finish();
         }
     }
@@ -191,14 +196,4 @@ public class SongWebInfoActivity extends BaseActivity {
         }
     }
 
-    @Override
-    public void finish() {
-        super.finish();
-        overridePendingTransition(R.anim.fade_in, R.anim.fade_out);
-    }
-
-    private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "showed Toast: " + message);
-    }
 }

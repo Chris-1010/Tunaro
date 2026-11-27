@@ -13,15 +13,15 @@
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingHorizontal="8dp"
-        android:paddingVertical="4dp">
+        android:paddingHorizontal="@dimen/space_sm"
+        android:paddingVertical="@dimen/space_xs">
 
         <ImageView
             android:id="@+id/sort_icon"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:contentDescription="@string/empty"
-            android:padding="8dp"
+            android:padding="@dimen/space_sm"
             android:src="@drawable/ic_filter"
             app:tint="@color/white" />
 
@@ -29,7 +29,7 @@
             android:id="@+id/sort_spinner"
             android:layout_width="0dp"
             android:layout_height="44dp"
-            android:layout_marginStart="4dp"
+            android:layout_marginStart="@dimen/space_xs"
             android:layout_weight="1"
             android:theme="@style/WhiteSpinnerTheme" />
 
@@ -38,7 +38,7 @@
             android:layout_width="wrap_content"
             android:layout_height="44dp"
             android:contentDescription="@string/empty"
-            android:padding="8dp"
+            android:padding="@dimen/space_sm"
             android:src="@drawable/ic_arrow_downward"
             app:tint="@color/white" />
 
@@ -47,23 +47,21 @@
             android:id="@+id/search_bar"
             android:layout_width="0dp"
             android:layout_height="44dp"
-            android:layout_marginEnd="4dp"
+            android:layout_marginEnd="@dimen/space_xs"
             android:layout_weight="1"
-            android:background="@android:drawable/editbox_background"
+            style="@style/Widget.Tunaro.Input"
             android:hint="Search releases..."
             android:imeOptions="actionSearch"
             android:inputType="text"
-            android:padding="8dp"
-            android:textColor="@android:color/black"
-            android:textColorHint="@android:color/darker_gray"
+            android:padding="@dimen/space_sm"
             android:visibility="gone" />
 
         <ImageView
             android:id="@+id/search_icon"
             android:layout_width="wrap_content"
             android:layout_height="44dp"
-            android:contentDescription="@string/empty"
-            android:padding="8dp"
+            android:contentDescription="@string/cd_search"
+            android:padding="@dimen/space_sm"
             android:src="@drawable/ic_search"
             app:tint="@color/white" />
     </LinearLayout>
@@ -80,7 +78,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="8dp">
+            android:padding="@dimen/space_sm">
 
             <View
                 android:layout_width="match_parent"
@@ -102,16 +100,9 @@
         </LinearLayout>
     </com.facebook.shimmer.ShimmerFrameLayout>
 
-    <TextView
+    <include
         android:id="@+id/empty_label"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="48dp"
-        android:gravity="center"
-        android:text="No releases found"
-        android:textColor="#99FFFFFF"
-        android:textSize="14sp"
-        android:visibility="gone" />
+        layout="@layout/view_state_message" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/albums_recycler_view"
